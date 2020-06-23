@@ -1,0 +1,99 @@
+/*
+Copyright 2019 VMware, Inc.
+SPDX-License-Identifier: Apache-2.0
+*/
+
+package factories
+
+import (
+	"fmt"
+
+	"github.com/vmware-labs/reconciler-runtime/apis"
+	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1beta1 "k8s.io/api/networking/v1beta1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+)
+
+type ingress struct {
+	target *networkingv1beta1.Ingress
+}
+
+var (
+	_ rtesting.Factory = (*ingress)(nil)
+)
+
+func Ingress(seed ...*networkingv1beta1.Ingress) *ingress {
+	var target *networkingv1beta1.Ingress
+	switch len(seed) {
+	case 0:
+		target = &networkingv1beta1.Ingress{}
+	case 1:
+		target = seed[0]
+	default:
+		panic(fmt.Errorf("expected exactly zero or one seed, got %v", seed))
+	}
+	return &ingress{
+		target: target,
+	}
+}
+
+func (f *ingress) deepCopy() *ingress {
+	return Ingress(f.target.DeepCopy())
+}
+
+func (f *ingress) Create() *networkingv1beta1.Ingress {
+	return f.deepCopy().target
+}
+
+func (f *ingress) CreateObject() apis.Object {
+	return f.Create()
+}
+
+func (f *ingress) mutation(m func(*networkingv1beta1.Ingress)) *ingress {
+	f = f.deepCopy()
+	m(f.target)
+	return f
+}
+
+func (f *ingress) NamespaceName(namespace, name string) *ingress {
+	return f.mutation(func(sa *networkingv1beta1.Ingress) {
+		sa.ObjectMeta.Namespace = namespace
+		sa.ObjectMeta.Name = name
+	})
+}
+
+func (f *ingress) ObjectMeta(nf func(ObjectMeta)) *ingress {
+	return f.mutation(func(sa *networkingv1beta1.Ingress) {
+		omf := ObjectMetaFactory(sa.ObjectMeta)
+		nf(omf)
+		sa.ObjectMeta = omf.Create()
+	})
+}
+
+func (f *ingress) HostToService(host, serviceName string) *ingress {
+	return f.mutation(func(i *networkingv1beta1.Ingress) {
+		i.Spec = networkingv1beta1.IngressSpec{
+			Rules: []networkingv1beta1.IngressRule{{
+				Host: host,
+				IngressRuleValue: networkingv1beta1.IngressRuleValue{
+					HTTP: &networkingv1beta1.HTTPIngressRuleValue{
+						Paths: []networkingv1beta1.HTTPIngressPath{{
+							Path: "/",
+							Backend: networkingv1beta1.IngressBackend{
+								ServiceName: serviceName,
+								ServicePort: intstr.FromInt(80),
+							},
+						}},
+					},
+				},
+			}},
+		}
+	})
+}
+
+func (f *ingress) StatusLoadBalancer(ingress ...corev1.LoadBalancerIngress) *ingress {
+	return f.mutation(func(i *networkingv1beta1.Ingress) {
+		i.Status.LoadBalancer.Ingress = ingress
+	})
+}

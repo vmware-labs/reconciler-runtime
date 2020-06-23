@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push: 
+    branches:
+    - '**'
+    - '!dependabot/**'
+  pull_request: {}
+
+jobs:
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ^1.14
+      id: go
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+    - name: Get dependencies
+      run: |
+        go get -v -t -d ./...
+    - name: Test
+      run: go test -v ./... -coverprofile cover.out
+    # TODO(scothis) enable CodeCov once the new repo is public
+    # - name: Report coverage
+    #   run: bash <(curl -s https://codecov.io/bash)
+    #   env:
+    #     CODECOV_TOKEN: ...
