@@ -1,6 +1,22 @@
-# reconciler-runtime
+# reconciler-runtime <!-- omit in toc -->
 
 `reconciler-runtime` is an opinionated framework for authoring and testing Kubernetes reconcilers using [`controller-runtime`](https://github.com/kubernetes-sigs/controller-runtime) project. `controller-runtime` provides infrastructure for creating and operating controllers, but provides little support for the business logic of implementing a reconciler within the controller. The [`Reconciler` interface](https://godoc.org/sigs.k8s.io/controller-runtime/pkg/reconcile#Reconciler) provided by `controller-runtime` is the handoff point with `reconciler-runtime`.
+
+<!-- ToC managed by https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one -->
+- [Reconcilers](#reconcilers)
+	- [ParentReconciler](#parentreconciler)
+	- [SubReconciler](#subreconciler)
+		- [SyncReconciler](#syncreconciler)
+		- [ChildReconciler](#childreconciler)
+	- [Utilities](#utilities)
+		- [Config](#config)
+		- [Stash](#stash)
+		- [Tracker](#tracker)
+- [Testing](#testing)
+	- [ReconcilerTestSuite](#reconcilertestsuite)
+	- [SubReconcilerTestSuite](#subreconcilertestsuite)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Reconcilers
 
@@ -20,7 +36,7 @@ The parent is responsible for:
 The implementor is responsible for:
 - defining the set of sub reconcilers
 
-Example:
+**Example:**
 
 Parent reconcilers tend to be quite simple, as they delegate their work to sub reconcilers. We'll use an example from projectriff of the Function resource, which uses Kpack to build images from a git repo. In this case the FunctionTargetImageReconciler resolves the target image for the function, and FunctionChildImageReconciler creates a child Kpack Image resource based on the resolve value. 
 
@@ -51,7 +67,7 @@ There are two types of sub reconcilers provided by `reconciler-runtime`:
 
 The [`SyncReconciler`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/reconcilers#SyncReconciler) is the minimal type-aware sub reconciler. It is used to manage a portion of the parent's reconciliation that is custom, or whose behavior is not covered by another sub reconciler type. Common uses include looking up reference data for the reconciliation, or controlling resources that are not kubernetes resources.
 
-Example:
+**Example:**
 
 While sync reconcilers have the ability to do anything a reconciler can do, it's best to keep them focused on a single goal, letting the parent reconciler structure multiple sub reconcilers together. In this case, we use the parent resource and the client to resolve the target image and stash the value on the parent's status. The status is a good place to stash simple values that can be made public. More [advanced forms of stashing](#stash) are also available.
 
@@ -93,7 +109,7 @@ The implementor is responsible for:
 - merging the actual resource with the desired state (often as simple as copying the spec and labels)
 - updating the parent's status from the child
 
-Example:
+**Example:**
 
 Now it's time to create the child Image resource that will do the work of building our Function. This reconciler looks more more complex than what we have seen so far, each function on the reconciler provides a focused hook into the lifecycle being orchestrated by the ChildReconciler.
 
@@ -186,7 +202,7 @@ The [`Config`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/recon
 
 The stash allows passing arbitrary state between sub reconcilers within the scope of a single reconciler request. Values are stored on the context by [`StashValue`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/reconcilers#StashValue) and accessed via [`RetrieveValue`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveValue).
 
-Example:
+**Example:**
 
 ```go
 const exampleStashKey reconcilers.StashKey = "example"
@@ -227,7 +243,7 @@ func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
 
 The [`Tracker`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/tracker#Tracker) provides a means for one resource to watch another resource for mutations, triggering the reconciliation of the resource defining the reference.
 
-Example:
+**Example:**
 
 The stream gateways in projectriff fetch the image references they use to run from a ConfigMap, when the values change, we want to detect and rollout the updated images.
 
@@ -371,7 +387,7 @@ For more complex reconcilers, the number of moving parts can make it difficult t
 - `GivenStashedValues` is a map of stashed value to seed, `ExpectStashedValues` are individually compared with the actual stashed value after the reconciler runs.
 - `ExpectStatusUpdates` is not available
 
-Example:
+**Example:**
 
 Like with the tracking example, the processor reconciler in projectriff also looks up images from a ConfigMap. The sub reconciler under test is responsible for tracking the ConfigMap, loading and stashing its contents. Sub reconciler tests make it trivial to test this behavior in isolation, including error conditions.
 
