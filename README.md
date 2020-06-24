@@ -440,4 +440,4 @@ Apache License v2.0: see [LICENSE](./LICENSE) for details.
 
 ## Acknowledgements
 
-The concept and initial implementation of `reconciler-runtime` originated within [`projectriff/system`](https://github.com/projectriff/system/) by [Scott Andrews](https://github.com/scothis), [Glyn Normington](https://github.com/glyn) and the [riff team](https://github.com/orgs/projectriff/people) at large drawing inspiration from [Kubebuilder](https://www.kubebuilder.io) and [Knative](https://knative.dev) reconcilers.
+`reconciler-runtime` was conceived in [`projectriff/system`](https://github.com/projectriff/system/) and implemented initially by [Scott Andrews](https://github.com/scothis), [Glyn Normington](https://github.com/glyn) and the [riff team](https://github.com/orgs/projectriff/people) at large, drawing inspiration from [Kubebuilder](https://www.kubebuilder.io) and [Knative](https://knative.dev) reconcilers.
