@@ -1,6 +1,6 @@
 # reconciler-runtime <!-- omit in toc -->
 
-`reconciler-runtime` is an opinionated framework for authoring and testing Kubernetes reconcilers using [`controller-runtime`](https://github.com/kubernetes-sigs/controller-runtime) project. `controller-runtime` provides infrastructure for creating and operating controllers, but provides little support for the business logic of implementing a reconciler within the controller. The [`Reconciler` interface](https://godoc.org/sigs.k8s.io/controller-runtime/pkg/reconcile#Reconciler) provided by `controller-runtime` is the handoff point with `reconciler-runtime`.
+`reconciler-runtime` is an opinionated framework for authoring and testing Kubernetes reconcilers using [`controller-runtime`](https://github.com/kubernetes-sigs/controller-runtime) project. `controller-runtime` provides infrastructure for creating and operating controllers, but provides little support for the business logic of implementing a reconciler within the controller. The [`Reconciler` interface](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/reconcile#Reconciler) provided by `controller-runtime` is the handoff point with `reconciler-runtime`.
 
 <!-- ToC managed by https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one -->
 - [Reconcilers](#reconcilers)
@@ -8,22 +8,22 @@
 	- [SubReconciler](#subreconciler)
 		- [SyncReconciler](#syncreconciler)
 		- [ChildReconciler](#childreconciler)
-	- [Utilities](#utilities)
-		- [Config](#config)
-		- [Stash](#stash)
-		- [Tracker](#tracker)
 - [Testing](#testing)
 	- [ReconcilerTestSuite](#reconcilertestsuite)
 	- [SubReconcilerTestSuite](#subreconcilertestsuite)
+- [Utilities](#utilities)
+	- [Config](#config)
+	- [Stash](#stash)
+	- [Tracker](#tracker)
 - [Contributing](#contributing)
-- [License](#license)
 - [Acknowledgements](#acknowledgements)
+- [License](#license)
 
 ## Reconcilers
 
 ### ParentReconciler
 
-A [`ParentReconciler`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/reconcilers#ParentReconciler) is responsible for orchestrating the reconciliation of a single resource. The reconciler delegates the manipulation of other resources to SubReconcilers.
+A [`ParentReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ParentReconciler) is responsible for orchestrating the reconciliation of a single resource. The reconciler delegates the manipulation of other resources to SubReconcilers.
 
 The parent is responsible for:
 - fetching the resource being reconciled
@@ -56,17 +56,17 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 	}
 }
 ```
-[full source](https://github.com/projectriff/system/blob/e80c1570003d4b7e7499164d597ec054489c6485/pkg/controllers/build/function_reconciler.go#L39-L51)
+[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/build/function_reconciler.go#L39-L51)
 
 ### SubReconciler
 
-The [`SubReconciler`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/reconcilers#SubReconciler) interface defines the contract between the parent and sub reconcilers.
+The [`SubReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SubReconciler) interface defines the contract between the parent and sub reconcilers.
 
 There are two types of sub reconcilers provided by `reconciler-runtime`:
 
 #### SyncReconciler
 
-The [`SyncReconciler`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/reconcilers#SyncReconciler) is the minimal type-aware sub reconciler. It is used to manage a portion of the parent's reconciliation that is custom, or whose behavior is not covered by another sub reconciler type. Common uses include looking up reference data for the reconciliation, or controlling resources that are not kubernetes resources.
+The [`SyncReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SyncReconciler) is the minimal type-aware sub reconciler. It is used to manage a portion of the parent's reconciliation that is custom, or whose behavior is not covered by another sub reconciler type. Common uses include looking up reference data for the reconciliation, or controlling resources that are not kubernetes resources.
 
 **Example:**
 
@@ -91,11 +91,11 @@ func FunctionTargetImageReconciler(c reconcilers.Config) reconcilers.SubReconcil
 	}
 }
 ```
-[full source](https://github.com/projectriff/system/blob/e80c1570003d4b7e7499164d597ec054489c6485/pkg/controllers/build/function_reconciler.go#L53-L74)
+[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/build/function_reconciler.go#L53-L74)
 
 #### ChildReconciler
 
-The [`ChildReconciler`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/reconcilers#ChildReconciler) is a sub reconciler that is responsible for managing a single controlled resource. A developer defines their desired state for the child resource (if any), and the reconciler creates/updates/deletes the resource to match the desired state. The child resource is also used to update the parent's status. Mutations and errors are recorded for the parent.
+The [`ChildReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ChildReconciler) is a sub reconciler that is responsible for managing a single controlled resource. A developer defines their desired state for the child resource (if any), and the reconciler creates/updates/deletes the resource to match the desired state. The child resource is also used to update the parent's status. Mutations and errors are recorded for the parent.
 
 The ChildReconciler is responsible for:
 - looking up an existing child
@@ -166,7 +166,7 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 			// name, check if the err is because the resource already exists.
 			// The ChildReconciler will not claim ownership of another resource.
 			//
-			// See https://github.com/projectriff/system/blob/e80c1570003d4b7e7499164d597ec054489c6485/pkg/controllers/core/deployer_reconciler.go#L277-L283
+			// See https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/core/deployer_reconciler.go#L277-L283
 
 			if child == nil {
 				// image was deleted
@@ -191,103 +191,7 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 	}
 }
 ```
-[full source](https://github.com/projectriff/system/blob/e80c1570003d4b7e7499164d597ec054489c6485/pkg/controllers/build/function_reconciler.go#L76-L151)
-
-### Utilities
-
-#### Config
-
-The [`Config`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/reconcilers#Config) is a single object that contains the key APIs needed by a reconciler. The config object is provided to the reconciler when initialized and is preconfigured for the reconciler.
-
-#### Stash
-
-The stash allows passing arbitrary state between sub reconcilers within the scope of a single reconciler request. Values are stored on the context by [`StashValue`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/reconcilers#StashValue) and accessed via [`RetrieveValue`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveValue).
-
-**Example:**
-
-```go
-const exampleStashKey reconcilers.StashKey = "example"
-
-func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	c.Log = c.Log.WithName("StashExample")
-
-	return &reconcilers.SyncReconciler{
-		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
-			value := Example{} // something we want to expose to a sub reconciler later in this chain
-			reconcilers.StashValue(ctx, exampleStashKey, *value)
-			return nil
-		},
-
-		Config: c,
-	}
-}
-
-
-func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	c.Log = c.Log.WithName("StashExample")
-
-	return &reconcilers.SyncReconciler{
-		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
-			value, ok := reconcilers.RetrieveValue(ctx, exampleStashKey).(Example)
-			if !ok {
-				return nil, fmt.Errorf("expected stashed value for key %q", exampleStashKey)
-			}
-			... // do something with the value
-		},
-
-		Config: c,
-	}
-}
-```
-
-#### Tracker
-
-The [`Tracker`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/tracker#Tracker) provides a means for one resource to watch another resource for mutations, triggering the reconciliation of the resource defining the reference.
-
-**Example:**
-
-The stream gateways in projectriff fetch the image references they use to run from a ConfigMap, when the values change, we want to detect and rollout the updated images.
-
-```go
-func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string) reconcilers.SubReconciler {
-	c.Log = c.Log.WithName("SyncConfig")
-
-	return &reconcilers.SyncReconciler{
-		Sync: func(ctx context.Context, parent *streamingv1alpha1.InMemoryGateway) error {
-			var config corev1.ConfigMap
-			key := types.NamespacedName{Namespace: namespace, Name: inmemoryGatewayImages}
-			// track config for new images
-			c.Tracker.Track(
-				// the resource to track, GVK and NamespacedName
-				tracker.NewKey(schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}, key),
-				// the resource to enqueue, NamespacedName only
-				types.NamespacedName{Namespace: parent.Namespace, Name: parent.Name},
-			)
-			// get the configmap
-			if err := c.Get(ctx, key, &config); err != nil {
-				return err
-			}
-			// consume the configmap
-			parent.Status.GatewayImage = config.Data[gatewayImageKey]
-			parent.Status.ProvisionerImage = config.Data[provisionerImageKey]
-			return nil
-		},
-
-		Config: c,
-		Setup: func(mgr reconcilers.Manager, bldr *reconcilers.Builder) error {
-			// enqueue the tracking resource for reconciliation from changes to
-			// tracked ConfigMaps. Internally `EnqueueTracked` sets up an 
-			// Informer to watch to changes of the target resource. When the
-			// informer emits an event, the tracking resources are looked up
-			// from the tracker and enqueded for reconciliation.
-			bldr.Watches(&source.Kind{Type: &corev1.ConfigMap{}}, reconcilers.EnqueueTracked(&corev1.ConfigMap{}, c.Tracker, c.Scheme))
-			return nil
-		},
-	}
-}
-```
-[full source](https://github.com/projectriff/system/blob/e80c1570003d4b7e7499164d597ec054489c6485/pkg/controllers/streaming/inmemorygateway_reconciler.go#L58-L84)
-
+[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/build/function_reconciler.go#L76-L151)
 
 ## Testing
 
@@ -317,7 +221,7 @@ deploymentGiven := deploymentCreate.
 		om.Created(1)
 	})
 ```
-[full source](https://github.com/projectriff/system/blob/e80c1570003d4b7e7499164d597ec054489c6485/pkg/controllers/streaming/gateway_reconciler_test.go#L84-L101)
+[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/streaming/gateway_reconciler_test.go#L84-L101)
 
 Factories are provided for some common k8s types like Deployment, ConfigMap, ServiceAccount (contributions for more are welcome). Resources that don't have a factory can be wrapped.
 
@@ -329,7 +233,7 @@ There are two test suites, one for reconcilers and an optimized harness for test
 
 ### ReconcilerTestSuite
 
-[`ReconcilerTestCase`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestCase) run the full reconciler via the controller runtime Reconciler's Reconcile method.
+[`ReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestCase) run the full reconciler via the controller runtime Reconciler's Reconcile method.
 
 ```go
 testKey := ... // NamesapcedName of the resource to reconcile
@@ -378,11 +282,11 @@ rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c recon
 	return streaming.InMemoryGatewayReconciler(c, testSystemNamespace)
 })
 ```
-[full source](https://github.com/projectriff/system/blob/e80c1570003d4b7e7499164d597ec054489c6485/pkg/controllers/streaming/inmemorygateway_reconciler_test.go#L142-L169)
+[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/streaming/inmemorygateway_reconciler_test.go#L142-L169)
 
 ### SubReconcilerTestSuite
 
-For more complex reconcilers, the number of moving parts can make it difficult to fully cover all aspects of the reonciler and handle corner cases and sources of error. The [`SubReconcilerTestCase`](https://godoc.org/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase) enables testing a single sub reconciler in isolation from the parent. While very similar to ReconcilerTestCase, these are the differences:
+For more complex reconcilers, the number of moving parts can make it difficult to fully cover all aspects of the reonciler and handle corner cases and sources of error. The [`SubReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase) enables testing a single sub reconciler in isolation from the parent. While very similar to ReconcilerTestCase, these are the differences:
 
 - `Key` is replaced with `Parent` since the parent resource is not lookedup, but handed to the reconciler. `ExpectParent` is the mutated value of the parent resource after the reconciler runs.
 - `GivenStashedValues` is a map of stashed value to seed, `ExpectStashedValues` are individually compared with the actual stashed value after the reconciler runs.
@@ -424,17 +328,111 @@ rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c re
 	return streaming.ProcessorSyncProcessorImages(c, testSystemNamespace)
 })
 ```
-[full source](https://github.com/projectriff/system/blob/e80c1570003d4b7e7499164d597ec054489c6485/pkg/controllers/streaming/processor_reconciler_test.go#L279-L305)
+[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/streaming/processor_reconciler_test.go#L279-L305)
 
+## Utilities
+
+### Config
+
+The [`Config`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config) is a single object that contains the key APIs needed by a reconciler. The config object is provided to the reconciler when initialized and is preconfigured for the reconciler.
+
+### Stash
+
+The stash allows passing arbitrary state between sub reconcilers within the scope of a single reconciler request. Values are stored on the context by [`StashValue`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#StashValue) and accessed via [`RetrieveValue`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveValue).
+
+**Example:**
+
+```go
+const exampleStashKey reconcilers.StashKey = "example"
+
+func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
+	c.Log = c.Log.WithName("StashExample")
+
+	return &reconcilers.SyncReconciler{
+		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
+			value := Example{} // something we want to expose to a sub reconciler later in this chain
+			reconcilers.StashValue(ctx, exampleStashKey, *value)
+			return nil
+		},
+
+		Config: c,
+	}
+}
+
+
+func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
+	c.Log = c.Log.WithName("StashExample")
+
+	return &reconcilers.SyncReconciler{
+		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
+			value, ok := reconcilers.RetrieveValue(ctx, exampleStashKey).(Example)
+			if !ok {
+				return nil, fmt.Errorf("expected stashed value for key %q", exampleStashKey)
+			}
+			... // do something with the value
+		},
+
+		Config: c,
+	}
+}
+```
+
+### Tracker
+
+The [`Tracker`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/tracker#Tracker) provides a means for one resource to watch another resource for mutations, triggering the reconciliation of the resource defining the reference.
+
+**Example:**
+
+The stream gateways in projectriff fetch the image references they use to run from a ConfigMap, when the values change, we want to detect and rollout the updated images.
+
+```go
+func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string) reconcilers.SubReconciler {
+	c.Log = c.Log.WithName("SyncConfig")
+
+	return &reconcilers.SyncReconciler{
+		Sync: func(ctx context.Context, parent *streamingv1alpha1.InMemoryGateway) error {
+			var config corev1.ConfigMap
+			key := types.NamespacedName{Namespace: namespace, Name: inmemoryGatewayImages}
+			// track config for new images
+			c.Tracker.Track(
+				// the resource to track, GVK and NamespacedName
+				tracker.NewKey(schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}, key),
+				// the resource to enqueue, NamespacedName only
+				types.NamespacedName{Namespace: parent.Namespace, Name: parent.Name},
+			)
+			// get the configmap
+			if err := c.Get(ctx, key, &config); err != nil {
+				return err
+			}
+			// consume the configmap
+			parent.Status.GatewayImage = config.Data[gatewayImageKey]
+			parent.Status.ProvisionerImage = config.Data[provisionerImageKey]
+			return nil
+		},
+
+		Config: c,
+		Setup: func(mgr reconcilers.Manager, bldr *reconcilers.Builder) error {
+			// enqueue the tracking resource for reconciliation from changes to
+			// tracked ConfigMaps. Internally `EnqueueTracked` sets up an 
+			// Informer to watch to changes of the target resource. When the
+			// informer emits an event, the tracking resources are looked up
+			// from the tracker and enqueded for reconciliation.
+			bldr.Watches(&source.Kind{Type: &corev1.ConfigMap{}}, reconcilers.EnqueueTracked(&corev1.ConfigMap{}, c.Tracker, c.Scheme))
+			return nil
+		},
+	}
+}
+```
+[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/streaming/inmemorygateway_reconciler.go#L58-L84)
 
 ## Contributing
 
 The reconciler-runtime project team welcomes contributions from the community. If you wish to contribute code and you have not signed our contributor license agreement (CLA), our bot will update the issue when you open a Pull Request. For any questions about the CLA process, please refer to our [FAQ](https://cla.vmware.com/faq). For more detailed information, refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Acknowledgements
+
+`reconciler-runtime` was conceived in [`projectriff/system`](https://github.com/projectriff/system/) and implemented initially by [Scott Andrews](https://github.com/scothis), [Glyn Normington](https://github.com/glyn) and the [riff community](https://github.com/orgs/projectriff/people) at large, drawing inspiration from [Kubebuilder](https://www.kubebuilder.io) and [Knative](https://knative.dev) reconcilers.
+
 ## License
 
 Apache License v2.0: see [LICENSE](./LICENSE) for details.
-
-## Acknowledgements
-
-`reconciler-runtime` was conceived in [`projectriff/system`](https://github.com/projectriff/system/) and implemented initially by [Scott Andrews](https://github.com/scothis), [Glyn Normington](https://github.com/glyn) and the [riff team](https://github.com/orgs/projectriff/people) at large, drawing inspiration from [Kubebuilder](https://www.kubebuilder.io) and [Knative](https://knative.dev) reconcilers.
