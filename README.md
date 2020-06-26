@@ -1,5 +1,10 @@
 # reconciler-runtime <!-- omit in toc -->
 
+![CI](https://github.com/vmware-labs/reconciler-runtime/workflows/CI/badge.svg?branch=main)
+[![GoDoc](https://godoc.org/github.com/vmware-labs/reconciler-runtime?status.svg)](https://godoc.org/github.com/vmware-labs/reconciler-runtime)
+[![Go Report Card](https://goreportcard.com/badge/github.com/vmware-labs/reconciler-runtime)](https://goreportcard.com/report/github.com/vmware-labs/reconciler-runtime)
+[![codecov](https://codecov.io/gh/vmware-labs/reconciler-runtime/branch/main/graph/badge.svg)](https://codecov.io/gh/vmware-labs/reconciler-runtime)
+
 `reconciler-runtime` is an opinionated framework for authoring and testing Kubernetes reconcilers using [`controller-runtime`](https://github.com/kubernetes-sigs/controller-runtime) project. `controller-runtime` provides infrastructure for creating and operating controllers, but provides little support for the business logic of implementing a reconciler within the controller. The [`Reconciler` interface](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/reconcile#Reconciler) provided by `controller-runtime` is the handoff point with `reconciler-runtime`.
 
 <!-- ToC managed by https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one -->
