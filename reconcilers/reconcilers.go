@@ -59,10 +59,10 @@ type ParentReconciler struct {
 	Config
 }
 
-func (r *ParentReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
 	for _, reconciler := range r.SubReconcilers {
-		err := reconciler.SetupWithManager(mgr, bldr)
+		err := reconciler.SetupWithManager(ctx, mgr, bldr)
 		if err != nil {
 			return err
 		}
@@ -162,7 +162,7 @@ func (r *ParentReconciler) status(obj apis.Object) interface{} {
 // being reconciled is passed directly to the sub reconciler. The resource's
 // status can be mutated to reflect the current state.
 type SubReconciler interface {
-	SetupWithManager(mgr ctrl.Manager, bldr *builder.Builder) error
+	SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error
 	Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error)
 }
 
@@ -178,7 +178,7 @@ type SyncReconciler struct {
 	// will run with. It's common to setup field indexes and watch resources.
 	//
 	// +optional
-	Setup func(mgr ctrl.Manager, bldr *builder.Builder) error
+	Setup func(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error
 
 	// Sync does whatever work is necessary for the reconciler
 	//
@@ -190,11 +190,11 @@ type SyncReconciler struct {
 	Config
 }
 
-func (r *SyncReconciler) SetupWithManager(mgr ctrl.Manager, bldr *builder.Builder) error {
+func (r *SyncReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
 	if r.Setup == nil {
 		return nil
 	}
-	return r.Setup(mgr, bldr)
+	return r.Setup(ctx, mgr, bldr)
 }
 
 func (r *SyncReconciler) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
@@ -262,7 +262,7 @@ type ChildReconciler struct {
 	// will run with. It's common to setup field indexes and watch resources.
 	//
 	// +optional
-	Setup func(mgr ctrl.Manager, bldr *builder.Builder) error
+	Setup func(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error
 
 	// DesiredChild returns the desired child object for the given parent
 	// object, or nil if the child should not exist.
@@ -322,17 +322,17 @@ type ChildReconciler struct {
 	IndexField string
 }
 
-func (r *ChildReconciler) SetupWithManager(mgr ctrl.Manager, bldr *builder.Builder) error {
+func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
 	bldr.Owns(r.ChildType)
 
-	if err := IndexControllersOfType(mgr, r.IndexField, r.ParentType, r.ChildType, r.Scheme); err != nil {
+	if err := IndexControllersOfType(ctx, mgr, r.IndexField, r.ParentType, r.ChildType, r.Scheme); err != nil {
 		return err
 	}
 
 	if r.Setup == nil {
 		return nil
 	}
-	return r.Setup(mgr, bldr)
+	return r.Setup(ctx, mgr, bldr)
 }
 
 func (r *ChildReconciler) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
