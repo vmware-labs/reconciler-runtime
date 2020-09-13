@@ -108,6 +108,7 @@ The ChildReconciler is responsible for:
 - setting the owner reference on the child resource
 - logging the reconcilers activities
 - recording child mutations and errors for the parent resource
+- adapting to child resource changes applied by mutating webhooks
 
 The implementor is responsible for:
 - defining the desired resource
