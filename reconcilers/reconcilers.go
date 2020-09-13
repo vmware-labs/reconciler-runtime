@@ -7,16 +7,21 @@ package reconcilers
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
+	"time"
 
+	jsonmergepatch "github.com/evanphx/json-patch/v5"
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	jsonpatch "gomodules.xyz/jsonpatch/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/cache"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -320,6 +325,11 @@ type ChildReconciler struct {
 	// IndexField is used to index objects of the child's type based on their
 	// controlling owner. This field needs to be unique within the manager.
 	IndexField string
+
+	// mutationCache holds patches received from updates to a resource made by
+	// mutation webhooks. This cache is used to avoid unnecessary update calls
+	// that would actually have no effect.
+	mutationCache *cache.Expiring
 }
 
 func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
@@ -336,6 +346,10 @@ func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 }
 
 func (r *ChildReconciler) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
+	if r.mutationCache == nil {
+		r.mutationCache = cache.NewExpiring()
+	}
+
 	child, err := r.reconcile(ctx, parent)
 	if err != nil {
 		if apierrs.IsAlreadyExists(err) {
@@ -428,14 +442,24 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent apis.Object) (ap
 	// overwrite fields that should not be mutated
 	r.harmonizeImmutableFields(actual, desired)
 
-	if r.semanticEquals(desired, actual) {
+	// lookup and apply remote mutations
+	desiredPatched := desired.DeepCopyObject().(apis.Object)
+	if patch, ok := r.mutationCache.Get(actual.GetUID()); ok {
+		err := r.merge(patch.([]byte), desiredPatched)
+		if err != nil {
+			// there's not much we can do, but let the normal update proceed
+			r.Log.Info("unable to patch desired child from mutation cache")
+		}
+	}
+
+	if r.semanticEquals(desiredPatched, actual) {
 		// child is unchanged
 		return actual, nil
 	}
 
 	// update child with desired changes
 	current := actual.DeepCopyObject().(apis.Object)
-	r.mergeBeforeUpdate(current, desired)
+	r.mergeBeforeUpdate(current, desiredPatched)
 	r.Log.Info("reconciling child", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
 	if err := r.Update(ctx, current); err != nil {
 		r.Log.Error(err, "unable to update child", typeName(r.ChildType), r.sanitize(current))
@@ -443,10 +467,54 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent apis.Object) (ap
 			"Failed to update %s %q: %v", typeName(r.ChildType), current.GetName(), err)
 		return nil, err
 	}
+	if r.semanticEquals(desired, current) {
+		r.mutationCache.Delete(current.GetUID())
+	} else {
+		base := current.DeepCopyObject().(apis.Object)
+		r.mergeBeforeUpdate(base, desired)
+		patch, err := r.diff(base, current)
+		if err != nil {
+			r.Log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base))
+		} else {
+			r.mutationCache.Set(current.GetUID(), patch, 1*time.Hour)
+		}
+	}
 	r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Updated",
 		"Updated %s %q", typeName(r.ChildType), current.GetName())
 
 	return current, nil
+}
+
+func (r *ChildReconciler) diff(a1, a2 apis.Object) ([]byte, error) {
+	b1, err := json.Marshal(a1)
+	if err != nil {
+		return nil, err
+	}
+	b2, err := json.Marshal(a2)
+	if err != nil {
+		return nil, err
+	}
+	patch, err := jsonpatch.CreatePatch(b1, b2)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(patch)
+}
+
+func (r *ChildReconciler) merge(patch []byte, obj apis.Object) error {
+	doc, err := json.Marshal(obj)
+	if err != nil {
+		return err
+	}
+	mergepatch, err := jsonmergepatch.DecodePatch(patch)
+	if err != nil {
+		return err
+	}
+	patched, err := mergepatch.Apply(doc)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(patched, obj)
 }
 
 func (r *ChildReconciler) semanticEquals(a1, a2 apis.Object) bool {
