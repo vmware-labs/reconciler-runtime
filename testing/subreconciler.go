@@ -121,12 +121,12 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 	}
 	log := TestLogger(t)
 	c := factory(t, tc, reconcilers.Config{
-		Client:    clientWrapper,
-		APIReader: apiReader,
-		Tracker:   tracker,
-		Recorder:  recorder,
-		Scheme:    scheme,
-		Log:       log,
+		DuckClient: clientWrapper,
+		APIReader:  apiReader,
+		Tracker:    tracker,
+		Recorder:   recorder,
+		Scheme:     scheme,
+		Log:        log,
 	})
 
 	if tc.CleanUp != nil {

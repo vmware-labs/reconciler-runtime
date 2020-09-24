@@ -10,16 +10,16 @@ import (
 	"fmt"
 
 	"github.com/vmware-labs/reconciler-runtime/apis"
+	"github.com/vmware-labs/reconciler-runtime/client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgotesting "k8s.io/client-go/testing"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type clientWrapper struct {
-	client              client.Client
+	client              client.DuckClient
 	scheme              *runtime.Scheme
 	createActions       []objectAction
 	updateActions       []objectAction
@@ -33,7 +33,7 @@ var _ client.Client = &clientWrapper{}
 
 func newClientWrapperWithScheme(scheme *runtime.Scheme, objs ...runtime.Object) *clientWrapper {
 	client := &clientWrapper{
-		client:              fakeclient.NewFakeClientWithScheme(scheme, objs...),
+		client:              client.NewDuckClient(fakeclient.NewFakeClientWithScheme(scheme, objs...)),
 		scheme:              scheme,
 		createActions:       []objectAction{},
 		updateActions:       []objectAction{},
@@ -121,6 +121,19 @@ func (w *clientWrapper) Get(ctx context.Context, key client.ObjectKey, obj runti
 	return w.client.Get(ctx, key, obj)
 }
 
+func (w *clientWrapper) GetDuck(ctx context.Context, key client.Key, obj runtime.Object) error {
+	// NOTE kind != resource, but for this purpose it's good enough
+	gvr := key.GroupVersionKind().GroupVersion().WithResource(key.Kind)
+
+	// call reactor chain
+	err := w.react(clientgotesting.NewGetAction(gvr, key.Namespace, key.Name))
+	if err != nil {
+		return err
+	}
+
+	return w.client.GetDuck(ctx, key, obj)
+}
+
 func (w *clientWrapper) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
 	gvr, _, _, err := w.objmeta(list)
 	if err != nil {
@@ -143,6 +156,27 @@ func (w *clientWrapper) List(ctx context.Context, list runtime.Object, opts ...c
 	}
 
 	return w.client.List(ctx, list, opts...)
+}
+
+func (w *clientWrapper) ListDuck(ctx context.Context, key client.Key, obj runtime.Object, opts ...client.ListOption) error {
+	gvk := key.GroupVersionKind()
+	// NOTE kind != resource, but for this purpose it's good enough
+	gvr := gvk.GroupVersion().WithResource(key.Kind)
+	listopts := &client.ListOptions{}
+	for _, opt := range opts {
+		opt.ApplyToList(listopts)
+	}
+	if key.Namespace != "" {
+		listopts.Namespace = key.Namespace
+	}
+
+	// call reactor chain
+	err := w.react(clientgotesting.NewListAction(gvr, gvk, listopts.Namespace, metav1.ListOptions{}))
+	if err != nil {
+		return err
+	}
+
+	return w.client.ListDuck(ctx, key, obj, opts...)
 }
 
 func (w *clientWrapper) Create(ctx context.Context, obj runtime.Object, opts ...client.CreateOption) error {
@@ -198,6 +232,7 @@ func (w *clientWrapper) Update(ctx context.Context, obj runtime.Object, opts ...
 
 	return w.client.Update(ctx, obj, opts...)
 }
+
 func (w *clientWrapper) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOption) error {
 	panic(fmt.Errorf("Patch() is not implemented"))
 }
