@@ -640,7 +640,6 @@ func TestChildReconciler(t *testing.T) {
 
 	defaultChildReconciler := func(c reconcilers.Config) *reconcilers.ChildReconciler {
 		return &reconcilers.ChildReconciler{
-			ParentType:    &rtesting.TestResource{},
 			ChildType:     &corev1.ConfigMap{},
 			ChildListType: &corev1.ConfigMapList{},
 

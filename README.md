@@ -125,11 +125,10 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 	c.Log = c.Log.WithName("ChildImage")
 
 	return &reconcilers.ChildReconciler{
-		ParentType:    &buildv1alpha1.Function{},
 		ChildType:     &kpackbuildv1alpha1.Image{},
 		ChildListType: &kpackbuildv1alpha1.ImageList{},
 
-		DesiredChild: func(parent *buildv1alpha1.Function) (*kpackbuildv1alpha1.Image, error) {
+		DesiredChild: func(ctx context.Context, parent *buildv1alpha1.Function) (*kpackbuildv1alpha1.Image, error) {
 			if parent.Spec.Source == nil {
 				// don't create an Image, and delete any existing Image
 				return nil, nil

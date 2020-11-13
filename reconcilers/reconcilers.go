@@ -7,6 +7,7 @@ package reconcilers
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -62,6 +63,7 @@ type ParentReconciler struct {
 }
 
 func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	ctx = StashParentType(ctx, r.Type)
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
 	for _, reconciler := range r.SubReconcilers {
 		err := reconciler.SetupWithManager(ctx, mgr, bldr)
@@ -76,6 +78,7 @@ func (r *ParentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := WithStash(context.Background())
 	log := r.Log.WithValues("request", req.NamespacedName)
 
+	ctx = StashParentType(ctx, r.Type)
 	originalParent := r.Type.DeepCopyObject().(apis.Object)
 
 	if err := r.Get(ctx, req.NamespacedName, originalParent); err != nil {
@@ -160,6 +163,20 @@ func (r *ParentReconciler) status(obj apis.Object) interface{} {
 	return reflect.ValueOf(obj).Elem().FieldByName("Status").Addr().Interface()
 }
 
+const parentTypeStashKey StashKey = "reconciler-runtime:parentType"
+
+func StashParentType(ctx context.Context, parentType runtime.Object) context.Context {
+	return context.WithValue(ctx, parentTypeStashKey, parentType)
+}
+
+func RetrieveParentType(ctx context.Context) runtime.Object {
+	value := ctx.Value(parentTypeStashKey)
+	if parentType, ok := value.(runtime.Object); ok {
+		return parentType
+	}
+	return nil
+}
+
 // SubReconciler are participants in a larger reconciler request. The resource
 // being reconciled is passed directly to the sub reconciler. The resource's
 // status can be mutated to reflect the current state.
@@ -196,13 +213,49 @@ func (r *SyncReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager,
 	if r.Setup == nil {
 		return nil
 	}
+	if err := r.validate(ctx); err != nil {
+		return err
+	}
 	return r.Setup(ctx, mgr, bldr)
+}
+
+func (r *SyncReconciler) validate(ctx context.Context) error {
+	// validate Sync function signature:
+	//     func(ctx context.Context, parent apis.Object) error
+	//     func(ctx context.Context, parent apis.Object) (ctrl.Result, error)
+	if r.Sync == nil {
+		return fmt.Errorf("SyncReconciler must implement Sync")
+	} else {
+		parentType := RetrieveParentType(ctx)
+		fn := reflect.TypeOf(r.Sync)
+		err := fmt.Errorf("SyncReconciler must implement Sync: func(context.Context, %s) error | func(context.Context, %s) (ctrl.Result, error), found: %s", reflect.TypeOf(parentType), reflect.TypeOf(parentType), fn)
+		if fn.NumIn() != 2 ||
+			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(parentType).AssignableTo(fn.In(1)) {
+			return err
+		}
+		switch fn.NumOut() {
+		case 1:
+			if !reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(0)) {
+				return err
+			}
+		case 2:
+			if !reflect.TypeOf(ctrl.Result{}).AssignableTo(fn.Out(0)) ||
+				!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(1)) {
+				return err
+			}
+		default:
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (r *SyncReconciler) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
 	result, err := r.sync(ctx, parent)
 	if err != nil {
-		r.Log.Error(err, "unable to sync", typeName(parent), parent)
+		r.Log.Error(err, "unable to sync", reflect.TypeOf(parent), parent)
 		return ctrl.Result{}, err
 	}
 
@@ -250,8 +303,6 @@ func (r *SyncReconciler) sync(ctx context.Context, parent apis.Object) (ctrl.Res
 // During setup, the child resource type is registered to watch for changes. A
 // field indexer is configured for the owner on the IndexField.
 type ChildReconciler struct {
-	// ParentType of resource to reconcile
-	ParentType apis.Object
 	// ChildType is the resource being created/updated/deleted by the
 	// reconciler. For example, a parent Deployment would have a ReplicaSet as a
 	// child.
@@ -270,7 +321,6 @@ type ChildReconciler struct {
 	// object, or nil if the child should not exist.
 	//
 	// Expected function signature:
-	//     func(parent apis.Object) (apis.Object, error)
 	//     func(ctx context.Context, parent apis.Object) (apis.Object, error)
 	DesiredChild interface{}
 
@@ -330,9 +380,14 @@ type ChildReconciler struct {
 }
 
 func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	if err := r.validate(ctx); err != nil {
+		return err
+	}
+
 	bldr.Owns(r.ChildType)
 
-	if err := IndexControllersOfType(ctx, mgr, r.IndexField, r.ParentType, r.ChildType, r.Scheme); err != nil {
+	parentType := RetrieveParentType(ctx)
+	if err := IndexControllersOfType(ctx, mgr, r.IndexField, parentType, r.ChildType, r.Scheme); err != nil {
 		return err
 	}
 
@@ -342,6 +397,106 @@ func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 	return r.Setup(ctx, mgr, bldr)
 }
 
+func (r *ChildReconciler) validate(ctx context.Context) error {
+	parentType := RetrieveParentType(ctx)
+
+	// validate IndexField value
+	if r.IndexField == "" {
+		return fmt.Errorf("IndexField must be defined")
+	}
+
+	// validate ChildType value
+	if r.ChildType == nil {
+		return fmt.Errorf("ChildType must be defined")
+	}
+
+	// validate ChildListType value
+	if r.ChildListType == nil {
+		return fmt.Errorf("ChildListType must be defined")
+	}
+
+	// validate DesiredChild function signature:
+	//     func(ctx context.Context, parent apis.Object) (apis.Object, error)
+	if r.DesiredChild == nil {
+		return fmt.Errorf("ChildReconciler must implement DesiredChild")
+	} else {
+		fn := reflect.TypeOf(r.DesiredChild)
+		if fn.NumIn() != 2 || fn.NumOut() != 2 ||
+			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(parentType).AssignableTo(fn.In(1)) ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.Out(0)) ||
+			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(1)) {
+			return fmt.Errorf("ChildReconciler must implement DesiredChild: func(context.Context, %s) (%s, error), found: %s", reflect.TypeOf(parentType), reflect.TypeOf(r.ChildType), fn)
+		}
+	}
+
+	// validate ReflectChildStatusOnParent function signature:
+	//     func(parent, child apis.Object, err error)
+	if r.ReflectChildStatusOnParent == nil {
+		return fmt.Errorf("ChildReconciler must implement ReflectChildStatusOnParent")
+	} else {
+		fn := reflect.TypeOf(r.ReflectChildStatusOnParent)
+		if fn.NumIn() != 3 || fn.NumOut() != 0 ||
+			!reflect.TypeOf(parentType).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) ||
+			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.In(2)) {
+			return fmt.Errorf("ChildReconciler must implement ReflectChildStatusOnParent: func(%s, %s, error), found: %s", reflect.TypeOf(parentType), reflect.TypeOf(r.ChildType), fn)
+		}
+	}
+
+	// validate HarmonizeImmutableFields function signature:
+	//     nil
+	//     func(current, desired apis.Object)
+	if r.HarmonizeImmutableFields != nil {
+		fn := reflect.TypeOf(r.HarmonizeImmutableFields)
+		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) {
+			return fmt.Errorf("ChildReconciler must implement HarmonizeImmutableFields: nil | func(%s, %s), found: %s", reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
+		}
+	}
+
+	// validate MergeBeforeUpdate function signature:
+	//     func(current, desired apis.Object)
+	if r.MergeBeforeUpdate == nil {
+		return fmt.Errorf("ChildReconciler must implement MergeBeforeUpdate")
+	} else {
+		fn := reflect.TypeOf(r.MergeBeforeUpdate)
+		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) {
+			return fmt.Errorf("ChildReconciler must implement MergeBeforeUpdate: nil | func(%s, %s), found: %s", reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
+		}
+	}
+
+	// validate SemanticEquals function signature:
+	//     func(a1, a2 apis.Object) bool
+	if r.SemanticEquals == nil {
+		return fmt.Errorf("ChildReconciler must implement SemanticEquals")
+	} else {
+		fn := reflect.TypeOf(r.SemanticEquals)
+		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) ||
+			fn.Out(0).Kind() != reflect.Bool {
+			return fmt.Errorf("ChildReconciler must implement SemanticEquals: nil | func(%s, %s) bool, found: %s", reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
+		}
+	}
+
+	// validate Sanitize function signature:
+	//     nil
+	//     func(child apis.Object) interface{}
+	if r.Sanitize != nil {
+		fn := reflect.TypeOf(r.Sanitize)
+		if fn.NumIn() != 1 || fn.NumOut() != 1 ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) {
+			return fmt.Errorf("ChildReconciler must implement Sanitize: nil | func(%s) interface{}, found: %s", reflect.TypeOf(r.ChildType), fn)
+		}
+	}
+
+	return nil
+}
+
 func (r *ChildReconciler) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
 	if r.mutationCache == nil {
 		r.mutationCache = cache.NewExpiring()
@@ -349,6 +504,7 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent apis.Object) (ct
 
 	child, err := r.reconcile(ctx, parent)
 	if err != nil {
+		parentType := RetrieveParentType(ctx)
 		if apierrs.IsAlreadyExists(err) {
 			// check if the resource blocking create is owned by the parent.
 			// the created child from a previous turn may be slow to appear in the informer cache, but shouldn't appear
@@ -360,11 +516,11 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent apis.Object) (ct
 				// skip updating the parent's status, fail and try again
 				return ctrl.Result{}, err
 			}
-			r.Log.Info("unable to reconcile child, not owned", typeName(r.ParentType), parent, typeName(r.ChildType), r.sanitize(child))
+			r.Log.Info("unable to reconcile child, not owned", typeName(parentType), parent, typeName(r.ChildType), r.sanitize(child))
 			r.reflectChildStatusOnParent(parent, child, err)
 			return ctrl.Result{}, nil
 		}
-		r.Log.Error(err, "unable to reconcile child", typeName(r.ParentType), parent)
+		r.Log.Error(err, "unable to reconcile child", typeName(parentType), parent)
 		return ctrl.Result{}, err
 	}
 	r.reflectChildStatusOnParent(parent, child, err)
@@ -494,13 +650,10 @@ func (r *ChildReconciler) semanticEquals(a1, a2 apis.Object) bool {
 
 func (r *ChildReconciler) desiredChild(ctx context.Context, parent apis.Object) (apis.Object, error) {
 	fn := reflect.ValueOf(r.DesiredChild)
-	args := []reflect.Value{}
-	if fn.Type().NumIn() == 2 {
-		// optional first argument
-		args = append(args, reflect.ValueOf(ctx))
-	}
-	args = append(args, reflect.ValueOf(parent))
-	out := fn.Call(args)
+	out := fn.Call([]reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(parent),
+	})
 	var obj apis.Object
 	if !out[0].IsNil() {
 		obj = out[0].Interface().(apis.Object)
