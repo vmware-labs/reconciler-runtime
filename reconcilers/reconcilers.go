@@ -46,6 +46,21 @@ type Config struct {
 	Tracker   tracker.Tracker
 }
 
+// NewConfig creates a Config for a specific API type. Typically passed into a
+// reconciler.
+func NewConfig(mgr ctrl.Manager, apiType runtime.Object, syncPeriod time.Duration) Config {
+	name := typeName(apiType)
+	log := ctrl.Log.WithName("controllers").WithName(name)
+	return Config{
+		Client:    mgr.GetClient(),
+		APIReader: mgr.GetAPIReader(),
+		Recorder:  mgr.GetEventRecorderFor(name),
+		Log:       log,
+		Scheme:    mgr.GetScheme(),
+		Tracker:   tracker.New(syncPeriod, log.WithName("tracker")),
+	}
+}
+
 // ParentReconciler is a controller-runtime reconciler that reconciles a given
 // existing resource. The ParentType resource is fetched for the reconciler
 // request and passed in turn to each SubReconciler. Finally, the reconciled
