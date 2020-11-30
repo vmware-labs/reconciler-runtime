@@ -7,6 +7,7 @@ package reconcilers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"time"
@@ -297,6 +298,10 @@ func (r *SyncReconciler) sync(ctx context.Context, parent apis.Object) (ctrl.Res
 	return result, err
 }
 
+var (
+	OnlyReconcileChildStatus = errors.New("skip reconciler create/update/delete behavior for the child resource, while still reflecting the existing child's status on the parent")
+)
+
 // ChildReconciler is a sub reconciler that manages a single child resource for
 // a parent. The reconciler will ensure that exactly one child will match the
 // desired state by:
@@ -332,6 +337,10 @@ type ChildReconciler struct {
 
 	// DesiredChild returns the desired child object for the given parent
 	// object, or nil if the child should not exist.
+	//
+	// To skip reconciliation of the child resource while still reflecting an
+	// existing child's status on the parent, return OnlyReconcileChildStatus as
+	// an error.
 	//
 	// Expected function signature:
 	//     func(ctx context.Context, parent apis.Object) (apis.Object, error)
@@ -567,6 +576,9 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent apis.Object) (ap
 
 	desired, err := r.desiredChild(ctx, parent)
 	if err != nil {
+		if errors.Is(err, OnlyReconcileChildStatus) {
+			return actual, nil
+		}
 		return nil, err
 	}
 	if desired != nil {
