@@ -878,6 +878,23 @@ func TestChildReconciler(t *testing.T) {
 			},
 		},
 	}, {
+		Name:   "status only reconcile",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			configMapGiven,
+		},
+		ExpectParent: resourceReady.
+			AddStatusField("foo", "bar"),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.DesiredChild = func(ctx context.Context, parent *rtesting.TestResource) (*corev1.ConfigMap, error) {
+					return nil, reconcilers.OnlyReconcileChildStatus
+				}
+				return r
+			},
+		},
+	}, {
 		Name: "sanitize child before logging",
 		Parent: resource.
 			AddField("foo", "bar"),
