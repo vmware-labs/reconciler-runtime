@@ -71,9 +71,10 @@ type ParentReconciler struct {
 	// Type of resource to reconcile
 	Type runtime.Object
 
-	// SubReconcilers are called in order for each reconciler request. If a sub
-	// reconciler errs, further sub reconcilers are skipped.
-	SubReconcilers []SubReconciler
+	// Reconciler is called for each reconciler request with the parent
+	// resource being reconciled. Typically a Sequence is used to compose
+	// multiple SubReconcilers.
+	Reconciler SubReconciler
 
 	Config
 }
@@ -81,11 +82,8 @@ type ParentReconciler struct {
 func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	ctx = StashParentType(ctx, r.Type)
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
-	for _, reconciler := range r.SubReconcilers {
-		err := reconciler.SetupWithManager(ctx, mgr, bldr)
-		if err != nil {
-			return err
-		}
+	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
+		return err
 	}
 	return bldr.Complete(r)
 }
@@ -143,29 +141,14 @@ func (r *ParentReconciler) reconcile(ctx context.Context, parent apis.Object) (c
 		return ctrl.Result{}, nil
 	}
 
-	aggregateResult := ctrl.Result{}
-	for _, reconciler := range r.SubReconcilers {
-		result, err := reconciler.Reconcile(ctx, parent)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		aggregateResult = r.aggregateResult(result, aggregateResult)
+	result, err := r.Reconciler.Reconcile(ctx, parent)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	r.copyGeneration(parent)
 
-	return aggregateResult, nil
-}
-
-func (r *ParentReconciler) aggregateResult(result, aggregate ctrl.Result) ctrl.Result {
-	if result.RequeueAfter != 0 && (aggregate.RequeueAfter == 0 || result.RequeueAfter < aggregate.RequeueAfter) {
-		aggregate.RequeueAfter = result.RequeueAfter
-	}
-	if result.Requeue {
-		aggregate.Requeue = true
-	}
-
-	return aggregate
+	return result, nil
 }
 
 func (r *ParentReconciler) copyGeneration(obj apis.Object) {
@@ -204,6 +187,7 @@ type SubReconciler interface {
 var (
 	_ SubReconciler = (*SyncReconciler)(nil)
 	_ SubReconciler = (*ChildReconciler)(nil)
+	_ SubReconciler = (Sequence)(nil)
 )
 
 // SyncReconciler is a sub reconciler for custom reconciliation logic. No
@@ -756,6 +740,44 @@ func (r *ChildReconciler) items(children runtime.Object) []apis.Object {
 		items[i] = itemsValue.Index(i).Addr().Interface().(apis.Object)
 	}
 	return items
+}
+
+// Sequence is a collection of SubReconcilers called in order. If a
+// reconciler errs, further reconcilers are skipped.
+type Sequence []SubReconciler
+
+func (r Sequence) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	for _, reconciler := range r {
+		err := reconciler.SetupWithManager(ctx, mgr, bldr)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r Sequence) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
+	aggregateResult := ctrl.Result{}
+	for _, reconciler := range r {
+		result, err := reconciler.Reconcile(ctx, parent)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		aggregateResult = r.aggregateResult(result, aggregateResult)
+	}
+
+	return aggregateResult, nil
+}
+
+func (r Sequence) aggregateResult(result, aggregate ctrl.Result) ctrl.Result {
+	if result.RequeueAfter != 0 && (aggregate.RequeueAfter == 0 || result.RequeueAfter < aggregate.RequeueAfter) {
+		aggregate.RequeueAfter = result.RequeueAfter
+	}
+	if result.Requeue {
+		aggregate.Requeue = true
+	}
+
+	return aggregate
 }
 
 func typeName(i interface{}) string {

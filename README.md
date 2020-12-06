@@ -13,6 +13,7 @@
 	- [SubReconciler](#subreconciler)
 		- [SyncReconciler](#syncreconciler)
 		- [ChildReconciler](#childreconciler)
+		- [Sequence](#sequence)
 - [Testing](#testing)
 	- [ReconcilerTestSuite](#reconcilertestsuite)
 	- [SubReconcilerTestSuite](#subreconcilertestsuite)
@@ -52,7 +53,7 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 
 	return &reconcilers.ParentReconciler{
 		Type: &buildv1alpha1.Function{},
-		SubReconcilers: []reconcilers.SubReconciler{
+		Reconciler: reconcilers.Sequence{
 			FunctionTargetImageReconciler(c),
 			FunctionChildImageReconciler(c),
 		},
@@ -66,8 +67,6 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 ### SubReconciler
 
 The [`SubReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SubReconciler) interface defines the contract between the parent and sub reconcilers.
-
-There are two types of sub reconcilers provided by `reconciler-runtime`:
 
 #### SyncReconciler
 
@@ -197,6 +196,32 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 }
 ```
 [full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/build/function_reconciler.go#L76-L151)
+
+#### Sequence
+
+A [`Sequence`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Sequence) composes multiple SubReconcilers as a single SubReconciler. Each sub reconciler is called in turn, aggregating the result of each sub reconciler. A reconciler returning an error will interrupt the sequence.
+
+**Example:**
+
+A Sequence is commonly used in a ParentReconciler, but may be used anywhere a SubReconciler a accepted. 
+
+```go
+func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
+	c.Log = c.Log.WithName("Function")
+
+	return &reconcilers.ParentReconciler{
+		Type: &buildv1alpha1.Function{},
+		Reconciler: reconcilers.Sequence{
+			FunctionTargetImageReconciler(c),
+			FunctionChildImageReconciler(c),
+		},
+
+		Config: c,
+	}
+}
+```
+[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/build/function_reconciler.go#L39-L51)
+
 
 ## Testing
 
