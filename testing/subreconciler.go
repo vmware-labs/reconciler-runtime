@@ -171,7 +171,7 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 	}
 	if err == nil {
 		// result is only significant if there wasn't an error
-		if diff := cmp.Diff(tc.ExpectedResult, result); diff != "" {
+		if diff := cmp.Diff(normalizeResult(tc.ExpectedResult), normalizeResult(result)); diff != "" {
 			t.Errorf("Unexpected result (-expected, +actual): %s", diff)
 		}
 	}
