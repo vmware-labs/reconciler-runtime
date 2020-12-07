@@ -72,7 +72,7 @@ type ParentReconciler struct {
 	Type runtime.Object
 
 	// Reconciler is called for each reconciler request with the parent
-	// resource being reconciled. Typically a Sequence is used to compose
+	// resource being reconciled. Typically, Reconciler is a Sequence of
 	// multiple SubReconcilers.
 	Reconciler SubReconciler
 

@@ -203,7 +203,7 @@ A [`Sequence`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reco
 
 **Example:**
 
-A Sequence is commonly used in a ParentReconciler, but may be used anywhere a SubReconciler a accepted. 
+A Sequence is commonly used in a ParentReconciler, but may be used anywhere a SubReconciler is accepted. 
 
 ```go
 func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
