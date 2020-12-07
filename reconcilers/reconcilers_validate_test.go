@@ -98,7 +98,7 @@ func TestSyncReconciler_validate(t *testing.T) {
 
 	for _, c := range tests {
 		t.Run(c.name, func(t *testing.T) {
-			ctx := StashParentType(context.TODO(), c.parent)
+			ctx := StashCastParentType(context.TODO(), c.parent)
 			err := c.reconciler.validate(ctx)
 			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
 				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
@@ -648,10 +648,70 @@ func TestChildReconciler_validate(t *testing.T) {
 
 	for _, c := range tests {
 		t.Run(c.name, func(t *testing.T) {
-			ctx := StashParentType(context.TODO(), c.parent)
+			ctx := StashCastParentType(context.TODO(), c.parent)
 			err := c.reconciler.validate(ctx)
 			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
 				t.Errorf("validate() error = %q, shouldErr %q", err.Error(), c.shouldErr)
+			}
+		})
+	}
+}
+
+func TestCastParent_validate(t *testing.T) {
+	tests := []struct {
+		name       string
+		parent     apis.Object
+		reconciler *CastParent
+		shouldErr  string
+	}{
+		{
+			name:       "empty",
+			parent:     &corev1.ConfigMap{},
+			reconciler: &CastParent{},
+			shouldErr:  "Type must be defined",
+		},
+		{
+			name:   "valid",
+			parent: &corev1.ConfigMap{},
+			reconciler: &CastParent{
+				Type: &corev1.Secret{},
+				Reconciler: &SyncReconciler{
+					Sync: func(ctx context.Context, parent *corev1.Secret) error {
+						return nil
+					},
+				},
+			},
+		},
+		{
+			name:   "missing type",
+			parent: &corev1.ConfigMap{},
+			reconciler: &CastParent{
+				Type: nil,
+				Reconciler: &SyncReconciler{
+					Sync: func(ctx context.Context, parent *corev1.Secret) error {
+						return nil
+					},
+				},
+			},
+			shouldErr: "Type must be defined",
+		},
+		{
+			name:   "missing reconciler",
+			parent: &corev1.ConfigMap{},
+			reconciler: &CastParent{
+				Type:       &corev1.Secret{},
+				Reconciler: nil,
+			},
+			shouldErr: "Reconciler must be defined",
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := StashCastParentType(context.TODO(), c.parent)
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
 			}
 		})
 	}

@@ -7,6 +7,7 @@ package reconcilers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -69,21 +70,20 @@ type ParentReconciler struct {
 	// Type of resource to reconcile
 	Type runtime.Object
 
-	// SubReconcilers are called in order for each reconciler request. If a sub
-	// reconciler errs, further sub reconcilers are skipped.
-	SubReconcilers []SubReconciler
+	// Reconciler is called for each reconciler request with the parent
+	// resource being reconciled. Typically, Reconciler is a Sequence of
+	// multiple SubReconcilers.
+	Reconciler SubReconciler
 
 	Config
 }
 
 func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
 	ctx = StashParentType(ctx, r.Type)
+	ctx = StashCastParentType(ctx, r.Type)
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
-	for _, reconciler := range r.SubReconcilers {
-		err := reconciler.SetupWithManager(ctx, mgr, bldr)
-		if err != nil {
-			return err
-		}
+	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
+		return err
 	}
 	return bldr.Complete(r)
 }
@@ -93,6 +93,7 @@ func (r *ParentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("request", req.NamespacedName)
 
 	ctx = StashParentType(ctx, r.Type)
+	ctx = StashCastParentType(ctx, r.Type)
 	originalParent := r.Type.DeepCopyObject().(apis.Object)
 
 	if err := r.Get(ctx, req.NamespacedName, originalParent); err != nil {
@@ -141,29 +142,14 @@ func (r *ParentReconciler) reconcile(ctx context.Context, parent apis.Object) (c
 		return ctrl.Result{}, nil
 	}
 
-	aggregateResult := ctrl.Result{}
-	for _, reconciler := range r.SubReconcilers {
-		result, err := reconciler.Reconcile(ctx, parent)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		aggregateResult = r.aggregateResult(result, aggregateResult)
+	result, err := r.Reconciler.Reconcile(ctx, parent)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	r.copyGeneration(parent)
 
-	return aggregateResult, nil
-}
-
-func (r *ParentReconciler) aggregateResult(result, aggregate ctrl.Result) ctrl.Result {
-	if result.RequeueAfter != 0 && (aggregate.RequeueAfter == 0 || result.RequeueAfter < aggregate.RequeueAfter) {
-		aggregate.RequeueAfter = result.RequeueAfter
-	}
-	if result.Requeue {
-		aggregate.Requeue = true
-	}
-
-	return aggregate
+	return result, nil
 }
 
 func (r *ParentReconciler) copyGeneration(obj apis.Object) {
@@ -178,15 +164,28 @@ func (r *ParentReconciler) status(obj apis.Object) interface{} {
 }
 
 const parentTypeStashKey StashKey = "reconciler-runtime:parentType"
+const castParentTypeStashKey StashKey = "reconciler-runtime:castParentType"
 
 func StashParentType(ctx context.Context, parentType runtime.Object) context.Context {
 	return context.WithValue(ctx, parentTypeStashKey, parentType)
+}
+
+func StashCastParentType(ctx context.Context, currentType runtime.Object) context.Context {
+	return context.WithValue(ctx, castParentTypeStashKey, currentType)
 }
 
 func RetrieveParentType(ctx context.Context) runtime.Object {
 	value := ctx.Value(parentTypeStashKey)
 	if parentType, ok := value.(runtime.Object); ok {
 		return parentType
+	}
+	return nil
+}
+
+func RetrieveCastParentType(ctx context.Context) runtime.Object {
+	value := ctx.Value(castParentTypeStashKey)
+	if currentType, ok := value.(runtime.Object); ok {
+		return currentType
 	}
 	return nil
 }
@@ -202,6 +201,8 @@ type SubReconciler interface {
 var (
 	_ SubReconciler = (*SyncReconciler)(nil)
 	_ SubReconciler = (*ChildReconciler)(nil)
+	_ SubReconciler = (Sequence)(nil)
+	_ SubReconciler = (*CastParent)(nil)
 )
 
 // SyncReconciler is a sub reconciler for custom reconciliation logic. No
@@ -240,12 +241,12 @@ func (r *SyncReconciler) validate(ctx context.Context) error {
 	if r.Sync == nil {
 		return fmt.Errorf("SyncReconciler must implement Sync")
 	} else {
-		parentType := RetrieveParentType(ctx)
+		castParentType := RetrieveCastParentType(ctx)
 		fn := reflect.TypeOf(r.Sync)
-		err := fmt.Errorf("SyncReconciler must implement Sync: func(context.Context, %s) error | func(context.Context, %s) (ctrl.Result, error), found: %s", reflect.TypeOf(parentType), reflect.TypeOf(parentType), fn)
+		err := fmt.Errorf("SyncReconciler must implement Sync: func(context.Context, %s) error | func(context.Context, %s) (ctrl.Result, error), found: %s", reflect.TypeOf(castParentType), reflect.TypeOf(castParentType), fn)
 		if fn.NumIn() != 2 ||
 			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(parentType).AssignableTo(fn.In(1)) {
+			!reflect.TypeOf(castParentType).AssignableTo(fn.In(1)) {
 			return err
 		}
 		switch fn.NumOut() {
@@ -420,7 +421,7 @@ func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 }
 
 func (r *ChildReconciler) validate(ctx context.Context) error {
-	parentType := RetrieveParentType(ctx)
+	castParentType := RetrieveCastParentType(ctx)
 
 	// validate IndexField value
 	if r.IndexField == "" {
@@ -445,10 +446,10 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 		fn := reflect.TypeOf(r.DesiredChild)
 		if fn.NumIn() != 2 || fn.NumOut() != 2 ||
 			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(parentType).AssignableTo(fn.In(1)) ||
+			!reflect.TypeOf(castParentType).AssignableTo(fn.In(1)) ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.Out(0)) ||
 			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(1)) {
-			return fmt.Errorf("ChildReconciler must implement DesiredChild: func(context.Context, %s) (%s, error), found: %s", reflect.TypeOf(parentType), reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler must implement DesiredChild: func(context.Context, %s) (%s, error), found: %s", reflect.TypeOf(castParentType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
@@ -459,10 +460,10 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 	} else {
 		fn := reflect.TypeOf(r.ReflectChildStatusOnParent)
 		if fn.NumIn() != 3 || fn.NumOut() != 0 ||
-			!reflect.TypeOf(parentType).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(castParentType).AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) ||
 			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.In(2)) {
-			return fmt.Errorf("ChildReconciler must implement ReflectChildStatusOnParent: func(%s, %s, error), found: %s", reflect.TypeOf(parentType), reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler must implement ReflectChildStatusOnParent: func(%s, %s, error), found: %s", reflect.TypeOf(castParentType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
@@ -754,6 +755,114 @@ func (r *ChildReconciler) items(children runtime.Object) []apis.Object {
 		items[i] = itemsValue.Index(i).Addr().Interface().(apis.Object)
 	}
 	return items
+}
+
+// Sequence is a collection of SubReconcilers called in order. If a
+// reconciler errs, further reconcilers are skipped.
+type Sequence []SubReconciler
+
+func (r Sequence) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	for _, reconciler := range r {
+		err := reconciler.SetupWithManager(ctx, mgr, bldr)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r Sequence) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
+	aggregateResult := ctrl.Result{}
+	for _, reconciler := range r {
+		result, err := reconciler.Reconcile(ctx, parent)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		aggregateResult = r.aggregateResult(result, aggregateResult)
+	}
+
+	return aggregateResult, nil
+}
+
+func (r Sequence) aggregateResult(result, aggregate ctrl.Result) ctrl.Result {
+	if result.RequeueAfter != 0 && (aggregate.RequeueAfter == 0 || result.RequeueAfter < aggregate.RequeueAfter) {
+		aggregate.RequeueAfter = result.RequeueAfter
+	}
+	if result.Requeue {
+		aggregate.Requeue = true
+	}
+
+	return aggregate
+}
+
+// CastParent casts the ParentReconciler's type by projecting the resource data
+// onto a new struct. Casting the parent resource is useful to create cross
+// cutting reconcilers that can operate on common portion of multiple parent
+// resources, commonly referred to as a duck type.
+//
+// JSON encoding is used as the intermediate representation. Operations on a
+// cast parent are read-only. Attempts to mutate the parent will result in the
+// reconciler erring.
+type CastParent struct {
+	// Type of resource to reconcile
+	Type runtime.Object
+
+	// Reconciler is called for each reconciler request with the parent
+	// resource being reconciled. Typically a Sequence is used to compose
+	// multiple SubReconcilers.
+	Reconciler SubReconciler
+}
+
+func (r *CastParent) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	if err := r.validate(ctx); err != nil {
+		return err
+	}
+	return r.Reconciler.SetupWithManager(ctx, mgr, bldr)
+}
+
+func (r *CastParent) validate(ctx context.Context) error {
+	// validate Type value
+	if r.Type == nil {
+		return fmt.Errorf("Type must be defined")
+	}
+
+	// validate Reconciler value
+	if r.Reconciler == nil {
+		return fmt.Errorf("Reconciler must be defined")
+	}
+
+	return nil
+}
+
+func (r *CastParent) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
+	ctx, castParent, err := r.cast(ctx, parent)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	castOriginal := castParent.DeepCopyObject()
+	result, err := r.Reconciler.Reconcile(ctx, castParent)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !equality.Semantic.DeepEqual(castParent, castOriginal) {
+		// TODO apply diff to parent resource, until then err
+		return ctrl.Result{}, fmt.Errorf("cast parent resource mutated")
+	}
+	return result, nil
+}
+
+func (r *CastParent) cast(ctx context.Context, parent runtime.Object) (context.Context, apis.Object, error) {
+	data, err := json.Marshal(parent)
+	if err != nil {
+		return nil, nil, err
+	}
+	castParent := r.Type.DeepCopyObject().(apis.Object)
+	err = json.Unmarshal(data, castParent)
+	if err != nil {
+		return nil, nil, err
+	}
+	ctx = StashCastParentType(ctx, castParent)
+	return ctx, castParent, nil
 }
 
 func typeName(i interface{}) string {

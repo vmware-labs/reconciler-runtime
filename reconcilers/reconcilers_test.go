@@ -16,6 +16,7 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	"github.com/vmware-labs/reconciler-runtime/testing/factories"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
@@ -49,14 +50,12 @@ func TestParentReconciler(t *testing.T) {
 		Name: "resource does not exist",
 		Key:  testKey,
 		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
-							t.Error("should not be called")
-							return nil
-						},
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Config: c,
+					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+						t.Error("should not be called")
+						return nil
 					},
 				}
 			},
@@ -70,14 +69,12 @@ func TestParentReconciler(t *testing.T) {
 			}),
 		},
 		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
-							t.Error("should not be called")
-							return nil
-						},
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Config: c,
+					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+						t.Error("should not be called")
+						return nil
 					},
 				}
 			},
@@ -94,14 +91,12 @@ func TestParentReconciler(t *testing.T) {
 			rtesting.InduceFailure("get", "TestResource"),
 		},
 		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
-							t.Error("should not be called")
-							return nil
-						},
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Config: c,
+					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+						t.Error("should not be called")
+						return nil
 					},
 				}
 			},
@@ -114,16 +109,14 @@ func TestParentReconciler(t *testing.T) {
 			resource,
 		},
 		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
-							if expected, actual := "ran", parent.Spec.Fields["Defaulter"]; expected != actual {
-								t.Errorf("unexpected default value, actually = %v, expected = %v", expected, actual)
-							}
-							return nil
-						},
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Config: c,
+					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+						if expected, actual := "ran", parent.Spec.Fields["Defaulter"]; expected != actual {
+							t.Errorf("unexpected default value, actually = %v, expected = %v", expected, actual)
+						}
+						return nil
 					},
 				}
 			},
@@ -135,19 +128,17 @@ func TestParentReconciler(t *testing.T) {
 			resource.StatusConditions(),
 		},
 		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
-							expected := apis.Conditions{
-								{Type: apis.ConditionReady, Status: corev1.ConditionUnknown},
-							}
-							if diff := cmp.Diff(expected, parent.Status.Conditions, rtesting.IgnoreLastTransitionTime); diff != "" {
-								t.Errorf("Unexpected condition (-expected, +actual): %s", diff)
-							}
-							return nil
-						},
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Config: c,
+					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+						expected := apis.Conditions{
+							{Type: apis.ConditionReady, Status: corev1.ConditionUnknown},
+						}
+						if diff := cmp.Diff(expected, parent.Status.Conditions, rtesting.IgnoreLastTransitionTime); diff != "" {
+							t.Errorf("Unexpected condition (-expected, +actual): %s", diff)
+						}
+						return nil
 					},
 				}
 			},
@@ -166,8 +157,8 @@ func TestParentReconciler(t *testing.T) {
 			resource,
 		},
 		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{&reconcilers.SyncReconciler{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
 					Config: c,
 					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
 						if parent.Status.Fields == nil {
@@ -176,7 +167,6 @@ func TestParentReconciler(t *testing.T) {
 						parent.Status.Fields["Reconciler"] = "ran"
 						return nil
 					},
-				},
 				}
 			},
 		},
@@ -194,275 +184,16 @@ func TestParentReconciler(t *testing.T) {
 			resource,
 		},
 		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
-							return fmt.Errorf("reconciler error")
-						},
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Config: c,
+					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+						return fmt.Errorf("reconciler error")
 					},
 				}
 			},
 		},
 		ShouldErr: true,
-	}, {
-		Name: "preserves result, Requeue",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{&reconcilers.SyncReconciler{
-					Config: c,
-					Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-						return ctrl.Result{Requeue: true}, nil
-					},
-				},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{Requeue: true},
-	}, {
-		Name: "preserves result, RequeueAfter",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-						},
-					},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
-	}, {
-		Name: "ignores result on err",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{Requeue: true}, fmt.Errorf("test error")
-						},
-					},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{},
-		ShouldErr:      true,
-	}, {
-		Name: "Requeue + empty => Requeue",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{Requeue: true}, nil
-						},
-					},
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{}, nil
-						},
-					},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{Requeue: true},
-	}, {
-		Name: "empty + Requeue => Requeue",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{}, nil
-						},
-					},
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{Requeue: true}, nil
-						},
-					},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{Requeue: true},
-	}, {
-		Name: "RequeueAfter + empty => RequeueAfter",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-						},
-					},
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{}, nil
-						},
-					},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
-	}, {
-		Name: "empty + RequeueAfter => RequeueAfter",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{}, nil
-						},
-					},
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-						},
-					},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
-	}, {
-		Name: "RequeueAfter + Requeue => RequeueAfter",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-						},
-					},
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{Requeue: true}, nil
-						},
-					},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
-	}, {
-		Name: "Requeue + RequeueAfter => RequeueAfter",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{Requeue: true}, nil
-						},
-					},
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-						},
-					},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
-	}, {
-		Name: "RequeueAfter(1m) + RequeueAfter(2m) => RequeueAfter(1m)",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-						},
-					},
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
-						},
-					},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
-	}, {
-		Name: "RequeueAfter(2m) + RequeueAfter(1m) => RequeueAfter(1m)",
-		Key:  testKey,
-		GivenObjects: []rtesting.Factory{
-			resource,
-		},
-		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
-						},
-					},
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
-							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
-						},
-					},
-				}
-			},
-		},
-		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
 	}, {
 		Name: "status update failed",
 		Key:  testKey,
@@ -475,17 +206,15 @@ func TestParentReconciler(t *testing.T) {
 			}),
 		},
 		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
-							if parent.Status.Fields == nil {
-								parent.Status.Fields = map[string]string{}
-							}
-							parent.Status.Fields["Reconciler"] = "ran"
-							return nil
-						},
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Config: c,
+					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+						if parent.Status.Fields == nil {
+							parent.Status.Fields = map[string]string{}
+						}
+						parent.Status.Fields["Reconciler"] = "ran"
+						return nil
 					},
 				}
 			},
@@ -505,16 +234,14 @@ func TestParentReconciler(t *testing.T) {
 			resource,
 		},
 		Metadata: map[string]interface{}{
-			"SubReconcilers": func(t *testing.T, c reconcilers.Config) []reconcilers.SubReconciler {
-				return []reconcilers.SubReconciler{
-					&reconcilers.SyncReconciler{
-						Config: c,
-						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
-							var key reconcilers.StashKey = "foo"
-							// StashValue will panic if the context is not setup correctly
-							reconcilers.StashValue(ctx, key, "bar")
-							return nil
-						},
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Config: c,
+					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+						var key reconcilers.StashKey = "foo"
+						// StashValue will panic if the context is not setup correctly
+						reconcilers.StashValue(ctx, key, "bar")
+						return nil
 					},
 				}
 			},
@@ -523,9 +250,9 @@ func TestParentReconciler(t *testing.T) {
 
 	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
 		return &reconcilers.ParentReconciler{
-			Type:           &rtesting.TestResource{},
-			SubReconcilers: rtc.Metadata["SubReconcilers"].(func(*testing.T, reconcilers.Config) []reconcilers.SubReconciler)(t, c),
-			Config:         c,
+			Type:       &rtesting.TestResource{},
+			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
+			Config:     c,
 		}
 	})
 }
@@ -1051,6 +778,476 @@ func TestChildReconciler(t *testing.T) {
 				scheme := runtime.NewScheme()
 				r.Config.Scheme = scheme
 				return r
+			},
+		},
+		ShouldErr: true,
+	}}
+
+	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c)
+	})
+}
+
+func TestSequence(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+
+	scheme := runtime.NewScheme()
+	_ = rtesting.AddToScheme(scheme)
+
+	resource := factories.TestResource().
+		NamespaceName(testNamespace, testName).
+		ObjectMeta(func(om factories.ObjectMeta) {
+			om.Created(1)
+		}).
+		StatusConditions(
+			factories.Condition().Type(apis.ConditionReady).Unknown(),
+		)
+
+	rts := rtesting.SubReconcilerTestSuite{{
+		Name:   "sub reconciler erred",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+							return fmt.Errorf("reconciler error")
+						},
+					},
+				}
+			},
+		},
+		ShouldErr: true,
+	}, {
+		Name:   "preserves result, Requeue",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Config: c,
+					Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+						return ctrl.Result{Requeue: true}, nil
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{Requeue: true},
+	}, {
+		Name:   "preserves result, RequeueAfter",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+						},
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
+	}, {
+		Name:   "ignores result on err",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{Requeue: true}, fmt.Errorf("test error")
+						},
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{},
+		ShouldErr:      true,
+	}, {
+		Name:   "Requeue + empty => Requeue",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{Requeue: true}, nil
+						},
+					},
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{}, nil
+						},
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{Requeue: true},
+	}, {
+		Name:   "empty + Requeue => Requeue",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{}, nil
+						},
+					},
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{Requeue: true}, nil
+						},
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{Requeue: true},
+	}, {
+		Name:   "RequeueAfter + empty => RequeueAfter",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+						},
+					},
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{}, nil
+						},
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
+	}, {
+		Name:   "empty + RequeueAfter => RequeueAfter",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{}, nil
+						},
+					},
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+						},
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
+	}, {
+		Name:   "RequeueAfter + Requeue => RequeueAfter",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+						},
+					},
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{Requeue: true}, nil
+						},
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
+	}, {
+		Name:   "Requeue + RequeueAfter => RequeueAfter",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{Requeue: true}, nil
+						},
+					},
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+						},
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
+	}, {
+		Name:   "RequeueAfter(1m) + RequeueAfter(2m) => RequeueAfter(1m)",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+						},
+					},
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+						},
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
+	}, {
+		Name:   "RequeueAfter(2m) + RequeueAfter(1m) => RequeueAfter(1m)",
+		Parent: resource,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return reconcilers.Sequence{
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+						},
+					},
+					&reconcilers.SyncReconciler{
+						Config: c,
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) (ctrl.Result, error) {
+							return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+						},
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
+	}}
+
+	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c)
+	})
+}
+
+func TestCastParent(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+
+	scheme := runtime.NewScheme()
+	_ = rtesting.AddToScheme(scheme)
+
+	resource := factories.TestResource().
+		NamespaceName(testNamespace, testName).
+		ObjectMeta(func(om factories.ObjectMeta) {
+			om.Created(1)
+		}).
+		StatusConditions(
+			factories.Condition().Type(apis.ConditionReady).Unknown(),
+		)
+
+	rts := rtesting.SubReconcilerTestSuite{{
+		Name: "sync success",
+		Parent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
+			pts.ContainerNamed("test-container", func(c *corev1.Container) {})
+		}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *appsv1.Deployment) error {
+							c.Recorder.Event(resource.Create(), corev1.EventTypeNormal, "Test",
+								parent.Spec.Template.Spec.Containers[0].Name)
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Test", "test-container"),
+		},
+	}, {
+		Name:   "cast mutation",
+		Parent: resource,
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *appsv1.Deployment) error {
+							parent.Spec.Template.Name = "mutation"
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldErr: true,
+	}, {
+		Name:   "return subreconciler result",
+		Parent: resource,
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *appsv1.Deployment) (ctrl.Result, error) {
+							return ctrl.Result{Requeue: true}, nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{Requeue: true},
+	}, {
+		Name:   "return subreconciler err",
+		Parent: resource,
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *appsv1.Deployment) error {
+							return fmt.Errorf("subreconciler error")
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldErr: true,
+	}, {
+		Name: "subreconcilers must be compatible with cast value, not parent",
+		Parent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
+			pts.ContainerNamed("test-container", func(c *corev1.Container) {})
+		}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldPanic: true,
+	}, {
+		Name: "error on cast resource mutation",
+		Parent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
+			pts.ContainerNamed("test-container", func(c *corev1.Container) {})
+		}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldPanic: true,
+	}, {
+		Name:   "marshal error",
+		Parent: resource.ErrorOn(true, false),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &rtesting.TestResource{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+							c.Recorder.Event(resource.Create(), corev1.EventTypeNormal, "Test", parent.Name)
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldErr: true,
+	}, {
+		Name:   "unmarshal error",
+		Parent: resource.ErrorOn(false, true),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &rtesting.TestResource{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+							c.Recorder.Event(resource.Create(), corev1.EventTypeNormal, "Test", parent.Name)
+							return nil
+						},
+						Config: c,
+					},
+				}
 			},
 		},
 		ShouldErr: true,
