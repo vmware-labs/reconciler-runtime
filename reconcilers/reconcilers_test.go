@@ -16,6 +16,7 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	"github.com/vmware-labs/reconciler-runtime/testing/factories"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
@@ -1078,6 +1079,178 @@ func TestSequence(t *testing.T) {
 			},
 		},
 		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
+	}}
+
+	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c)
+	})
+}
+
+func TestCastParent(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+
+	scheme := runtime.NewScheme()
+	_ = rtesting.AddToScheme(scheme)
+
+	resource := factories.TestResource().
+		NamespaceName(testNamespace, testName).
+		ObjectMeta(func(om factories.ObjectMeta) {
+			om.Created(1)
+		}).
+		StatusConditions(
+			factories.Condition().Type(apis.ConditionReady).Unknown(),
+		)
+
+	rts := rtesting.SubReconcilerTestSuite{{
+		Name: "sync success",
+		Parent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
+			pts.ContainerNamed("test-container", func(c *corev1.Container) {})
+		}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *appsv1.Deployment) error {
+							c.Recorder.Event(resource.Create(), corev1.EventTypeNormal, "Test",
+								parent.Spec.Template.Spec.Containers[0].Name)
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Test", "test-container"),
+		},
+	}, {
+		Name:   "cast mutation",
+		Parent: resource,
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *appsv1.Deployment) error {
+							parent.Spec.Template.Name = "mutation"
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldErr: true,
+	}, {
+		Name:   "return subreconciler result",
+		Parent: resource,
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *appsv1.Deployment) (ctrl.Result, error) {
+							return ctrl.Result{Requeue: true}, nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ExpectedResult: ctrl.Result{Requeue: true},
+	}, {
+		Name:   "return subreconciler err",
+		Parent: resource,
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *appsv1.Deployment) error {
+							return fmt.Errorf("subreconciler error")
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldErr: true,
+	}, {
+		Name: "subreconcilers must be compatible with cast value, not parent",
+		Parent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
+			pts.ContainerNamed("test-container", func(c *corev1.Container) {})
+		}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldPanic: true,
+	}, {
+		Name: "error on cast resource mutation",
+		Parent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
+			pts.ContainerNamed("test-container", func(c *corev1.Container) {})
+		}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &appsv1.Deployment{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldPanic: true,
+	}, {
+		Name:   "marshal error",
+		Parent: resource.ErrorOn(true, false),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &rtesting.TestResource{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+							c.Recorder.Event(resource.Create(), corev1.EventTypeNormal, "Test", parent.Name)
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldErr: true,
+	}, {
+		Name:   "unmarshal error",
+		Parent: resource.ErrorOn(false, true),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.CastParent{
+					Type: &rtesting.TestResource{},
+					Reconciler: &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
+							c.Recorder.Event(resource.Create(), corev1.EventTypeNormal, "Test", parent.Name)
+							return nil
+						},
+						Config: c,
+					},
+				}
+			},
+		},
+		ShouldErr: true,
 	}}
 
 	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {

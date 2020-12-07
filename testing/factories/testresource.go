@@ -77,6 +77,21 @@ func (f *testresource) AddField(key string, value string) *testresource {
 	})
 }
 
+func (f *testresource) PodTemplateSpec(nf func(PodTemplateSpec)) *testresource {
+	return f.mutation(func(r *rtesting.TestResource) {
+		ptsf := PodTemplateSpecFactory(r.Spec.Template)
+		nf(ptsf)
+		r.Spec.Template = ptsf.Create()
+	})
+}
+
+func (f *testresource) ErrorOn(marshal, unmarshal bool) *testresource {
+	return f.mutation(func(r *rtesting.TestResource) {
+		r.Spec.ErrOnMarshal = marshal
+		r.Spec.ErrOnUnmarshal = unmarshal
+	})
+}
+
 func (f *testresource) StatusConditions(conditions ...ConditionFactory) *testresource {
 	return f.mutation(func(testresource *rtesting.TestResource) {
 		c := make([]apis.Condition, len(conditions))

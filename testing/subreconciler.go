@@ -152,6 +152,7 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 
 	parent := tc.Parent.CreateObject()
 	ctx = reconcilers.StashParentType(ctx, parent.DeepCopyObject())
+	ctx = reconcilers.StashCastParentType(ctx, parent.DeepCopyObject())
 
 	// Run the Reconcile we're testing.
 	result, err := func(ctx context.Context, parent apis.Object) (reconcile.Result, error) {

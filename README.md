@@ -13,6 +13,8 @@
 	- [SubReconciler](#subreconciler)
 		- [SyncReconciler](#syncreconciler)
 		- [ChildReconciler](#childreconciler)
+	- [Higher-order Reconcilers](#higher-order-reconcilers)
+		- [CastParent](#castparent)
 		- [Sequence](#sequence)
 - [Testing](#testing)
 	- [ReconcilerTestSuite](#reconcilertestsuite)
@@ -196,6 +198,43 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 }
 ```
 [full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/build/function_reconciler.go#L76-L151)
+
+### Higher-order Reconcilers
+
+Higher order reconcilers are SubReconcilers that do not perform work directly, but instead compose other SubReconcilers in new patterns.
+
+#### CastParent
+
+A [`CastParent`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#CastParent) casts the ParentReconciler's type by projecting the resource data onto a new struct. Casting the parent resource is useful to create cross cutting reconcilers that can operate on common portion of multiple parent resources, commonly referred to as a duck type.
+
+JSON encoding is used as the intermediate representation. Operations on a cast parent are read-only. Attempts to mutate the parent will result in the reconciler erring, although read/write support may be added in the future.
+
+**Example:**
+
+```go
+func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
+	c.Log = c.Log.WithName("Function")
+
+	return &reconcilers.ParentReconciler{
+		Type: &buildv1alpha1.Function{},
+		Reconciler: reconcilers.Sequence{
+			&reconcilers.CastParent{
+				Type: &duckv1alpha1.ImageRef{},
+				Reconciler: &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, parent *duckv1alpha1.ImageRef) error {
+						// do something with the duckv1alpha1.ImageRef instead of a buildv1alpha1.Function
+						return nil
+					},
+					Config: c,
+				},
+			},
+			FunctionChildImageReconciler(c),
+		},
+
+		Config: c,
+	}
+}
+```
 
 #### Sequence
 
