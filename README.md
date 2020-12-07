@@ -205,7 +205,7 @@ Higher order reconcilers are SubReconcilers that do not perform work directly, b
 
 #### CastParent
 
-A [`CastParent`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#CastParent) casts the type of the ParentReconciler's type by projecting the data onto a new resource. Casting the parent resource is useful to create cross cutting reconcilers that can operate on common portion of multiple parent resources, common referred to as a duck type.
+A [`CastParent`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#CastParent) casts the ParentReconciler's type by projecting the resource data onto a new struct. Casting the parent resource is useful to create cross cutting reconcilers that can operate on common portion of multiple parent resources, common referred to as a duck type.
 
 JSON encoding is used as the intermediate representation. Operations on a cast parent are read-only. Attempts to mutate the parent will result in the reconciler erring. Although, read/write support may be added in the future.
 
