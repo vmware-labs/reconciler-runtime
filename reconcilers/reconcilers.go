@@ -800,7 +800,7 @@ func (r Sequence) aggregateResult(result, aggregate ctrl.Result) ctrl.Result {
 // CastParent casts the ParentReconciler's type by projecting the resource data
 // onto a new struct. Casting the parent resource is useful to create cross
 // cutting reconcilers that can operate on common portion of multiple parent
-// resources, common referred to as a duck type.
+// resources, commonly referred to as a duck type.
 //
 // JSON encoding is used as the intermediate representation. Operations on a
 // cast parent are read-only. Attempts to mutate the parent will result in the
