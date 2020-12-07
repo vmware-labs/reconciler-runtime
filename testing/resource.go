@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package testing
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -39,7 +40,49 @@ func (r *TestResource) Default() {
 
 // +kubebuilder:object:generate=true
 type TestResourceSpec struct {
-	Fields map[string]string `json:"fields,omitempty"`
+	Fields   map[string]string      `json:"fields,omitempty"`
+	Template corev1.PodTemplateSpec `json:"template,omitempty"`
+
+	ErrOnMarshal   bool `json:"errOnMarhsal,omitempty"`
+	ErrOnUnmarshal bool `json:"errOnUnmarhsal,omitempty"`
+}
+
+func (r *TestResourceSpec) MarshalJSON() ([]byte, error) {
+	if r.ErrOnMarshal {
+		return nil, fmt.Errorf("ErrOnMarshal true")
+	}
+	return json.Marshal(&struct {
+		Fields         map[string]string      `json:"fields,omitempty"`
+		Template       corev1.PodTemplateSpec `json:"template,omitempty"`
+		ErrOnMarshal   bool                   `json:"errOnMarshal,omitempty"`
+		ErrOnUnmarshal bool                   `json:"errOnUnmarshal,omitempty"`
+	}{
+		Fields:         r.Fields,
+		Template:       r.Template,
+		ErrOnMarshal:   r.ErrOnMarshal,
+		ErrOnUnmarshal: r.ErrOnUnmarshal,
+	})
+}
+
+func (r *TestResourceSpec) UnmarshalJSON(data []byte) error {
+	type alias struct {
+		Fields         map[string]string      `json:"fields,omitempty"`
+		Template       corev1.PodTemplateSpec `json:"template,omitempty"`
+		ErrOnMarshal   bool                   `json:"errOnMarshal,omitempty"`
+		ErrOnUnmarshal bool                   `json:"errOnUnmarshal,omitempty"`
+	}
+	a := &alias{}
+	if err := json.Unmarshal(data, a); err != nil {
+		return err
+	}
+	r.Fields = a.Fields
+	r.Template = a.Template
+	r.ErrOnMarshal = a.ErrOnMarshal
+	r.ErrOnUnmarshal = a.ErrOnUnmarshal
+	if r.ErrOnUnmarshal {
+		return fmt.Errorf("ErrOnUnmarshal true")
+	}
+	return nil
 }
 
 // +kubebuilder:object:generate=true
