@@ -8,7 +8,7 @@ package factories
 import (
 	"fmt"
 
-	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
+	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -18,7 +18,7 @@ type service struct {
 }
 
 var (
-	_ rtesting.Factory = (*service)(nil)
+	_ ftesting.Factory = (*service)(nil)
 )
 
 func Service(seed ...*corev1.Service) *service {

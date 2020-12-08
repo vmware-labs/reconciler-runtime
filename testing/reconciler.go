@@ -13,6 +13,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
+	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
+	ttesting "github.com/vmware-labs/reconciler-runtime/testing/trackertesting"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,26 +43,26 @@ type ReconcilerTestCase struct {
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
 	// GivenObjects build the kubernetes objects which are present at the onset of reconciliation
-	GivenObjects []Factory
+	GivenObjects []ftesting.Factory
 	// APIGivenObjects contains objects that are only available via an API reader instead of the normal cache
-	APIGivenObjects []Factory
+	APIGivenObjects []ftesting.Factory
 
 	// side effects
 
 	// ExpectTracks holds the ordered list of Track calls expected during reconciliation
-	ExpectTracks []TrackRequest
+	ExpectTracks []ttesting.TrackRequest
 	// ExpectEvents holds the ordered list of events recorded during the reconciliation
 	ExpectEvents []Event
 	// ExpectCreates builds the ordered list of objects expected to be created during reconciliation
-	ExpectCreates []Factory
+	ExpectCreates []ftesting.Factory
 	// ExpectUpdates builds the ordered list of objects expected to be updated during reconciliation
-	ExpectUpdates []Factory
+	ExpectUpdates []ftesting.Factory
 	// ExpectPatches holds the ordered list of objects expected to be patched during reconciliation
 	ExpectPatches []PatchRef
 	// ExpectDeletes holds the ordered list of objects expected to be deleted during reconciliation
 	ExpectDeletes []DeleteRef
 	// ExpectStatusUpdates builds the ordered list of objects whose status is updated during reconciliation
-	ExpectStatusUpdates []Factory
+	ExpectStatusUpdates []ftesting.Factory
 
 	// outputs
 
@@ -117,7 +119,7 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 		clientWrapper.PrependReactor("*", "*", reactor)
 	}
 	apiReader := newClientWrapperWithScheme(scheme, apiGivenObjects...)
-	tracker := createTracker()
+	tracker := ttesting.CreateTracker()
 	recorder := &eventRecorder{
 		events: []Event{},
 		scheme: scheme,
@@ -164,7 +166,7 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 		tc.Verify(t, result, err)
 	}
 
-	actualTracks := tracker.getTrackRequests()
+	actualTracks := tracker.GetTrackRequests()
 	for i, exp := range tc.ExpectTracks {
 		if i >= len(actualTracks) {
 			t.Errorf("Missing tracking request: %s", exp)
@@ -251,7 +253,7 @@ func normalizeResult(result controllerruntime.Result) controllerruntime.Result {
 	return result
 }
 
-func compareActions(t *testing.T, actionName string, expectedActionFactories []Factory, actualActions []objectAction, diffOptions ...cmp.Option) {
+func compareActions(t *testing.T, actionName string, expectedActionFactories []ftesting.Factory, actualActions []objectAction, diffOptions ...cmp.Option) {
 	t.Helper()
 	for i, exp := range expectedActionFactories {
 		if i >= len(actualActions) {
