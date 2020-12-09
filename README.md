@@ -64,7 +64,7 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 	}
 }
 ```
-[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/build/function_reconciler.go#L39-L51)
+[full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/build/function_reconciler.go#L39-L51)
 
 ### SubReconciler
 
@@ -97,7 +97,7 @@ func FunctionTargetImageReconciler(c reconcilers.Config) reconcilers.SubReconcil
 	}
 }
 ```
-[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/build/function_reconciler.go#L53-L74)
+[full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/build/function_reconciler.go#L53-L74)
 
 #### ChildReconciler
 
@@ -197,7 +197,7 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 	}
 }
 ```
-[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/build/function_reconciler.go#L76-L151)
+[full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/build/function_reconciler.go#L76-L151)
 
 ### Higher-order Reconcilers
 
@@ -259,7 +259,7 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 	}
 }
 ```
-[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/build/function_reconciler.go#L39-L51)
+[full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/build/function_reconciler.go#L39-L51)
 
 
 ## Testing
@@ -290,7 +290,7 @@ deploymentGiven := deploymentCreate.
 		om.Created(1)
 	})
 ```
-[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/streaming/gateway_reconciler_test.go#L84-L101)
+[full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/gateway_reconciler_test.go#L84-L101)
 
 Factories are provided for some common k8s types like Deployment, ConfigMap, ServiceAccount (contributions for more are welcome). Resources that don't have a factory can be wrapped.
 
@@ -351,7 +351,7 @@ rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c recon
 	return streaming.InMemoryGatewayReconciler(c, testSystemNamespace)
 })
 ```
-[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/streaming/inmemorygateway_reconciler_test.go#L142-L169)
+[full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/inmemorygateway_reconciler_test.go#L142-L169)
 
 ### SubReconcilerTestSuite
 
@@ -397,7 +397,7 @@ rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c re
 	return streaming.ProcessorSyncProcessorImages(c, testSystemNamespace)
 })
 ```
-[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/streaming/processor_reconciler_test.go#L279-L305)
+[full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/processor_reconciler_test.go#L279-L305)
 
 ## Utilities
 
@@ -492,7 +492,7 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 	}
 }
 ```
-[full source](https://github.com/projectriff/system/blob/1fcdb7a090565d6750f9284a176eb00a3fe14663/pkg/controllers/streaming/inmemorygateway_reconciler.go#L58-L84)
+[full source](htthttps://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/inmemorygateway_reconciler.go#L58-L84)
 
 ## Contributing
 
