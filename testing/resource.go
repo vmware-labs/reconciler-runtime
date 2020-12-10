@@ -129,6 +129,30 @@ type TestResourceList struct {
 	Items []TestResource `json:"items"`
 }
 
+// +kubebuilder:object:root=true
+
+type TestDuck struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec TestDuckSpec `json:"spec"`
+}
+
+// +kubebuilder:object:generate=true
+
+type TestDuckSpec struct {
+	Template corev1.PodTemplateSpec `json:"template,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+type TestDuckList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+
+	Items []TestDuck `json:"items"`
+}
+
 var (
 	// GroupVersion is group version used to register these objects
 	GroupVersion = schema.GroupVersion{Group: "testing.reconciler.runtime", Version: "v1"}
