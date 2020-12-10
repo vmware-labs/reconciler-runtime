@@ -58,6 +58,8 @@ type SubReconcilerTestCase struct {
 	ExpectCreates []Factory
 	// ExpectUpdates builds the ordered list of objects expected to be updated during reconciliation
 	ExpectUpdates []Factory
+	// ExpectPatches holds the ordered list of objects expected to be patched during reconciliation
+	ExpectPatches []PatchRef
 	// ExpectDeletes holds the ordered list of objects expected to be deleted during reconciliation
 	ExpectDeletes []DeleteRef
 
@@ -235,6 +237,23 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 
 	compareActions(t, "create", tc.ExpectCreates, clientWrapper.createActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, cmpopts.EquateEmpty())
 	compareActions(t, "update", tc.ExpectUpdates, clientWrapper.updateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, cmpopts.EquateEmpty())
+
+	for i, exp := range tc.ExpectPatches {
+		if i >= len(clientWrapper.patchActions) {
+			t.Errorf("Missing patch: %#v", exp)
+			continue
+		}
+		actual := NewPatchRef(clientWrapper.patchActions[i])
+
+		if diff := cmp.Diff(exp, actual); diff != "" {
+			t.Errorf("Unexpected patch (-expected, +actual): %s", diff)
+		}
+	}
+	if actual, expected := len(clientWrapper.patchActions), len(tc.ExpectPatches); actual > expected {
+		for _, extra := range clientWrapper.patchActions[expected:] {
+			t.Errorf("Extra patch: %#v", extra)
+		}
+	}
 
 	for i, exp := range tc.ExpectDeletes {
 		if i >= len(clientWrapper.deleteActions) {

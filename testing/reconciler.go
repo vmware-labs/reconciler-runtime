@@ -53,6 +53,8 @@ type ReconcilerTestCase struct {
 	ExpectCreates []Factory
 	// ExpectUpdates builds the ordered list of objects expected to be updated during reconciliation
 	ExpectUpdates []Factory
+	// ExpectPatches holds the ordered list of objects expected to be patched during reconciliation
+	ExpectPatches []PatchRef
 	// ExpectDeletes holds the ordered list of objects expected to be deleted during reconciliation
 	ExpectDeletes []DeleteRef
 	// ExpectStatusUpdates builds the ordered list of objects whose status is updated during reconciliation
@@ -212,6 +214,23 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 		}
 	}
 
+	for i, exp := range tc.ExpectPatches {
+		if i >= len(clientWrapper.patchActions) {
+			t.Errorf("Missing patch: %#v", exp)
+			continue
+		}
+		actual := NewPatchRef(clientWrapper.patchActions[i])
+
+		if diff := cmp.Diff(exp, actual); diff != "" {
+			t.Errorf("Unexpected patch (-expected, +actual): %s", diff)
+		}
+	}
+	if actual, expected := len(clientWrapper.patchActions), len(tc.ExpectDeletes); actual > expected {
+		for _, extra := range clientWrapper.patchActions[expected:] {
+			t.Errorf("Extra patch: %#v", extra)
+		}
+	}
+
 	compareActions(t, "status update", tc.ExpectStatusUpdates, clientWrapper.statusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, safeDeployDiff, cmpopts.EquateEmpty())
 
 	// Validate the given objects are not mutated by reconciliation
@@ -294,6 +313,26 @@ func (tb ReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory
 // ActionRecorderList/EventList to capture k8s actions/events produced during reconciliation
 // and FakeStatsReporter to capture stats.
 type ReconcilerFactory func(t *testing.T, rtc *ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler
+
+type PatchRef struct {
+	Group     string
+	Kind      string
+	Namespace string
+	Name      string
+	PatchType types.PatchType
+	Patch     []byte
+}
+
+func NewPatchRef(action PatchAction) PatchRef {
+	return PatchRef{
+		Group:     action.GetResource().Group,
+		Kind:      action.GetResource().Resource,
+		Namespace: action.GetNamespace(),
+		Name:      action.GetName(),
+		PatchType: action.GetPatchType(),
+		Patch:     action.GetPatch(),
+	}
+}
 
 type DeleteRef struct {
 	Group     string
