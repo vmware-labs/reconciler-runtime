@@ -9,7 +9,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/vmware-labs/reconciler-runtime/apis"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -20,7 +20,6 @@ import (
 
 type clientWrapper struct {
 	client              client.Client
-	scheme              *runtime.Scheme
 	createActions       []objectAction
 	updateActions       []objectAction
 	deleteActions       []DeleteAction
@@ -31,10 +30,13 @@ type clientWrapper struct {
 
 var _ client.Client = &clientWrapper{}
 
-func newClientWrapperWithScheme(scheme *runtime.Scheme, objs ...runtime.Object) *clientWrapper {
+func newClientWrapperWithScheme(scheme *runtime.Scheme, objs ...client.Object) *clientWrapper {
+	o := make([]runtime.Object, len(objs))
+	for i := range objs {
+		o[i] = objs[i]
+	}
 	client := &clientWrapper{
-		client:              fakeclient.NewFakeClientWithScheme(scheme, objs...),
-		scheme:              scheme,
+		client:              fakeclient.NewFakeClientWithScheme(scheme, o...),
 		createActions:       []objectAction{},
 		updateActions:       []objectAction{},
 		deleteActions:       []DeleteAction{},
@@ -70,7 +72,7 @@ func (w *clientWrapper) PrependReactor(verb, kind string, reaction ReactionFunc)
 }
 
 func (w *clientWrapper) objmeta(obj runtime.Object) (schema.GroupVersionResource, string, string, error) {
-	gvks, _, err := w.scheme.ObjectKinds(obj)
+	gvks, _, err := w.Scheme().ObjectKinds(obj)
 	if err != nil {
 		return schema.GroupVersionResource{}, "", "", err
 	}
@@ -106,7 +108,15 @@ func (w *clientWrapper) react(action Action) error {
 	return nil
 }
 
-func (w *clientWrapper) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
+func (w *clientWrapper) Scheme() *runtime.Scheme {
+	return w.client.Scheme()
+}
+
+func (w *clientWrapper) RESTMapper() meta.RESTMapper {
+	return w.client.RESTMapper()
+}
+
+func (w *clientWrapper) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
 	gvr, namespace, name, err := w.objmeta(obj)
 	if err != nil {
 		return err
@@ -121,7 +131,7 @@ func (w *clientWrapper) Get(ctx context.Context, key client.ObjectKey, obj runti
 	return w.client.Get(ctx, key, obj)
 }
 
-func (w *clientWrapper) List(ctx context.Context, list runtime.Object, opts ...client.ListOption) error {
+func (w *clientWrapper) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	gvr, _, _, err := w.objmeta(list)
 	if err != nil {
 		return err
@@ -145,7 +155,7 @@ func (w *clientWrapper) List(ctx context.Context, list runtime.Object, opts ...c
 	return w.client.List(ctx, list, opts...)
 }
 
-func (w *clientWrapper) Create(ctx context.Context, obj runtime.Object, opts ...client.CreateOption) error {
+func (w *clientWrapper) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	gvr, namespace, _, err := w.objmeta(obj)
 	if err != nil {
 		return err
@@ -163,7 +173,7 @@ func (w *clientWrapper) Create(ctx context.Context, obj runtime.Object, opts ...
 	return w.client.Create(ctx, obj, opts...)
 }
 
-func (w *clientWrapper) Delete(ctx context.Context, obj runtime.Object, opts ...client.DeleteOption) error {
+func (w *clientWrapper) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	gvr, namespace, name, err := w.objmeta(obj)
 	if err != nil {
 		return err
@@ -181,7 +191,7 @@ func (w *clientWrapper) Delete(ctx context.Context, obj runtime.Object, opts ...
 	return w.client.Delete(ctx, obj, opts...)
 }
 
-func (w *clientWrapper) Update(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+func (w *clientWrapper) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	gvr, namespace, _, err := w.objmeta(obj)
 	if err != nil {
 		return err
@@ -198,11 +208,11 @@ func (w *clientWrapper) Update(ctx context.Context, obj runtime.Object, opts ...
 
 	return w.client.Update(ctx, obj, opts...)
 }
-func (w *clientWrapper) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (w *clientWrapper) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	panic(fmt.Errorf("Patch() is not implemented"))
 }
 
-func (w *clientWrapper) DeleteAllOf(ctx context.Context, obj runtime.Object, opts ...client.DeleteAllOfOption) error {
+func (w *clientWrapper) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	panic(fmt.Errorf("DeleteAllOf() is not implemented"))
 }
 
@@ -220,7 +230,7 @@ type statusWriterWrapper struct {
 
 var _ client.StatusWriter = &statusWriterWrapper{}
 
-func (w *statusWriterWrapper) Update(ctx context.Context, obj runtime.Object, opts ...client.UpdateOption) error {
+func (w *statusWriterWrapper) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	gvr, namespace, _, err := w.clientWrapper.objmeta(obj)
 	if err != nil {
 		return err
@@ -238,7 +248,7 @@ func (w *statusWriterWrapper) Update(ctx context.Context, obj runtime.Object, op
 	return w.statusWriter.Update(ctx, obj, opts...)
 }
 
-func (w *statusWriterWrapper) Patch(ctx context.Context, obj runtime.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (w *statusWriterWrapper) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	panic(fmt.Errorf("Patch() is not implemented"))
 }
 
@@ -272,7 +282,7 @@ func InduceFailure(verb, kind string, o ...InduceFailureOpts) ReactionFunc {
 					return false, nil, nil
 				}
 			case objectAction: // matches CreateAction, UpdateAction
-				obj, ok := a.GetObject().(apis.Object)
+				obj, ok := a.GetObject().(client.Object)
 				if ok && opts.Name != obj.GetName() {
 					return false, nil, nil
 				}

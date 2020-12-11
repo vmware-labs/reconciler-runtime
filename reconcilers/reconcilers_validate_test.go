@@ -9,15 +9,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestSyncReconciler_validate(t *testing.T) {
 	tests := []struct {
 		name       string
-		parent     apis.Object
+		parent     client.Object
 		reconciler *SyncReconciler
 		shouldErr  string
 	}{
@@ -110,7 +110,7 @@ func TestSyncReconciler_validate(t *testing.T) {
 func TestChildReconciler_validate(t *testing.T) {
 	tests := []struct {
 		name       string
-		parent     apis.Object
+		parent     client.Object
 		reconciler *ChildReconciler
 		shouldErr  string
 	}{
@@ -660,7 +660,7 @@ func TestChildReconciler_validate(t *testing.T) {
 func TestCastParent_validate(t *testing.T) {
 	tests := []struct {
 		name       string
-		parent     apis.Object
+		parent     client.Object
 		reconciler *CastParent
 		shouldErr  string
 	}{

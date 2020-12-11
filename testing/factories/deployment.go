@@ -8,11 +8,11 @@ package factories
 import (
 	"fmt"
 
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type deployment struct {
@@ -46,7 +46,7 @@ func (f *deployment) Create() *appsv1.Deployment {
 	return f.deepCopy().target
 }
 
-func (f *deployment) CreateObject() apis.Object {
+func (f *deployment) CreateObject() client.Object {
 	return f.Create()
 }
 

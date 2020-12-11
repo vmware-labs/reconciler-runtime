@@ -11,10 +11,10 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -95,14 +95,14 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 	}
 
 	// Record the given objects
-	givenObjects := make([]runtime.Object, 0, len(tc.GivenObjects))
-	originalGivenObjects := make([]runtime.Object, 0, len(tc.GivenObjects))
+	givenObjects := make([]client.Object, 0, len(tc.GivenObjects))
+	originalGivenObjects := make([]client.Object, 0, len(tc.GivenObjects))
 	for _, f := range tc.GivenObjects {
 		object := f.CreateObject()
-		givenObjects = append(givenObjects, object.DeepCopyObject())
-		originalGivenObjects = append(originalGivenObjects, object.DeepCopyObject())
+		givenObjects = append(givenObjects, object.DeepCopyObject().(client.Object))
+		originalGivenObjects = append(originalGivenObjects, object.DeepCopyObject().(client.Object))
 	}
-	apiGivenObjects := make([]runtime.Object, 0, len(tc.APIGivenObjects))
+	apiGivenObjects := make([]client.Object, 0, len(tc.APIGivenObjects))
 	for _, f := range tc.APIGivenObjects {
 		apiGivenObjects = append(apiGivenObjects, f.CreateObject())
 	}
@@ -151,11 +151,11 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 	}
 
 	parent := tc.Parent.CreateObject()
-	ctx = reconcilers.StashParentType(ctx, parent.DeepCopyObject())
-	ctx = reconcilers.StashCastParentType(ctx, parent.DeepCopyObject())
+	ctx = reconcilers.StashParentType(ctx, parent.DeepCopyObject().(client.Object))
+	ctx = reconcilers.StashCastParentType(ctx, parent.DeepCopyObject().(client.Object))
 
 	// Run the Reconcile we're testing.
-	result, err := func(ctx context.Context, parent apis.Object) (reconcile.Result, error) {
+	result, err := func(ctx context.Context, parent client.Object) (reconcile.Result, error) {
 		if tc.ShouldPanic {
 			defer func() {
 				if r := recover(); r == nil {

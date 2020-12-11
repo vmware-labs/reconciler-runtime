@@ -8,9 +8,9 @@ package factories
 import (
 	"fmt"
 
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type serviceAccount struct {
@@ -44,7 +44,7 @@ func (f *serviceAccount) Create() *corev1.ServiceAccount {
 	return f.deepCopy().target
 }
 
-func (f *serviceAccount) CreateObject() apis.Object {
+func (f *serviceAccount) CreateObject() client.Object {
 	return f.Create()
 }
 

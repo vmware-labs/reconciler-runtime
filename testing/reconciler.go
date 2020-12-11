@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package testing
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -91,15 +93,17 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 		t.SkipNow()
 	}
 
+	ctx := context.TODO()
+
 	// Record the given objects
-	givenObjects := make([]runtime.Object, 0, len(tc.GivenObjects))
-	originalGivenObjects := make([]runtime.Object, 0, len(tc.GivenObjects))
+	givenObjects := make([]client.Object, 0, len(tc.GivenObjects))
+	originalGivenObjects := make([]client.Object, 0, len(tc.GivenObjects))
 	for _, f := range tc.GivenObjects {
 		object := f.CreateObject()
-		givenObjects = append(givenObjects, object.DeepCopyObject())
-		originalGivenObjects = append(originalGivenObjects, object.DeepCopyObject())
+		givenObjects = append(givenObjects, object.DeepCopyObject().(client.Object))
+		originalGivenObjects = append(originalGivenObjects, object.DeepCopyObject().(client.Object))
 	}
-	apiGivenObjects := make([]runtime.Object, 0, len(tc.APIGivenObjects))
+	apiGivenObjects := make([]client.Object, 0, len(tc.APIGivenObjects))
 	for _, f := range tc.APIGivenObjects {
 		apiGivenObjects = append(apiGivenObjects, f.CreateObject())
 	}
@@ -140,7 +144,7 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 	}
 
 	// Run the Reconcile we're testing.
-	result, err := c.Reconcile(reconcile.Request{
+	result, err := c.Reconcile(ctx, reconcile.Request{
 		NamespacedName: tc.Key,
 	})
 

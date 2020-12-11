@@ -8,9 +8,9 @@ package factories
 import (
 	"fmt"
 
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type configMap struct {
@@ -44,7 +44,7 @@ func (f *configMap) Create() *corev1.ConfigMap {
 	return f.deepCopy().target
 }
 
-func (f *configMap) CreateObject() apis.Object {
+func (f *configMap) CreateObject() client.Object {
 	return f.Create()
 }
 
