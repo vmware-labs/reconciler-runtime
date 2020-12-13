@@ -1128,13 +1128,21 @@ func TestCastParent(t *testing.T) {
 	}, {
 		Name:   "cast mutation",
 		Parent: resource,
+		ExpectParent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
+			pts.ObjectMeta(func(om factories.ObjectMeta) {
+				om.Name("mutation")
+			})
+		}),
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return &reconcilers.CastParent{
 					Type: &appsv1.Deployment{},
 					Reconciler: &reconcilers.SyncReconciler{
 						Sync: func(ctx context.Context, parent *appsv1.Deployment) error {
+							// mutation that exists on the original parent and will be reflected
 							parent.Spec.Template.Name = "mutation"
+							// mutation that does not exists on the original parent and will be dropped
+							parent.Spec.Paused = true
 							return nil
 						},
 						Config: c,
@@ -1142,7 +1150,6 @@ func TestCastParent(t *testing.T) {
 				}
 			},
 		},
-		ShouldErr: true,
 	}, {
 		Name:   "return subreconciler result",
 		Parent: resource,
@@ -1197,7 +1204,7 @@ func TestCastParent(t *testing.T) {
 		},
 		ShouldPanic: true,
 	}, {
-		Name: "error on cast resource mutation",
+		Name: "error for cast to different type than expected by sub reconciler",
 		Parent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
 			pts.ContainerNamed("test-container", func(c *corev1.Container) {})
 		}),
