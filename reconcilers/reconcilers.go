@@ -839,14 +839,22 @@ func (r *CastParent) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Re
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	castOriginal := castParent.DeepCopyObject()
+	castOriginal := castParent.DeepCopyObject().(apis.Object)
 	result, err := r.Reconciler.Reconcile(ctx, castParent)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	if !equality.Semantic.DeepEqual(castParent, castOriginal) {
-		// TODO apply diff to parent resource, until then err
-		return ctrl.Result{}, fmt.Errorf("cast parent resource mutated")
+		// patch the parent object with the updated duck values
+		patch, err := NewPatch(castOriginal, castParent)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		err = patch.Apply(parent)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
 	}
 	return result, nil
 }
