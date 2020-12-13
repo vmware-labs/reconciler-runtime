@@ -10,6 +10,7 @@ import (
 
 	"github.com/vmware-labs/reconciler-runtime/apis"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type testresource struct {
@@ -43,7 +44,7 @@ func (f *testresource) Create() *rtesting.TestResource {
 	return f.deepCopy().target
 }
 
-func (f *testresource) CreateObject() apis.Object {
+func (f *testresource) CreateObject() client.Object {
 	return f.Create()
 }
 

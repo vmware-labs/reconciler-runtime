@@ -8,9 +8,9 @@ package factories
 import (
 	"fmt"
 
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type secret struct {
@@ -44,7 +44,7 @@ func (f *secret) Create() *corev1.Secret {
 	return f.deepCopy().target
 }
 
-func (f *secret) CreateObject() apis.Object {
+func (f *secret) CreateObject() client.Object {
 	return f.Create()
 }
 

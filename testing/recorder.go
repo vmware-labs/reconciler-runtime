@@ -12,8 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
-
-	"github.com/vmware-labs/reconciler-runtime/apis"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type Event struct {
@@ -54,7 +53,7 @@ var (
 )
 
 func (r *eventRecorder) Event(object runtime.Object, eventtype, reason, message string) {
-	o := object.(apis.Object)
+	o := object.(client.Object)
 	gvks, _, _ := r.scheme.ObjectKinds(o)
 	apiVersion, kind := gvks[0].ToAPIVersionAndKind()
 	r.events = append(r.events, Event{

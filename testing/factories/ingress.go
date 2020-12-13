@@ -8,11 +8,11 @@ package factories
 import (
 	"fmt"
 
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1beta1 "k8s.io/api/networking/v1beta1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ingress struct {
@@ -46,7 +46,7 @@ func (f *ingress) Create() *networkingv1beta1.Ingress {
 	return f.deepCopy().target
 }
 
-func (f *ingress) CreateObject() apis.Object {
+func (f *ingress) CreateObject() client.Object {
 	return f.Create()
 }
 
