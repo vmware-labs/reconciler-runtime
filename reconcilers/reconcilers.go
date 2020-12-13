@@ -840,7 +840,7 @@ func (r *CastParent) Reconcile(ctx context.Context, parent client.Object) (ctrl.
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	castOriginal := castParent.DeepCopyObject().(apis.Object)
+	castOriginal := castParent.DeepCopyObject().(client.Object)
 	result, err := r.Reconciler.Reconcile(ctx, castParent)
 	if err != nil {
 		return ctrl.Result{}, err
