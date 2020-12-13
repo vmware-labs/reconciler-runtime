@@ -58,3 +58,14 @@ func (s *Status) GetCondition(t ConditionType) *Condition {
 	}
 	return nil
 }
+
+// SetCondition replaces or appends the condition of the specified type.
+func (s *Status) SetCondition(c Condition) {
+	for i := range s.Conditions {
+		if s.Conditions[i].Type == c.Type {
+			s.Conditions[i] = c
+			return
+		}
+	}
+	s.Conditions = append(s.Conditions, c)
+}
