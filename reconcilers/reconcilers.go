@@ -271,7 +271,7 @@ func (r *SyncReconciler) validate(ctx context.Context) error {
 func (r *SyncReconciler) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	result, err := r.sync(ctx, parent)
 	if err != nil {
-		r.Log.Error(err, "unable to sync", reflect.TypeOf(parent), parent)
+		r.Log.Error(err, "unable to sync", typeName(parent), parent)
 		return ctrl.Result{}, err
 	}
 
