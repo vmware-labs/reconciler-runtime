@@ -19,28 +19,42 @@ package client
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type DuckClient interface {
+	Client
 	DuckReader
 	DuckWriter
-	StatusClient
 }
 
 func NewDuckClient(client Client) DuckClient {
 	return &duckClient{
-		DuckReader:   NewDuckReader(client),
-		DuckWriter:   NewDuckWriter(client),
-		StatusClient: client,
+		DuckReader: NewDuckReader(client),
+		DuckWriter: NewDuckWriter(client),
+		client:     client,
 	}
 }
 
 type duckClient struct {
 	DuckReader
 	DuckWriter
-	StatusClient
+	client Client
+}
+
+func (c *duckClient) Status() client.StatusWriter {
+	return c.client.Status()
+}
+
+func (c *duckClient) Scheme() *runtime.Scheme {
+	return c.client.Scheme()
+}
+
+func (c *duckClient) RESTMapper() meta.RESTMapper {
+	return c.client.RESTMapper()
 }
 
 // DuckReader wraps a Reader adding duck type specific methods for reading
@@ -56,7 +70,7 @@ type DuckReader interface {
 	// the obj type, and must be included in the key. The representation from
 	// the API server is unmarshaled into the the duck object with no type
 	// checking. Incompatible structs will contain their empty values.
-	GetDuck(ctx context.Context, key Key, duck runtime.Object) error
+	GetDuck(ctx context.Context, key Key, duck client.Object) error
 
 	// ListDuck retrieves list of objects for a given namespace and list
 	// options. On a successful call, Items field in the list will be populated
@@ -66,7 +80,7 @@ type DuckReader interface {
 	// from the obj type, and must be included in the key. The representation
 	// from the API server is unmarshaled into the the duck object with no type
 	// checking. Incompatible structs will contain their empty values.
-	ListDuck(ctx context.Context, key Key, duck runtime.Object, opts ...ListOption) error
+	ListDuck(ctx context.Context, key Key, duck client.ObjectList, opts ...ListOption) error
 }
 
 func NewDuckReader(reader Reader) DuckReader {
@@ -79,8 +93,8 @@ type duckReader struct {
 	Reader
 }
 
-func (c *duckReader) GetDuck(ctx context.Context, key Key, duck runtime.Object) error {
-	u := key.Unstructured()
+func (c *duckReader) GetDuck(ctx context.Context, key Key, duck client.Object) error {
+	u := key.UnstructuredObject()
 	err := c.Reader.Get(ctx, key.ObjectKey(), u)
 	if err != nil {
 		return err
@@ -88,8 +102,8 @@ func (c *duckReader) GetDuck(ctx context.Context, key Key, duck runtime.Object) 
 	return runtime.DefaultUnstructuredConverter.FromUnstructured(u.UnstructuredContent(), duck)
 }
 
-func (c *duckReader) ListDuck(ctx context.Context, key Key, duck runtime.Object, opts ...ListOption) error {
-	u := key.Unstructured()
+func (c *duckReader) ListDuck(ctx context.Context, key Key, duck client.ObjectList, opts ...ListOption) error {
+	u := key.UnstructuredList()
 	if key.Namespace != "" {
 		opts = append(opts, InNamespace(key.Namespace))
 	}
@@ -112,7 +126,7 @@ type DuckWriter interface {
 	// PatchDuck patches the given obj in the Kubernetes cluster. obj must be a
 	// struct pointer so that obj can be updated with the content returned by
 	// the Server.
-	PatchDuck(ctx context.Context, duck runtime.Object, patch Patch, opts ...PatchOption) error
+	PatchDuck(ctx context.Context, duck client.Object, patch Patch, opts ...PatchOption) error
 }
 
 func NewDuckWriter(writer Writer) DuckWriter {
@@ -126,11 +140,11 @@ type duckWriter struct {
 }
 
 func (c *duckWriter) DeleteDuck(ctx context.Context, key Key, opts ...DeleteOption) error {
-	obj := key.Unstructured()
+	obj := key.UnstructuredObject()
 	return c.Delete(ctx, obj, opts...)
 }
 
-func (c *duckWriter) PatchDuck(ctx context.Context, duck runtime.Object, patch Patch, opts ...PatchOption) error {
+func (c *duckWriter) PatchDuck(ctx context.Context, duck client.Object, patch Patch, opts ...PatchOption) error {
 	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(duck)
 	if err != nil {
 		return err

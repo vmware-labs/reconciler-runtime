@@ -11,21 +11,21 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestPatch(t *testing.T) {
 	tests := []struct {
 		name           string
-		base           apis.Object
-		update         apis.Object
-		rebase         apis.Object
-		expected       apis.Object
+		base           client.Object
+		update         client.Object
+		rebase         client.Object
+		expected       client.Object
 		newShouldErr   bool
 		applyShouldErr bool
 	}{

@@ -6,23 +6,23 @@ SPDX-License-Identifier: Apache-2.0
 package testing
 
 import (
-	"github.com/vmware-labs/reconciler-runtime/apis"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Factory creates Kubernetes objects
 type Factory interface {
 	// CreateObject creates a new Kubernetes object
-	CreateObject() apis.Object
+	CreateObject() client.Object
 }
 
-func Wrapper(obj apis.Object) Factory {
+func Wrapper(obj client.Object) Factory {
 	return &wrapper{obj: obj}
 }
 
 type wrapper struct {
-	obj apis.Object
+	obj client.Object
 }
 
-func (w *wrapper) CreateObject() apis.Object {
-	return w.obj.DeepCopyObject().(apis.Object)
+func (w *wrapper) CreateObject() client.Object {
+	return w.obj.DeepCopyObject().(client.Object)
 }

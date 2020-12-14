@@ -19,7 +19,6 @@ package client
 import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
@@ -65,14 +64,15 @@ func (k *Key) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(k.APIVersion, k.Kind)
 }
 
-func (k *Key) Unstructured() runtime.Unstructured {
-	if k.Name == "" {
-		u := &unstructured.UnstructuredList{}
-		u.SetAPIVersion(k.APIVersion)
-		u.SetKind(k.Kind)
-		return u
-	}
+func (k *Key) UnstructuredObject() *unstructured.Unstructured {
 	u := &unstructured.Unstructured{}
+	u.SetAPIVersion(k.APIVersion)
+	u.SetKind(k.Kind)
+	return u
+}
+
+func (k *Key) UnstructuredList() *unstructured.UnstructuredList {
+	u := &unstructured.UnstructuredList{}
 	u.SetAPIVersion(k.APIVersion)
 	u.SetKind(k.Kind)
 	return u

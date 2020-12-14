@@ -10,11 +10,11 @@ import (
 	"errors"
 
 	jsonmergepatch "github.com/evanphx/json-patch/v5"
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func NewPatch(base, update apis.Object) (*Patch, error) {
+func NewPatch(base, update client.Object) (*Patch, error) {
 	baseBytes, err := json.Marshal(base)
 	if err != nil {
 		return nil, err
@@ -45,7 +45,7 @@ type Patch struct {
 
 var PatchGenerationMismatch = errors.New("patch generation did not match target")
 
-func (p *Patch) Apply(rebase apis.Object) error {
+func (p *Patch) Apply(rebase client.Object) error {
 	if rebase.GetGeneration() != p.generation {
 		return PatchGenerationMismatch
 	}

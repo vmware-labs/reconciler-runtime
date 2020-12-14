@@ -115,7 +115,7 @@ func TestKey_GroupVersionKind(t *testing.T) {
 	}
 }
 
-func TestKey_Unstructured(t *testing.T) {
+func TestKey_UnstructuredObject(t *testing.T) {
 	key := &client.Key{
 		APIVersion: "example.com/v1alpha1",
 		Kind:       "MyKind",
@@ -125,7 +125,7 @@ func TestKey_Unstructured(t *testing.T) {
 	expected := &unstructured.Unstructured{}
 	expected.SetAPIVersion("example.com/v1alpha1")
 	expected.SetKind("MyKind")
-	actual := key.Unstructured()
+	actual := key.UnstructuredObject()
 	if diff := cmp.Diff(expected, actual); diff != "" {
 		t.Errorf("(-expected, +actual): %s", diff)
 	}
@@ -140,7 +140,7 @@ func TestKey_UnstructuredList(t *testing.T) {
 	expected := &unstructured.UnstructuredList{}
 	expected.SetAPIVersion("example.com/v1alpha1")
 	expected.SetKind("MyKind")
-	actual := key.Unstructured()
+	actual := key.UnstructuredList()
 	if diff := cmp.Diff(expected, actual); diff != "" {
 		t.Errorf("(-expected, +actual): %s", diff)
 	}

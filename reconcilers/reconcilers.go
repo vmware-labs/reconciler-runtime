@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	"github.com/vmware-labs/reconciler-runtime/client"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
@@ -48,7 +47,9 @@ type Config struct {
 	Tracker   tracker.Tracker
 }
 
-func NewConfig(mgr ctrl.Manager, apiType runtime.Object, syncPeriod time.Duration) Config {
+// NewConfig creates a Config for a specific API type. Typically passed into a
+// reconciler.
+func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration) Config {
 	name := typeName(apiType)
 	log := ctrl.Log.WithName("controllers").WithName(name)
 	return Config{
@@ -68,7 +69,7 @@ func NewConfig(mgr ctrl.Manager, apiType runtime.Object, syncPeriod time.Duratio
 // server if needed.
 type ParentReconciler struct {
 	// Type of resource to reconcile
-	Type runtime.Object
+	Type client.Object
 
 	// Reconciler is called for each reconciler request with the parent
 	// resource being reconciled. Typically, Reconciler is a Sequence of
@@ -88,13 +89,13 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 	return bldr.Complete(r)
 }
 
-func (r *ParentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := WithStash(context.Background())
+func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	ctx = WithStash(ctx)
 	log := r.Log.WithValues("request", req.NamespacedName)
 
 	ctx = StashParentType(ctx, r.Type)
 	ctx = StashCastParentType(ctx, r.Type)
-	originalParent := r.Type.DeepCopyObject().(apis.Object)
+	originalParent := r.Type.DeepCopyObject().(client.Object)
 
 	if err := r.Get(ctx, req.NamespacedName, originalParent); err != nil {
 		if apierrs.IsNotFound(err) {
@@ -106,7 +107,7 @@ func (r *ParentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Error(err, "unable to fetch resource")
 		return ctrl.Result{}, err
 	}
-	parent := originalParent.DeepCopyObject().(apis.Object)
+	parent := originalParent.DeepCopyObject().(client.Object)
 
 	if defaulter, ok := parent.(webhook.Defaulter); ok {
 		// parent.Default()
@@ -137,7 +138,7 @@ func (r *ParentReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return result, err
 }
 
-func (r *ParentReconciler) reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
+func (r *ParentReconciler) reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	if parent.GetDeletionTimestamp() != nil {
 		return ctrl.Result{}, nil
 	}
@@ -152,39 +153,39 @@ func (r *ParentReconciler) reconcile(ctx context.Context, parent apis.Object) (c
 	return result, nil
 }
 
-func (r *ParentReconciler) copyGeneration(obj apis.Object) {
+func (r *ParentReconciler) copyGeneration(obj client.Object) {
 	// obj.Status.ObservedGeneration = obj.Generation
 	objVal := reflect.ValueOf(obj).Elem()
 	generation := objVal.FieldByName("Generation").Int()
 	objVal.FieldByName("Status").FieldByName("ObservedGeneration").SetInt(generation)
 }
 
-func (r *ParentReconciler) status(obj apis.Object) interface{} {
+func (r *ParentReconciler) status(obj client.Object) interface{} {
 	return reflect.ValueOf(obj).Elem().FieldByName("Status").Addr().Interface()
 }
 
 const parentTypeStashKey StashKey = "reconciler-runtime:parentType"
 const castParentTypeStashKey StashKey = "reconciler-runtime:castParentType"
 
-func StashParentType(ctx context.Context, parentType runtime.Object) context.Context {
+func StashParentType(ctx context.Context, parentType client.Object) context.Context {
 	return context.WithValue(ctx, parentTypeStashKey, parentType)
 }
 
-func StashCastParentType(ctx context.Context, currentType runtime.Object) context.Context {
+func StashCastParentType(ctx context.Context, currentType client.Object) context.Context {
 	return context.WithValue(ctx, castParentTypeStashKey, currentType)
 }
 
-func RetrieveParentType(ctx context.Context) runtime.Object {
+func RetrieveParentType(ctx context.Context) client.Object {
 	value := ctx.Value(parentTypeStashKey)
-	if parentType, ok := value.(runtime.Object); ok {
+	if parentType, ok := value.(client.Object); ok {
 		return parentType
 	}
 	return nil
 }
 
-func RetrieveCastParentType(ctx context.Context) runtime.Object {
+func RetrieveCastParentType(ctx context.Context) client.Object {
 	value := ctx.Value(castParentTypeStashKey)
-	if currentType, ok := value.(runtime.Object); ok {
+	if currentType, ok := value.(client.Object); ok {
 		return currentType
 	}
 	return nil
@@ -195,7 +196,7 @@ func RetrieveCastParentType(ctx context.Context) runtime.Object {
 // status can be mutated to reflect the current state.
 type SubReconciler interface {
 	SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error
-	Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error)
+	Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error)
 }
 
 var (
@@ -217,8 +218,8 @@ type SyncReconciler struct {
 	// Sync does whatever work is necessary for the reconciler
 	//
 	// Expected function signature:
-	//     func(ctx context.Context, parent apis.Object) error
-	//     func(ctx context.Context, parent apis.Object) (ctrl.Result, error)
+	//     func(ctx context.Context, parent client.Object) error
+	//     func(ctx context.Context, parent client.Object) (ctrl.Result, error)
 	Sync interface{}
 
 	Config
@@ -236,8 +237,8 @@ func (r *SyncReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager,
 
 func (r *SyncReconciler) validate(ctx context.Context) error {
 	// validate Sync function signature:
-	//     func(ctx context.Context, parent apis.Object) error
-	//     func(ctx context.Context, parent apis.Object) (ctrl.Result, error)
+	//     func(ctx context.Context, parent client.Object) error
+	//     func(ctx context.Context, parent client.Object) (ctrl.Result, error)
 	if r.Sync == nil {
 		return fmt.Errorf("SyncReconciler must implement Sync")
 	} else {
@@ -267,7 +268,7 @@ func (r *SyncReconciler) validate(ctx context.Context) error {
 	return nil
 }
 
-func (r *SyncReconciler) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
+func (r *SyncReconciler) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	result, err := r.sync(ctx, parent)
 	if err != nil {
 		r.Log.Error(err, "unable to sync", reflect.TypeOf(parent), parent)
@@ -277,7 +278,7 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, parent apis.Object) (ctr
 	return result, nil
 }
 
-func (r *SyncReconciler) sync(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
+func (r *SyncReconciler) sync(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	fn := reflect.ValueOf(r.Sync)
 	out := fn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
@@ -325,10 +326,10 @@ type ChildReconciler struct {
 	// ChildType is the resource being created/updated/deleted by the
 	// reconciler. For example, a parent Deployment would have a ReplicaSet as a
 	// child.
-	ChildType apis.Object
+	ChildType client.Object
 	// ChildListType is the listing type for the child type. For example,
 	// PodList is the list type for Pod
-	ChildListType runtime.Object
+	ChildListType client.ObjectList
 
 	// Setup performs initialization on the manager and builder this reconciler
 	// will run with. It's common to setup field indexes and watch resources.
@@ -344,7 +345,7 @@ type ChildReconciler struct {
 	// an error.
 	//
 	// Expected function signature:
-	//     func(ctx context.Context, parent apis.Object) (apis.Object, error)
+	//     func(ctx context.Context, parent client.Object) (client.Object, error)
 	DesiredChild interface{}
 
 	// ReflectChildStatusOnParent updates the parent object's status with values
@@ -352,7 +353,7 @@ type ChildReconciler struct {
 	// - apierrs.IsConflict
 	//
 	// Expected function signature:
-	//     func(parent, child apis.Object, err error)
+	//     func(parent, child client.Object, err error)
 	ReflectChildStatusOnParent interface{}
 
 	// HarmonizeImmutableFields allows fields that are immutable on the current
@@ -360,7 +361,7 @@ type ChildReconciler struct {
 	// updates which are guaranteed to fail.
 	//
 	// Expected function signature:
-	//     func(current, desired apis.Object)
+	//     func(current, desired client.Object)
 	//
 	// +optional
 	HarmonizeImmutableFields interface{}
@@ -370,14 +371,14 @@ type ChildReconciler struct {
 	// Annotations.
 	//
 	// Expected function signature:
-	//     func(current, desired apis.Object)
+	//     func(current, desired client.Object)
 	MergeBeforeUpdate interface{}
 
 	// SemanticEquals compares two child resources returning true if there is a
 	// meaningful difference that should trigger an update.
 	//
 	// Expected function signature:
-	//     func(a1, a2 apis.Object) bool
+	//     func(a1, a2 client.Object) bool
 	SemanticEquals interface{}
 
 	// Sanitize is called with an object before logging the value. Any value may
@@ -385,7 +386,7 @@ type ChildReconciler struct {
 	// like the Spec.
 	//
 	// Expected function signature:
-	//     func(child apis.Object) interface{}
+	//     func(child client.Object) interface{}
 	//
 	// +optional
 	Sanitize interface{}
@@ -439,7 +440,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 	}
 
 	// validate DesiredChild function signature:
-	//     func(ctx context.Context, parent apis.Object) (apis.Object, error)
+	//     func(ctx context.Context, parent client.Object) (client.Object, error)
 	if r.DesiredChild == nil {
 		return fmt.Errorf("ChildReconciler must implement DesiredChild")
 	} else {
@@ -454,7 +455,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 	}
 
 	// validate ReflectChildStatusOnParent function signature:
-	//     func(parent, child apis.Object, err error)
+	//     func(parent, child client.Object, err error)
 	if r.ReflectChildStatusOnParent == nil {
 		return fmt.Errorf("ChildReconciler must implement ReflectChildStatusOnParent")
 	} else {
@@ -469,7 +470,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 
 	// validate HarmonizeImmutableFields function signature:
 	//     nil
-	//     func(current, desired apis.Object)
+	//     func(current, desired client.Object)
 	if r.HarmonizeImmutableFields != nil {
 		fn := reflect.TypeOf(r.HarmonizeImmutableFields)
 		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
@@ -480,7 +481,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 	}
 
 	// validate MergeBeforeUpdate function signature:
-	//     func(current, desired apis.Object)
+	//     func(current, desired client.Object)
 	if r.MergeBeforeUpdate == nil {
 		return fmt.Errorf("ChildReconciler must implement MergeBeforeUpdate")
 	} else {
@@ -493,7 +494,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 	}
 
 	// validate SemanticEquals function signature:
-	//     func(a1, a2 apis.Object) bool
+	//     func(a1, a2 client.Object) bool
 	if r.SemanticEquals == nil {
 		return fmt.Errorf("ChildReconciler must implement SemanticEquals")
 	} else {
@@ -508,7 +509,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 
 	// validate Sanitize function signature:
 	//     nil
-	//     func(child apis.Object) interface{}
+	//     func(child client.Object) interface{}
 	if r.Sanitize != nil {
 		fn := reflect.TypeOf(r.Sanitize)
 		if fn.NumIn() != 1 || fn.NumOut() != 1 ||
@@ -520,7 +521,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 	return nil
 }
 
-func (r *ChildReconciler) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
+func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	if r.mutationCache == nil {
 		r.mutationCache = cache.NewExpiring()
 	}
@@ -533,7 +534,7 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent apis.Object) (ct
 			// the created child from a previous turn may be slow to appear in the informer cache, but shouldn't appear
 			// on the parent as being not ready.
 			apierr := err.(apierrs.APIStatus)
-			conflicted := r.ChildType.DeepCopyObject().(apis.Object)
+			conflicted := r.ChildType.DeepCopyObject().(client.Object)
 			_ = r.APIReader.Get(ctx, types.NamespacedName{Namespace: parent.GetNamespace(), Name: apierr.Status().Details.Name}, conflicted)
 			if metav1.IsControlledBy(conflicted, parent) {
 				// skip updating the parent's status, fail and try again
@@ -551,10 +552,10 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent apis.Object) (ct
 	return ctrl.Result{}, nil
 }
 
-func (r *ChildReconciler) reconcile(ctx context.Context, parent apis.Object) (apis.Object, error) {
-	actual := r.ChildType.DeepCopyObject().(apis.Object)
-	children := r.ChildListType.DeepCopyObject().(runtime.Object)
-	if err := r.List(ctx, children, client.InNamespace(parent.GetNamespace()), client.MatchingField(r.IndexField, parent.GetName())); err != nil {
+func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (client.Object, error) {
+	actual := r.ChildType.DeepCopyObject().(client.Object)
+	children := r.ChildListType.DeepCopyObject().(client.ObjectList)
+	if err := r.List(ctx, children, client.InNamespace(parent.GetNamespace()), client.MatchingFields{r.IndexField: parent.GetName()}); err != nil {
 		return nil, err
 	}
 	// TODO do we need to remove resources pending deletion?
@@ -622,7 +623,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent apis.Object) (ap
 	r.harmonizeImmutableFields(actual, desired)
 
 	// lookup and apply remote mutations
-	desiredPatched := desired.DeepCopyObject().(apis.Object)
+	desiredPatched := desired.DeepCopyObject().(client.Object)
 	if patch, ok := r.mutationCache.Get(actual.GetUID()); ok {
 		// the only object added to the cache is *Patch
 		err := patch.(*Patch).Apply(desiredPatched)
@@ -638,7 +639,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent apis.Object) (ap
 	}
 
 	// update child with desired changes
-	current := actual.DeepCopyObject().(apis.Object)
+	current := actual.DeepCopyObject().(client.Object)
 	r.mergeBeforeUpdate(current, desiredPatched)
 	r.Log.Info("reconciling child", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
 	if err := r.Update(ctx, current); err != nil {
@@ -650,7 +651,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent apis.Object) (ap
 	if r.semanticEquals(desired, current) {
 		r.mutationCache.Delete(current.GetUID())
 	} else {
-		base := current.DeepCopyObject().(apis.Object)
+		base := current.DeepCopyObject().(client.Object)
 		r.mergeBeforeUpdate(base, desired)
 		patch, err := NewPatch(base, current)
 		if err != nil {
@@ -665,7 +666,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent apis.Object) (ap
 	return current, nil
 }
 
-func (r *ChildReconciler) semanticEquals(a1, a2 apis.Object) bool {
+func (r *ChildReconciler) semanticEquals(a1, a2 client.Object) bool {
 	fn := reflect.ValueOf(r.SemanticEquals)
 	out := fn.Call([]reflect.Value{
 		reflect.ValueOf(a1),
@@ -674,15 +675,15 @@ func (r *ChildReconciler) semanticEquals(a1, a2 apis.Object) bool {
 	return out[0].Bool()
 }
 
-func (r *ChildReconciler) desiredChild(ctx context.Context, parent apis.Object) (apis.Object, error) {
+func (r *ChildReconciler) desiredChild(ctx context.Context, parent client.Object) (client.Object, error) {
 	fn := reflect.ValueOf(r.DesiredChild)
 	out := fn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
 		reflect.ValueOf(parent),
 	})
-	var obj apis.Object
+	var obj client.Object
 	if !out[0].IsNil() {
-		obj = out[0].Interface().(apis.Object)
+		obj = out[0].Interface().(client.Object)
 	}
 	var err error
 	if !out[1].IsNil() {
@@ -691,7 +692,7 @@ func (r *ChildReconciler) desiredChild(ctx context.Context, parent apis.Object) 
 	return obj, err
 }
 
-func (r *ChildReconciler) reflectChildStatusOnParent(parent, child apis.Object, err error) {
+func (r *ChildReconciler) reflectChildStatusOnParent(parent, child client.Object, err error) {
 	fn := reflect.ValueOf(r.ReflectChildStatusOnParent)
 	args := []reflect.Value{
 		reflect.ValueOf(parent),
@@ -710,7 +711,7 @@ func (r *ChildReconciler) reflectChildStatusOnParent(parent, child apis.Object, 
 	fn.Call(args)
 }
 
-func (r *ChildReconciler) harmonizeImmutableFields(current, desired apis.Object) {
+func (r *ChildReconciler) harmonizeImmutableFields(current, desired client.Object) {
 	if r.HarmonizeImmutableFields == nil {
 		return
 	}
@@ -721,7 +722,7 @@ func (r *ChildReconciler) harmonizeImmutableFields(current, desired apis.Object)
 	})
 }
 
-func (r *ChildReconciler) mergeBeforeUpdate(current, desired apis.Object) {
+func (r *ChildReconciler) mergeBeforeUpdate(current, desired client.Object) {
 	fn := reflect.ValueOf(r.MergeBeforeUpdate)
 	fn.Call([]reflect.Value{
 		reflect.ValueOf(current),
@@ -729,7 +730,7 @@ func (r *ChildReconciler) mergeBeforeUpdate(current, desired apis.Object) {
 	})
 }
 
-func (r *ChildReconciler) sanitize(child apis.Object) interface{} {
+func (r *ChildReconciler) sanitize(child client.Object) interface{} {
 	if r.Sanitize == nil {
 		return child
 	}
@@ -747,12 +748,12 @@ func (r *ChildReconciler) sanitize(child apis.Object) interface{} {
 	return sanitized
 }
 
-func (r *ChildReconciler) items(children runtime.Object) []apis.Object {
+func (r *ChildReconciler) items(children client.ObjectList) []client.Object {
 	childrenValue := reflect.ValueOf(children).Elem()
 	itemsValue := childrenValue.FieldByName("Items")
-	items := make([]apis.Object, itemsValue.Len())
+	items := make([]client.Object, itemsValue.Len())
 	for i := range items {
-		items[i] = itemsValue.Index(i).Addr().Interface().(apis.Object)
+		items[i] = itemsValue.Index(i).Addr().Interface().(client.Object)
 	}
 	return items
 }
@@ -771,7 +772,7 @@ func (r Sequence) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *
 	return nil
 }
 
-func (r Sequence) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
+func (r Sequence) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	aggregateResult := ctrl.Result{}
 	for _, reconciler := range r {
 		result, err := reconciler.Reconcile(ctx, parent)
@@ -805,7 +806,7 @@ func (r Sequence) aggregateResult(result, aggregate ctrl.Result) ctrl.Result {
 // reconciler erring.
 type CastParent struct {
 	// Type of resource to reconcile
-	Type runtime.Object
+	Type client.Object
 
 	// Reconciler is called for each reconciler request with the parent
 	// resource being reconciled. Typically a Sequence is used to compose
@@ -834,12 +835,12 @@ func (r *CastParent) validate(ctx context.Context) error {
 	return nil
 }
 
-func (r *CastParent) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Result, error) {
+func (r *CastParent) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	ctx, castParent, err := r.cast(ctx, parent)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	castOriginal := castParent.DeepCopyObject().(apis.Object)
+	castOriginal := castParent.DeepCopyObject().(client.Object)
 	result, err := r.Reconciler.Reconcile(ctx, castParent)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -859,12 +860,12 @@ func (r *CastParent) Reconcile(ctx context.Context, parent apis.Object) (ctrl.Re
 	return result, nil
 }
 
-func (r *CastParent) cast(ctx context.Context, parent runtime.Object) (context.Context, apis.Object, error) {
+func (r *CastParent) cast(ctx context.Context, parent client.Object) (context.Context, client.Object, error) {
 	data, err := json.Marshal(parent)
 	if err != nil {
 		return nil, nil, err
 	}
-	castParent := r.Type.DeepCopyObject().(apis.Object)
+	castParent := r.Type.DeepCopyObject().(client.Object)
 	err = json.Unmarshal(data, castParent)
 	if err != nil {
 		return nil, nil, err

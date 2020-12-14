@@ -20,6 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type Object = client.Object
+type ObjectList = client.ObjectList
 type Client = client.Client
 type Reader = client.Reader
 type Writer = client.Writer
@@ -35,5 +37,4 @@ type Patch = client.Patch
 type PatchOption = client.PatchOption
 type DeleteOption = client.DeleteOption
 type DeleteAllOfOption = client.DeleteAllOfOption
-
-var MatchingField = client.MatchingField
+type MatchingFields = client.MatchingFields
