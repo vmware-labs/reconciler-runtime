@@ -492,7 +492,7 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 	}
 }
 ```
-[full source](htthttps://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/inmemorygateway_reconciler.go#L58-L84)
+[full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/inmemorygateway_reconciler.go#L58-L84)
 
 ## Contributing
 
