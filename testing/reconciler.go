@@ -126,7 +126,6 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 		APIReader: apiReader,
 		Tracker:   tracker,
 		Recorder:  recorder,
-		Scheme:    scheme,
 		Log:       log,
 	})
 
