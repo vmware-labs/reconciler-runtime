@@ -767,20 +767,6 @@ func TestChildReconciler(t *testing.T) {
 			},
 		},
 		ShouldErr: true,
-	}, {
-		Name: "error empty scheme",
-		Parent: resource.
-			AddField("foo", "bar"),
-		GivenObjects: []rtesting.Factory{},
-		Metadata: map[string]interface{}{
-			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
-				r := defaultChildReconciler(c)
-				scheme := runtime.NewScheme()
-				r.Config.Scheme = scheme
-				return r
-			},
-		},
-		ShouldErr: true,
 	}}
 
 	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
