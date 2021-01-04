@@ -19,7 +19,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/cache"
 	"k8s.io/client-go/tools/record"
@@ -45,7 +44,6 @@ type Config struct {
 	APIReader client.DuckReader
 	Recorder  record.EventRecorder
 	Log       logr.Logger
-	Scheme    *runtime.Scheme
 	Tracker   tracker.Tracker
 }
 
@@ -60,7 +58,6 @@ func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration
 		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
 		Recorder:   mgr.GetEventRecorderFor(name),
 		Log:        log,
-		Scheme:     scheme,
 		Tracker: watchtracker.New(syncPeriod, log.WithName("tracker"), scheme, func(by client.Object, t tracker.Tracker) handler.EventHandler {
 			return EnqueueTracked(by, t, scheme)
 		}),
@@ -421,7 +418,7 @@ func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 	bldr.Owns(r.ChildType)
 
 	parentType := RetrieveParentType(ctx)
-	if err := IndexControllersOfType(ctx, mgr, r.IndexField, parentType, r.ChildType, r.Scheme); err != nil {
+	if err := IndexControllersOfType(ctx, mgr, r.IndexField, parentType, r.ChildType, r.Scheme()); err != nil {
 		return err
 	}
 
@@ -594,7 +591,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 		return nil, err
 	}
 	if desired != nil {
-		if err := ctrl.SetControllerReference(parent, desired, r.Scheme); err != nil {
+		if err := ctrl.SetControllerReference(parent, desired, r.Scheme()); err != nil {
 			return nil, err
 		}
 	}
