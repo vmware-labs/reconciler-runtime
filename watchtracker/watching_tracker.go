@@ -40,7 +40,7 @@ var _ tracker.Tracker = &impl{}
 // it will expire.
 func New(lease time.Duration, log logr.Logger, scheme *runtime.Scheme, enqueueTracked func(by client.Object, t tracker.Tracker) handler.EventHandler) tracker.Tracker {
 	tracker := tracker.New(lease, log)
-	return newWatchingTracker(tracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
+	return NewWatchingTracker(tracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
 		rObj, err := scheme.New(gvk)
 		obj := rObj.(crclient.Object)
 		if err != nil {
@@ -51,7 +51,8 @@ func New(lease time.Duration, log logr.Logger, scheme *runtime.Scheme, enqueueTr
 	})
 }
 
-func newWatchingTracker(tracker tracker.Tracker, watch watchFunc) tracker.Tracker {
+// Deprecated: use New
+func NewWatchingTracker(tracker tracker.Tracker, watch watchFunc) tracker.Tracker {
 	return &impl{
 		tracker: tracker,
 		watch:   watch,

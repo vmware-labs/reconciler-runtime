@@ -10,7 +10,6 @@ import (
 
 	"github.com/vmware-labs/reconciler-runtime/apis"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
-	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -19,7 +18,7 @@ type testresource struct {
 }
 
 var (
-	_ ftesting.Factory = (*testresource)(nil)
+	_ rtesting.Factory = (*testresource)(nil)
 )
 
 func TestResource(seed ...*rtesting.TestResource) *testresource {

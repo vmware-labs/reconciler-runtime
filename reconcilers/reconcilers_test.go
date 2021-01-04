@@ -16,7 +16,6 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	"github.com/vmware-labs/reconciler-runtime/testing/factories"
-	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -64,7 +63,7 @@ func TestParentReconciler(t *testing.T) {
 	}, {
 		Name: "ignore deleted resource",
 		Key:  testKey,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource.ObjectMeta(func(om factories.ObjectMeta) {
 				om.Deleted(1)
 			}),
@@ -83,7 +82,7 @@ func TestParentReconciler(t *testing.T) {
 	}, {
 		Name: "error fetching resource",
 		Key:  testKey,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource.ObjectMeta(func(om factories.ObjectMeta) {
 				om.Deleted(1)
 			}),
@@ -106,7 +105,7 @@ func TestParentReconciler(t *testing.T) {
 	}, {
 		Name: "resource is defaulted",
 		Key:  testKey,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -125,7 +124,7 @@ func TestParentReconciler(t *testing.T) {
 	}, {
 		Name: "status conditions are initialized",
 		Key:  testKey,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource.StatusConditions(),
 		},
 		Metadata: map[string]interface{}{
@@ -148,13 +147,13 @@ func TestParentReconciler(t *testing.T) {
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated",
 				`Updated status`),
 		},
-		ExpectStatusUpdates: []ftesting.Factory{
+		ExpectStatusUpdates: []rtesting.Factory{
 			resource,
 		},
 	}, {
 		Name: "reconciler mutated status",
 		Key:  testKey,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -175,13 +174,13 @@ func TestParentReconciler(t *testing.T) {
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated",
 				`Updated status`),
 		},
-		ExpectStatusUpdates: []ftesting.Factory{
+		ExpectStatusUpdates: []rtesting.Factory{
 			resource.AddStatusField("Reconciler", "ran"),
 		},
 	}, {
 		Name: "sub reconciler erred",
 		Key:  testKey,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -198,7 +197,7 @@ func TestParentReconciler(t *testing.T) {
 	}, {
 		Name: "status update failed",
 		Key:  testKey,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		WithReactors: []rtesting.ReactionFunc{
@@ -224,14 +223,14 @@ func TestParentReconciler(t *testing.T) {
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "StatusUpdateFailed",
 				`Failed to update status: inducing failure for update TestResource`),
 		},
-		ExpectStatusUpdates: []ftesting.Factory{
+		ExpectStatusUpdates: []rtesting.Factory{
 			resource.AddStatusField("Reconciler", "ran"),
 		},
 		ShouldErr: true,
 	}, {
 		Name: "context is stashable",
 		Key:  testKey,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -415,7 +414,7 @@ func TestChildReconciler(t *testing.T) {
 	rts := rtesting.SubReconcilerTestSuite{{
 		Name:         "preserve no child",
 		Parent:       resourceReady,
-		GivenObjects: []ftesting.Factory{},
+		GivenObjects: []rtesting.Factory{},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return defaultChildReconciler(c)
@@ -426,7 +425,7 @@ func TestChildReconciler(t *testing.T) {
 		Parent: resourceReady.
 			AddField("foo", "bar").
 			AddStatusField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			configMapGiven,
 		},
 		Metadata: map[string]interface{}{
@@ -438,7 +437,7 @@ func TestChildReconciler(t *testing.T) {
 		Name: "create child",
 		Parent: resource.
 			AddField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{},
+		GivenObjects: []rtesting.Factory{},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return defaultChildReconciler(c)
@@ -451,7 +450,7 @@ func TestChildReconciler(t *testing.T) {
 		ExpectParent: resourceReady.
 			AddField("foo", "bar").
 			AddStatusField("foo", "bar"),
-		ExpectCreates: []ftesting.Factory{
+		ExpectCreates: []rtesting.Factory{
 			configMapCreate,
 		},
 	}, {
@@ -460,7 +459,7 @@ func TestChildReconciler(t *testing.T) {
 			AddField("foo", "bar").
 			AddField("new", "field").
 			AddStatusField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			configMapGiven,
 		},
 		Metadata: map[string]interface{}{
@@ -477,14 +476,14 @@ func TestChildReconciler(t *testing.T) {
 			AddField("new", "field").
 			AddStatusField("foo", "bar").
 			AddStatusField("new", "field"),
-		ExpectUpdates: []ftesting.Factory{
+		ExpectUpdates: []rtesting.Factory{
 			configMapGiven.
 				AddData("new", "field"),
 		},
 	}, {
 		Name:   "delete child",
 		Parent: resourceReady,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			configMapGiven,
 		},
 		Metadata: map[string]interface{}{
@@ -503,7 +502,7 @@ func TestChildReconciler(t *testing.T) {
 		Name: "delete duplicate children",
 		Parent: resource.
 			AddField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			configMapGiven.
 				NamespaceName(testNamespace, "extra-child-1"),
 			configMapGiven.
@@ -529,14 +528,14 @@ func TestChildReconciler(t *testing.T) {
 			{Group: "", Kind: "ConfigMap", Namespace: testNamespace, Name: "extra-child-1"},
 			{Group: "", Kind: "ConfigMap", Namespace: testNamespace, Name: "extra-child-2"},
 		},
-		ExpectCreates: []ftesting.Factory{
+		ExpectCreates: []rtesting.Factory{
 			configMapCreate,
 		},
 	}, {
 		Name: "child name collision",
 		Parent: resourceReady.
 			AddField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{},
+		GivenObjects: []rtesting.Factory{},
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("create", "ConfigMap", rtesting.InduceFailureOpts{
 				Error: apierrs.NewAlreadyExists(schema.GroupResource{}, testName),
@@ -557,15 +556,15 @@ func TestChildReconciler(t *testing.T) {
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "CreationFailed",
 				"Failed to create ConfigMap %q:  %q already exists", testName, testName),
 		},
-		ExpectCreates: []ftesting.Factory{
+		ExpectCreates: []rtesting.Factory{
 			configMapCreate,
 		},
 	}, {
 		Name: "child name collision, stale informer cache",
 		Parent: resourceReady.
 			AddField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{},
-		APIGivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{},
+		APIGivenObjects: []rtesting.Factory{
 			configMapGiven,
 		},
 		WithReactors: []rtesting.ReactionFunc{
@@ -582,7 +581,7 @@ func TestChildReconciler(t *testing.T) {
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "CreationFailed",
 				"Failed to create ConfigMap %q:  %q already exists", testName, testName),
 		},
-		ExpectCreates: []ftesting.Factory{
+		ExpectCreates: []rtesting.Factory{
 			configMapCreate,
 		},
 		ShouldErr: true,
@@ -592,7 +591,7 @@ func TestChildReconciler(t *testing.T) {
 			AddField("foo", "bar").
 			AddStatusField("foo", "bar").
 			AddStatusField("immutable", "field"),
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			configMapGiven.
 				AddData("immutable", "field"),
 		},
@@ -608,7 +607,7 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name:   "status only reconcile",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			configMapGiven,
 		},
 		ExpectParent: resourceReady.
@@ -626,7 +625,7 @@ func TestChildReconciler(t *testing.T) {
 		Name: "sanitize child before logging",
 		Parent: resource.
 			AddField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{},
+		GivenObjects: []rtesting.Factory{},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
@@ -643,13 +642,13 @@ func TestChildReconciler(t *testing.T) {
 		ExpectParent: resourceReady.
 			AddField("foo", "bar").
 			AddStatusField("foo", "bar"),
-		ExpectCreates: []ftesting.Factory{
+		ExpectCreates: []rtesting.Factory{
 			configMapCreate,
 		},
 	}, {
 		Name:         "error listing children",
 		Parent:       resourceReady,
-		GivenObjects: []ftesting.Factory{},
+		GivenObjects: []rtesting.Factory{},
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("list", "ConfigMapList"),
 		},
@@ -663,7 +662,7 @@ func TestChildReconciler(t *testing.T) {
 		Name: "error creating child",
 		Parent: resource.
 			AddField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{},
+		GivenObjects: []rtesting.Factory{},
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("create", "ConfigMap"),
 		},
@@ -676,7 +675,7 @@ func TestChildReconciler(t *testing.T) {
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "CreationFailed",
 				`Failed to create ConfigMap %q: inducing failure for create ConfigMap`, testName),
 		},
-		ExpectCreates: []ftesting.Factory{
+		ExpectCreates: []rtesting.Factory{
 			configMapCreate,
 		},
 		ShouldErr: true,
@@ -686,7 +685,7 @@ func TestChildReconciler(t *testing.T) {
 			AddField("foo", "bar").
 			AddField("new", "field").
 			AddStatusField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			configMapGiven,
 		},
 		WithReactors: []rtesting.ReactionFunc{
@@ -701,7 +700,7 @@ func TestChildReconciler(t *testing.T) {
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "UpdateFailed",
 				`Failed to update ConfigMap %q: inducing failure for update ConfigMap`, testName),
 		},
-		ExpectUpdates: []ftesting.Factory{
+		ExpectUpdates: []rtesting.Factory{
 			configMapGiven.
 				AddData("new", "field"),
 		},
@@ -709,7 +708,7 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name:   "error deleting child",
 		Parent: resourceReady,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			configMapGiven,
 		},
 		WithReactors: []rtesting.ReactionFunc{
@@ -732,7 +731,7 @@ func TestChildReconciler(t *testing.T) {
 		Name: "error deleting duplicate children",
 		Parent: resource.
 			AddField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			configMapGiven.
 				NamespaceName(testNamespace, "extra-child-1"),
 			configMapGiven.
@@ -757,7 +756,7 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name:         "error creating desired child",
 		Parent:       resource,
-		GivenObjects: []ftesting.Factory{},
+		GivenObjects: []rtesting.Factory{},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
@@ -772,7 +771,7 @@ func TestChildReconciler(t *testing.T) {
 		Name: "error empty scheme",
 		Parent: resource.
 			AddField("foo", "bar"),
-		GivenObjects: []ftesting.Factory{},
+		GivenObjects: []rtesting.Factory{},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
@@ -808,7 +807,7 @@ func TestSequence(t *testing.T) {
 	rts := rtesting.SubReconcilerTestSuite{{
 		Name:   "sub reconciler erred",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -827,7 +826,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "preserves result, Requeue",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -844,7 +843,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "preserves result, RequeueAfter",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -863,7 +862,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "ignores result on err",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -883,7 +882,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "Requeue + empty => Requeue",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -908,7 +907,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "empty + Requeue => Requeue",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -933,7 +932,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "RequeueAfter + empty => RequeueAfter",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -958,7 +957,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "empty + RequeueAfter => RequeueAfter",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -983,7 +982,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "RequeueAfter + Requeue => RequeueAfter",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -1008,7 +1007,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "Requeue + RequeueAfter => RequeueAfter",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -1033,7 +1032,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "RequeueAfter(1m) + RequeueAfter(2m) => RequeueAfter(1m)",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{
@@ -1058,7 +1057,7 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "RequeueAfter(2m) + RequeueAfter(1m) => RequeueAfter(1m)",
 		Parent: resource,
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			resource,
 		},
 		Metadata: map[string]interface{}{

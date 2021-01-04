@@ -8,7 +8,7 @@ package factories
 import (
 	"fmt"
 
-	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
+	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -18,7 +18,7 @@ type secret struct {
 }
 
 var (
-	_ ftesting.Factory = (*secret)(nil)
+	_ rtesting.Factory = (*secret)(nil)
 )
 
 func Secret(seed ...*corev1.Secret) *secret {

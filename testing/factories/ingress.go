@@ -8,7 +8,7 @@ package factories
 import (
 	"fmt"
 
-	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
+	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1beta1 "k8s.io/api/networking/v1beta1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -20,7 +20,7 @@ type ingress struct {
 }
 
 var (
-	_ ftesting.Factory = (*ingress)(nil)
+	_ rtesting.Factory = (*ingress)(nil)
 )
 
 func Ingress(seed ...*networkingv1beta1.Ingress) *ingress {

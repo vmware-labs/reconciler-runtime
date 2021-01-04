@@ -3,13 +3,12 @@ Copyright 2019 VMware, Inc.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package trackertesting
+package testing
 
 import (
 	"time"
 
 	"github.com/go-logr/logr/testing"
-	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -39,7 +38,7 @@ func CreateTrackRequest(trackedObjGroup, trackedObjVersion, trackedObjKind, trac
 	}
 }
 
-func NewTrackRequest(t, b ftesting.Factory, scheme *runtime.Scheme) TrackRequest {
+func NewTrackRequest(t, b Factory, scheme *runtime.Scheme) TrackRequest {
 	tracked, by := t.CreateObject(), b.CreateObject()
 	gvks, _, err := scheme.ObjectKinds(tracked)
 	if err != nil {

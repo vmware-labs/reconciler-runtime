@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
-	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,7 +20,7 @@ type deployment struct {
 }
 
 var (
-	_ ftesting.Factory = (*deployment)(nil)
+	_ rtesting.Factory = (*deployment)(nil)
 )
 
 func Deployment(seed ...*appsv1.Deployment) *deployment {

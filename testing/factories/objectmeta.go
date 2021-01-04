@@ -8,7 +8,7 @@ package factories
 import (
 	"fmt"
 
-	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
+	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -24,7 +24,7 @@ type ObjectMeta interface {
 	AddLabel(key, value string) ObjectMeta
 	AddAnnotation(key, value string) ObjectMeta
 	Generation(generation int64) ObjectMeta
-	ControlledBy(owner ftesting.Factory, scheme *runtime.Scheme) ObjectMeta
+	ControlledBy(owner rtesting.Factory, scheme *runtime.Scheme) ObjectMeta
 	Created(sec int64) ObjectMeta
 	Deleted(sec int64) ObjectMeta
 	UID(uid string) ObjectMeta
@@ -91,7 +91,7 @@ func (f *objectMetaImpl) Generation(generation int64) ObjectMeta {
 	})
 }
 
-func (f *objectMetaImpl) ControlledBy(owner ftesting.Factory, scheme *runtime.Scheme) ObjectMeta {
+func (f *objectMetaImpl) ControlledBy(owner rtesting.Factory, scheme *runtime.Scheme) ObjectMeta {
 	return f.mutate(func(om *metav1.ObjectMeta) {
 		err := ctrl.SetControllerReference(owner.CreateObject(), om, scheme)
 		if err != nil {

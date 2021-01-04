@@ -3,25 +3,26 @@ Copyright 2019-2020 VMware, Inc.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package watchtracker
+package watchtracker_test
 
 import (
 	"errors"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	ttesting "github.com/vmware-labs/reconciler-runtime/testing/trackertesting"
+	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
+	"github.com/vmware-labs/reconciler-runtime/watchtracker"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
 func TestWatchingTracker_Ok(t *testing.T) {
-	mockTracker := ttesting.CreateTracker()
+	mockTracker := rtesting.CreateTracker()
 	watches := []schema.GroupVersionKind{}
 
-	wt := newWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
+	wt := watchtracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
 		watches = append(watches, gvk)
 		return nil
 	})
@@ -48,8 +49,8 @@ func TestWatchingTracker_Ok(t *testing.T) {
 		t.Errorf("unexpected error %v", err)
 	}
 
-	tr := ttesting.CreateTrackRequest(gvk1.Group, gvk1.Version, gvk1.Kind, n1.Namespace, n1.Name).By(tracking1.Namespace, tracking1.Name)
-	if diff := cmp.Diff([]ttesting.TrackRequest{tr}, mockTracker.GetTrackRequests()); diff != "" {
+	tr := rtesting.CreateTrackRequest(gvk1.Group, gvk1.Version, gvk1.Kind, n1.Namespace, n1.Name).By(tracking1.Namespace, tracking1.Name)
+	if diff := cmp.Diff([]rtesting.TrackRequest{tr}, mockTracker.GetTrackRequests()); diff != "" {
 		t.Errorf("incorrect track requests (-expected, +actual): %s", diff)
 	}
 
@@ -66,7 +67,7 @@ func TestWatchingTracker_Ok(t *testing.T) {
 	if err := wt.Track(tracked1, tracking1); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
-	if diff := cmp.Diff([]ttesting.TrackRequest{tr, tr}, mockTracker.GetTrackRequests()); diff != "" {
+	if diff := cmp.Diff([]rtesting.TrackRequest{tr, tr}, mockTracker.GetTrackRequests()); diff != "" {
 		t.Errorf("incorrect track requests (-expected, +actual): %s", diff)
 	}
 	if diff := cmp.Diff([]schema.GroupVersionKind{gvk1}, watches); diff != "" {
@@ -88,9 +89,9 @@ func TestWatchingTracker_Ok(t *testing.T) {
 	if err := wt.Track(tracked2, tracking2); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
-	tr2 := ttesting.CreateTrackRequest(gvk2.Group, gvk2.Version, gvk2.Kind, n2.Namespace, n2.Name).By(tracking2.Namespace, tracking2.Name)
+	tr2 := rtesting.CreateTrackRequest(gvk2.Group, gvk2.Version, gvk2.Kind, n2.Namespace, n2.Name).By(tracking2.Namespace, tracking2.Name)
 
-	if diff := cmp.Diff([]ttesting.TrackRequest{tr, tr, tr2}, mockTracker.GetTrackRequests()); diff != "" {
+	if diff := cmp.Diff([]rtesting.TrackRequest{tr, tr, tr2}, mockTracker.GetTrackRequests()); diff != "" {
 		t.Errorf("incorrect track requests (-expected, +actual): %s", diff)
 	}
 	if diff := cmp.Diff([]schema.GroupVersionKind{gvk1}, watches); diff != "" {
@@ -99,10 +100,10 @@ func TestWatchingTracker_Ok(t *testing.T) {
 }
 
 func TestWatchingTracker_WatchError(t *testing.T) {
-	mockTracker := ttesting.CreateTracker()
+	mockTracker := rtesting.CreateTracker()
 	watches := []schema.GroupVersionKind{}
 
-	wt := newWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
+	wt := watchtracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
 		watches = append(watches, gvk)
 		return errors.New("failed")
 	})
@@ -128,7 +129,7 @@ func TestWatchingTracker_WatchError(t *testing.T) {
 		t.Errorf("unexpected error %v", err)
 	}
 
-	if diff := cmp.Diff([]ttesting.TrackRequest{}, mockTracker.GetTrackRequests()); diff != "" {
+	if diff := cmp.Diff([]rtesting.TrackRequest{}, mockTracker.GetTrackRequests()); diff != "" {
 		t.Errorf("incorrect track requests (-expected, +actual): %s", diff)
 	}
 

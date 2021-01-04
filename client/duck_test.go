@@ -25,7 +25,6 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	"github.com/vmware-labs/reconciler-runtime/testing/factories"
-	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -40,7 +39,7 @@ func TestDuckClient(t *testing.T) {
 	rts := rtesting.SubReconcilerTestSuite{{
 		Name:   "get duck",
 		Parent: factories.ConfigMap(),
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			factories.TestResource().
 				NamespaceName(testNamespace, testName).
 				PodTemplateSpec(func(pts factories.PodTemplateSpec) {
@@ -104,7 +103,7 @@ func TestDuckClient(t *testing.T) {
 	}, {
 		Name:   "list duck",
 		Parent: factories.ConfigMap(),
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			factories.TestResource().
 				NamespaceName(testNamespace, testName).
 				PodTemplateSpec(func(pts factories.PodTemplateSpec) {
@@ -141,7 +140,7 @@ func TestDuckClient(t *testing.T) {
 	}, {
 		Name:   "list duck error",
 		Parent: factories.ConfigMap(),
-		GivenObjects: []ftesting.Factory{
+		GivenObjects: []rtesting.Factory{
 			factories.TestResource().
 				NamespaceName(testNamespace, testName).
 				PodTemplateSpec(func(pts factories.PodTemplateSpec) {
