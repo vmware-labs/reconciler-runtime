@@ -8,6 +8,7 @@ package testing
 import (
 	"fmt"
 
+	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,7 +24,7 @@ type Event struct {
 	Message string
 }
 
-func NewEvent(factory Factory, scheme *runtime.Scheme, eventtype, reason, messageFormat string, a ...interface{}) Event {
+func NewEvent(factory ftesting.Factory, scheme *runtime.Scheme, eventtype, reason, messageFormat string, a ...interface{}) Event {
 	obj := factory.CreateObject()
 	gvks, _, _ := scheme.ObjectKinds(obj)
 	apiVersion, kind := gvks[0].ToAPIVersionAndKind()

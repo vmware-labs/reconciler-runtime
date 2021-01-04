@@ -12,6 +12,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
+	ftesting "github.com/vmware-labs/reconciler-runtime/testing/factorytesting"
+	ttesting "github.com/vmware-labs/reconciler-runtime/testing/trackertesting"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,31 +35,31 @@ type SubReconcilerTestCase struct {
 	// inputs
 
 	// Parent is the initial object passed to the sub reconciler
-	Parent Factory
+	Parent ftesting.Factory
 	// GivenStashedValues adds these items to the stash passed into the reconciler. Factories are resolved to their object.
 	GivenStashedValues map[reconcilers.StashKey]interface{}
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
 	// GivenObjects build the kubernetes objects which are present at the onset of reconciliation
-	GivenObjects []Factory
+	GivenObjects []ftesting.Factory
 	// APIGivenObjects contains objects that are only available via an API reader instead of the normal cache
-	APIGivenObjects []Factory
+	APIGivenObjects []ftesting.Factory
 
 	// side effects
 
 	// ExpectParent is the expected parent as mutated after the sub reconciler, or nil if no modification
-	ExpectParent Factory
+	ExpectParent ftesting.Factory
 	// ExpectStashedValues ensures each value is stashed. Values in the stash that are not expected are ignored. Factories are resolved to their object.
 	ExpectStashedValues map[reconcilers.StashKey]interface{}
 	// ExpectTracks holds the ordered list of Track calls expected during reconciliation
-	ExpectTracks []TrackRequest
+	ExpectTracks []ttesting.TrackRequest
 	// ExpectEvents holds the ordered list of events recorded during the reconciliation
 	ExpectEvents []Event
 	// ExpectCreates builds the ordered list of objects expected to be created during reconciliation
-	ExpectCreates []Factory
+	ExpectCreates []ftesting.Factory
 	// ExpectUpdates builds the ordered list of objects expected to be updated during reconciliation
-	ExpectUpdates []Factory
+	ExpectUpdates []ftesting.Factory
 	// ExpectPatches holds the ordered list of objects expected to be patched during reconciliation
 	ExpectPatches []PatchRef
 	// ExpectDeletes holds the ordered list of objects expected to be deleted during reconciliation
@@ -116,7 +118,7 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 		clientWrapper.PrependReactor("*", "*", reactor)
 	}
 	apiReader := newClientWrapperWithScheme(scheme, apiGivenObjects...)
-	tracker := createTracker()
+	tracker := ttesting.CreateTracker()
 	recorder := &eventRecorder{
 		events: []Event{},
 		scheme: scheme,
@@ -146,7 +148,7 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 
 	ctx := reconcilers.WithStash(context.Background())
 	for k, v := range tc.GivenStashedValues {
-		if f, ok := v.(Factory); ok {
+		if f, ok := v.(ftesting.Factory); ok {
 			v = f.CreateObject()
 		}
 		reconcilers.StashValue(ctx, k, v)
@@ -192,7 +194,7 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 	}
 
 	for key, expected := range tc.ExpectStashedValues {
-		if f, ok := expected.(Factory); ok {
+		if f, ok := expected.(ftesting.Factory); ok {
 			expected = f.CreateObject()
 		}
 		actual := reconcilers.RetrieveValue(ctx, key)
@@ -201,7 +203,7 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 		}
 	}
 
-	actualTracks := tracker.getTrackRequests()
+	actualTracks := tracker.GetTrackRequests()
 	for i, exp := range tc.ExpectTracks {
 		if i >= len(actualTracks) {
 			t.Errorf("Missing tracking request: %s", exp)

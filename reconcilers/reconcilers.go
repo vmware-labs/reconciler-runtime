@@ -25,11 +25,13 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/vmware-labs/reconciler-runtime/client"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
+	"github.com/vmware-labs/reconciler-runtime/watchtracker"
 )
 
 var (
@@ -52,13 +54,16 @@ type Config struct {
 func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration) Config {
 	name := typeName(apiType)
 	log := ctrl.Log.WithName("controllers").WithName(name)
+	scheme := mgr.GetScheme()
 	return Config{
 		DuckClient: client.NewDuckClient(mgr.GetClient()),
 		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
 		Recorder:   mgr.GetEventRecorderFor(name),
 		Log:        log,
-		Scheme:     mgr.GetScheme(),
-		Tracker:    tracker.New(syncPeriod, log.WithName("tracker")),
+		Scheme:     scheme,
+		Tracker: watchtracker.New(syncPeriod, log.WithName("tracker"), scheme, func(by client.Object, t tracker.Tracker) handler.EventHandler {
+			return EnqueueTracked(by, t, scheme)
+		}),
 	}
 }
 
@@ -86,7 +91,12 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return err
 	}
-	return bldr.Complete(r)
+	ctrl, err := bldr.Build(r)
+	if err != nil {
+		return err
+	}
+	r.Config.Tracker.Controller(ctrl)
+	return nil
 }
 
 func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

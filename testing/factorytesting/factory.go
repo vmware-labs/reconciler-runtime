@@ -3,7 +3,7 @@ Copyright 2020 VMware, Inc.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package testing
+package factorytesting
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
