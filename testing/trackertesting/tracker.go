@@ -46,7 +46,7 @@ func NewTrackRequest(t, b ftesting.Factory, scheme *runtime.Scheme) TrackRequest
 		panic(err)
 	}
 	return TrackRequest{
-		Tracked: tracker.Key{GroupKind: schema.GroupKind{Group: gvks[0].Group, Kind: gvks[0].Kind}, NamespacedName: types.NamespacedName{Namespace: tracked.GetNamespace(), Name: tracked.GetName()}},
+		Tracked: tracker.Key{GroupKind: schema.GroupKind{Group: gvks[0].Group, Kind: gvks[0].Kind}, Version: gvks[0].Version, NamespacedName: types.NamespacedName{Namespace: tracked.GetNamespace(), Name: tracked.GetName()}},
 		Tracker: types.NamespacedName{Namespace: by.GetNamespace(), Name: by.GetName()},
 	}
 }
