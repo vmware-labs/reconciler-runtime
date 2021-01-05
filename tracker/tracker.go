@@ -45,20 +45,18 @@ type Tracker interface {
 
 func NewKey(gvk schema.GroupVersionKind, namespacedName types.NamespacedName) Key {
 	return Key{
-		GroupKind:      gvk.GroupKind(),
-		Version:        gvk.Version,
-		NamespacedName: namespacedName,
+		GroupVersionKind: gvk,
+		NamespacedName:   namespacedName,
 	}
 }
 
 type Key struct {
-	GroupKind      schema.GroupKind
-	Version        string
-	NamespacedName types.NamespacedName
+	schema.GroupVersionKind
+	types.NamespacedName
 }
 
 func (k *Key) UnversionedString() string {
-	return fmt.Sprintf("%s/%s", k.GroupKind, k.NamespacedName)
+	return fmt.Sprintf("%s/%s", k.GroupKind(), k.NamespacedName)
 }
 
 // New returns an implementation of Tracker that lets a Reconciler

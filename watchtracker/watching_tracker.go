@@ -91,24 +91,19 @@ func (i *impl) Track(ref tracker.Key, obj types.NamespacedName) error {
 }
 
 func (i *impl) startWatch(ref tracker.Key) error {
-	gvk := schema.GroupVersionKind{
-		Group:   ref.GroupKind.Group,
-		Version: ref.Version,
-		Kind:    ref.GroupKind.Kind,
-	}
 	i.m.Lock() // TODO: this is held across alien calls, so use finer grain mutexes to avoid deadlocks
 	defer i.m.Unlock()
-	_, watching := i.watches[ref.GroupKind]
+	_, watching := i.watches[ref.GroupKind()]
 
 	if watching {
 		return nil
 	}
 
-	if err := i.watch(gvk, i.controller); err != nil {
+	if err := i.watch(ref.GroupVersionKind, i.controller); err != nil {
 		return err
 	}
 
-	i.watches[ref.GroupKind] = struct{}{}
+	i.watches[ref.GroupKind()] = struct{}{}
 	return nil
 }
 

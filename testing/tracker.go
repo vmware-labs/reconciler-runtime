@@ -32,7 +32,7 @@ func (t trackBy) By(trackingObjNamespace, trackingObjName string) TrackRequest {
 func CreateTrackRequest(trackedObjGroup, trackedObjVersion, trackedObjKind, trackedObjNamespace, trackedObjName string) trackBy {
 	return func(trackingObjNamespace, trackingObjName string) TrackRequest {
 		return TrackRequest{
-			Tracked: tracker.Key{GroupKind: schema.GroupKind{Group: trackedObjGroup, Kind: trackedObjKind}, Version: trackedObjVersion, NamespacedName: types.NamespacedName{Namespace: trackedObjNamespace, Name: trackedObjName}},
+			Tracked: tracker.Key{GroupVersionKind: schema.GroupVersionKind{Group: trackedObjGroup, Version: trackedObjVersion, Kind: trackedObjKind}, NamespacedName: types.NamespacedName{Namespace: trackedObjNamespace, Name: trackedObjName}},
 			Tracker: types.NamespacedName{Namespace: trackingObjNamespace, Name: trackingObjName},
 		}
 	}
@@ -45,7 +45,7 @@ func NewTrackRequest(t, b Factory, scheme *runtime.Scheme) TrackRequest {
 		panic(err)
 	}
 	return TrackRequest{
-		Tracked: tracker.Key{GroupKind: schema.GroupKind{Group: gvks[0].Group, Kind: gvks[0].Kind}, Version: gvks[0].Version, NamespacedName: types.NamespacedName{Namespace: tracked.GetNamespace(), Name: tracked.GetName()}},
+		Tracked: tracker.Key{GroupVersionKind: gvks[0], NamespacedName: types.NamespacedName{Namespace: tracked.GetNamespace(), Name: tracked.GetName()}},
 		Tracker: types.NamespacedName{Namespace: by.GetNamespace(), Name: by.GetName()},
 	}
 }
