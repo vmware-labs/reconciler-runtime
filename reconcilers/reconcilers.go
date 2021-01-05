@@ -31,7 +31,6 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/client"
 	"github.com/vmware-labs/reconciler-runtime/inject"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
-	"github.com/vmware-labs/reconciler-runtime/watchtracker"
 )
 
 var (
@@ -59,7 +58,7 @@ func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration
 		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
 		Recorder:   mgr.GetEventRecorderFor(name),
 		Log:        log,
-		Tracker: watchtracker.New(syncPeriod, log.WithName("tracker"), scheme, func(by client.Object, t tracker.Tracker) handler.EventHandler {
+		Tracker: tracker.NewWatcher(syncPeriod, log.WithName("tracker"), scheme, func(by client.Object, t tracker.Tracker) handler.EventHandler {
 			return EnqueueTracked(by, t, scheme)
 		}),
 	}

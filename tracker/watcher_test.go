@@ -3,7 +3,7 @@ Copyright 2019-2020 VMware, Inc.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package watchtracker_test
+package tracker_test
 
 import (
 	"errors"
@@ -12,7 +12,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
-	"github.com/vmware-labs/reconciler-runtime/watchtracker"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -22,7 +21,7 @@ func TestWatchingTracker_Ok(t *testing.T) {
 	mockTracker := rtesting.CreateTracker()
 	watches := []schema.GroupVersionKind{}
 
-	wt := watchtracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
+	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
 		watches = append(watches, gvk)
 		return nil
 	})
@@ -103,7 +102,7 @@ func TestWatchingTracker_WatchError(t *testing.T) {
 	mockTracker := rtesting.CreateTracker()
 	watches := []schema.GroupVersionKind{}
 
-	wt := watchtracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
+	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
 		watches = append(watches, gvk)
 		return errors.New("failed")
 	})

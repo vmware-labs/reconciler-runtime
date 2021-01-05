@@ -3,7 +3,7 @@ Copyright 2019-2020 VMware, Inc.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package watchtracker
+package tracker
 
 import (
 	"fmt"
@@ -13,7 +13,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/vmware-labs/reconciler-runtime/client"
 	"github.com/vmware-labs/reconciler-runtime/inject"
-	"github.com/vmware-labs/reconciler-runtime/tracker"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,8 +24,8 @@ import (
 
 type watchFunc func(gvk schema.GroupVersionKind, controller controller.Controller) error
 
-type impl struct {
-	tracker tracker.Tracker
+type watcher struct {
+	tracker Tracker
 	watch   watchFunc
 
 	m          sync.Mutex // protects watches and controller
@@ -35,16 +34,16 @@ type impl struct {
 }
 
 var (
-	_ tracker.Tracker   = (*impl)(nil)
-	_ inject.Controller = (*impl)(nil)
+	_ Tracker           = (*watcher)(nil)
+	_ inject.Controller = (*watcher)(nil)
 )
 
-// New returns an implementation of Tracker that lets a Reconciler register a
+// NewWatcher returns an implementation of Tracker that lets a Reconciler register a
 // particular resource as watching a resource for a particular lease duration.
 // This watch must be refreshed periodically (e.g. by a controller resync) or
 // it will expire.
-func New(lease time.Duration, log logr.Logger, scheme *runtime.Scheme, enqueueTracked func(by client.Object, t tracker.Tracker) handler.EventHandler) tracker.Tracker {
-	tracker := tracker.New(lease, log)
+func NewWatcher(lease time.Duration, log logr.Logger, scheme *runtime.Scheme, enqueueTracked func(by client.Object, t Tracker) handler.EventHandler) Tracker {
+	tracker := New(lease, log)
 	return NewWatchingTracker(tracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
 		rObj, err := scheme.New(gvk)
 		obj := rObj.(crclient.Object)
@@ -56,9 +55,9 @@ func New(lease time.Duration, log logr.Logger, scheme *runtime.Scheme, enqueueTr
 	})
 }
 
-// Deprecated: use New
-func NewWatchingTracker(tracker tracker.Tracker, watch watchFunc) tracker.Tracker {
-	return &impl{
+// Deprecated: use NewWatcher
+func NewWatchingTracker(tracker Tracker, watch watchFunc) Tracker {
+	return &watcher{
 		tracker: tracker,
 		watch:   watch,
 		watches: map[schema.GroupKind]struct{}{},
@@ -67,7 +66,7 @@ func NewWatchingTracker(tracker tracker.Tracker, watch watchFunc) tracker.Tracke
 
 // InjectController injects a controller into this tracker which will be used to
 // start watches.
-func (i *impl) InjectController(controller controller.Controller) error {
+func (i *watcher) InjectController(controller controller.Controller) error {
 	i.m.Lock()
 	defer i.m.Unlock()
 	if i.controller != nil {
@@ -82,7 +81,7 @@ func (i *impl) InjectController(controller controller.Controller) error {
 // referenced object. Any existing informer for the same group and kind, but
 // potentially a distinct version can be reused since we are only using the
 // informer to watch for metadata changes and these are version independent.
-func (i *impl) Track(ref tracker.Key, obj types.NamespacedName) error {
+func (i *watcher) Track(ref Key, obj types.NamespacedName) error {
 	if err := i.startWatch(ref); err != nil {
 		return err
 	}
@@ -90,7 +89,7 @@ func (i *impl) Track(ref tracker.Key, obj types.NamespacedName) error {
 	return i.tracker.Track(ref, obj)
 }
 
-func (i *impl) startWatch(ref tracker.Key) error {
+func (i *watcher) startWatch(ref Key) error {
 	i.m.Lock() // TODO: this is held across alien calls, so use finer grain mutexes to avoid deadlocks
 	defer i.m.Unlock()
 	_, watching := i.watches[ref.GroupKind()]
@@ -108,7 +107,7 @@ func (i *impl) startWatch(ref tracker.Key) error {
 }
 
 // Lookup implements Tracker.
-func (i *impl) Lookup(ref tracker.Key) []types.NamespacedName {
+func (i *watcher) Lookup(ref Key) []types.NamespacedName {
 	// TODO: garbage collect unnecessary watches after the call below
 	return i.tracker.Lookup(ref)
 }
