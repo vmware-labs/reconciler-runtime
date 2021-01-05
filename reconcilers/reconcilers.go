@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/vmware-labs/reconciler-runtime/client"
+	"github.com/vmware-labs/reconciler-runtime/inject"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	"github.com/vmware-labs/reconciler-runtime/watchtracker"
 )
@@ -92,7 +93,10 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 	if err != nil {
 		return err
 	}
-	r.Config.Tracker.Controller(ctrl)
+	_, err = inject.ControllerInto(ctrl, r.Config.Tracker)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

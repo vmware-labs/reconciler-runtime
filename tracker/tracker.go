@@ -30,15 +30,11 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
 // Tracker defines the interface through which an object can register
 // that it is tracking another object by reference.
 type Tracker interface {
-	// Controller injects a controller into this tracker
-	Controller(controller controller.Controller)
-
 	// Track tells us that "obj" is tracking changes to the
 	// referenced object.
 	Track(ref Key, obj types.NamespacedName) error
@@ -94,9 +90,6 @@ var _ Tracker = (*impl)(nil)
 
 // set is a map from keys to expirations
 type set map[types.NamespacedName]time.Time
-
-// Controller implements Tracker.
-func (i *impl) Controller(controller controller.Controller) {}
 
 // Track implements Tracker.
 func (i *impl) Track(ref Key, obj types.NamespacedName) error {

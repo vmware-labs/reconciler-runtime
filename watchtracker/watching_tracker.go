@@ -6,11 +6,13 @@ SPDX-License-Identifier: Apache-2.0
 package watchtracker
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/vmware-labs/reconciler-runtime/client"
+	"github.com/vmware-labs/reconciler-runtime/inject"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -32,7 +34,10 @@ type impl struct {
 	controller controller.Controller
 }
 
-var _ tracker.Tracker = &impl{}
+var (
+	_ tracker.Tracker   = (*impl)(nil)
+	_ inject.Controller = (*impl)(nil)
+)
 
 // New returns an implementation of Tracker that lets a Reconciler register a
 // particular resource as watching a resource for a particular lease duration.
@@ -60,12 +65,16 @@ func NewWatchingTracker(tracker tracker.Tracker, watch watchFunc) tracker.Tracke
 	}
 }
 
-// Controller injects a controller into this tracker which will be used to
+// InjectController injects a controller into this tracker which will be used to
 // start watches.
-func (i *impl) Controller(controller controller.Controller) {
+func (i *impl) InjectController(controller controller.Controller) error {
 	i.m.Lock()
 	defer i.m.Unlock()
+	if i.controller != nil {
+		return fmt.Errorf("controller may not be mutated once injected")
+	}
 	i.controller = controller
+	return nil
 }
 
 // Track tells us that "obj" is tracking changes to the referenced object
