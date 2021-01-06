@@ -29,10 +29,10 @@ func (t trackBy) By(trackingObjNamespace, trackingObjName string) TrackRequest {
 	return t(trackingObjNamespace, trackingObjName)
 }
 
-func CreateTrackRequest(trackedObjGroup, trackedObjKind, trackedObjNamespace, trackedObjName string) trackBy {
+func CreateTrackRequest(trackedObjGroup, trackedObjVersion, trackedObjKind, trackedObjNamespace, trackedObjName string) trackBy {
 	return func(trackingObjNamespace, trackingObjName string) TrackRequest {
 		return TrackRequest{
-			Tracked: tracker.Key{GroupKind: schema.GroupKind{Group: trackedObjGroup, Kind: trackedObjKind}, NamespacedName: types.NamespacedName{Namespace: trackedObjNamespace, Name: trackedObjName}},
+			Tracked: tracker.Key{GroupVersionKind: schema.GroupVersionKind{Group: trackedObjGroup, Version: trackedObjVersion, Kind: trackedObjKind}, NamespacedName: types.NamespacedName{Namespace: trackedObjNamespace, Name: trackedObjName}},
 			Tracker: types.NamespacedName{Namespace: trackingObjNamespace, Name: trackingObjName},
 		}
 	}
@@ -45,30 +45,31 @@ func NewTrackRequest(t, b Factory, scheme *runtime.Scheme) TrackRequest {
 		panic(err)
 	}
 	return TrackRequest{
-		Tracked: tracker.Key{GroupKind: schema.GroupKind{Group: gvks[0].Group, Kind: gvks[0].Kind}, NamespacedName: types.NamespacedName{Namespace: tracked.GetNamespace(), Name: tracked.GetName()}},
+		Tracked: tracker.Key{GroupVersionKind: gvks[0], NamespacedName: types.NamespacedName{Namespace: tracked.GetNamespace(), Name: tracked.GetName()}},
 		Tracker: types.NamespacedName{Namespace: by.GetNamespace(), Name: by.GetName()},
 	}
 }
 
 const maxDuration = time.Duration(1<<63 - 1)
 
-func createTracker() *mockTracker {
-	return &mockTracker{Tracker: tracker.New(maxDuration, testing.NullLogger{}), reqs: []TrackRequest{}}
+func CreateTracker() *MockTracker {
+	return &MockTracker{Tracker: tracker.New(maxDuration, testing.NullLogger{}), reqs: []TrackRequest{}}
 }
 
-type mockTracker struct {
+type MockTracker struct {
 	tracker.Tracker
 	reqs []TrackRequest
 }
 
-var _ tracker.Tracker = &mockTracker{}
+var _ tracker.Tracker = &MockTracker{}
 
-func (t *mockTracker) Track(ref tracker.Key, obj types.NamespacedName) {
+func (t *MockTracker) Track(ref tracker.Key, obj types.NamespacedName) error {
 	t.Tracker.Track(ref, obj)
 	t.reqs = append(t.reqs, TrackRequest{Tracked: ref, Tracker: obj})
+	return nil
 }
 
-func (t *mockTracker) getTrackRequests() []TrackRequest {
+func (t *MockTracker) GetTrackRequests() []TrackRequest {
 	result := []TrackRequest{}
 	for _, req := range t.reqs {
 		result = append(result, req)

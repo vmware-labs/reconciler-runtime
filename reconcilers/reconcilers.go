@@ -24,10 +24,12 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/vmware-labs/reconciler-runtime/client"
+	"github.com/vmware-labs/reconciler-runtime/inject"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
 
@@ -38,8 +40,8 @@ var (
 // Config holds common resources for controllers. The configuration may be
 // passed to sub-reconcilers.
 type Config struct {
-	client.Client
-	APIReader client.Reader
+	client.DuckClient
+	APIReader client.DuckReader
 	Recorder  record.EventRecorder
 	Log       logr.Logger
 	Tracker   tracker.Tracker
@@ -50,12 +52,15 @@ type Config struct {
 func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration) Config {
 	name := typeName(apiType)
 	log := ctrl.Log.WithName("controllers").WithName(name)
+	scheme := mgr.GetScheme()
 	return Config{
-		Client:    mgr.GetClient(),
-		APIReader: mgr.GetAPIReader(),
-		Recorder:  mgr.GetEventRecorderFor(name),
-		Log:       log,
-		Tracker:   tracker.New(syncPeriod, log.WithName("tracker")),
+		DuckClient: client.NewDuckClient(mgr.GetClient()),
+		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
+		Recorder:   mgr.GetEventRecorderFor(name),
+		Log:        log,
+		Tracker: tracker.NewWatcher(syncPeriod, log.WithName("tracker"), scheme, func(by client.Object, t tracker.Tracker) handler.EventHandler {
+			return EnqueueTracked(by, t, scheme)
+		}),
 	}
 }
 
@@ -83,7 +88,15 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return err
 	}
-	return bldr.Complete(r)
+	ctrl, err := bldr.Build(r)
+	if err != nil {
+		return err
+	}
+	_, err = inject.ControllerInto(ctrl, r.Config.Tracker)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -268,7 +281,7 @@ func (r *SyncReconciler) validate(ctx context.Context) error {
 func (r *SyncReconciler) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	result, err := r.sync(ctx, parent)
 	if err != nil {
-		r.Log.Error(err, "unable to sync", reflect.TypeOf(parent), parent)
+		r.Log.Error(err, "unable to sync", typeName(parent), parent)
 		return ctrl.Result{}, err
 	}
 

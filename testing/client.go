@@ -9,19 +9,20 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/vmware-labs/reconciler-runtime/client"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgotesting "k8s.io/client-go/testing"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type clientWrapper struct {
-	client              client.Client
+	client              client.DuckClient
 	createActions       []objectAction
 	updateActions       []objectAction
+	patchActions        []PatchAction
 	deleteActions       []DeleteAction
 	statusUpdateActions []objectAction
 	genCount            int
@@ -36,9 +37,10 @@ func newClientWrapperWithScheme(scheme *runtime.Scheme, objs ...client.Object) *
 		o[i] = objs[i]
 	}
 	client := &clientWrapper{
-		client:              fakeclient.NewFakeClientWithScheme(scheme, o...),
+		client:              client.NewDuckClient(fakeclient.NewFakeClientWithScheme(scheme, o...)),
 		createActions:       []objectAction{},
 		updateActions:       []objectAction{},
+		patchActions:        []PatchAction{},
 		deleteActions:       []DeleteAction{},
 		statusUpdateActions: []objectAction{},
 		genCount:            0,
@@ -131,6 +133,19 @@ func (w *clientWrapper) Get(ctx context.Context, key client.ObjectKey, obj clien
 	return w.client.Get(ctx, key, obj)
 }
 
+func (w *clientWrapper) GetDuck(ctx context.Context, key client.Key, obj client.Object) error {
+	// NOTE kind != resource, but for this purpose it's good enough
+	gvr := key.GroupVersionKind().GroupVersion().WithResource(key.Kind)
+
+	// call reactor chain
+	err := w.react(clientgotesting.NewGetAction(gvr, key.Namespace, key.Name))
+	if err != nil {
+		return err
+	}
+
+	return w.client.GetDuck(ctx, key, obj)
+}
+
 func (w *clientWrapper) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	gvr, _, _, err := w.objmeta(list)
 	if err != nil {
@@ -153,6 +168,27 @@ func (w *clientWrapper) List(ctx context.Context, list client.ObjectList, opts .
 	}
 
 	return w.client.List(ctx, list, opts...)
+}
+
+func (w *clientWrapper) ListDuck(ctx context.Context, key client.Key, obj client.ObjectList, opts ...client.ListOption) error {
+	gvk := key.GroupVersionKind()
+	// NOTE kind != resource, but for this purpose it's good enough
+	gvr := gvk.GroupVersion().WithResource(key.Kind)
+	listopts := &client.ListOptions{}
+	for _, opt := range opts {
+		opt.ApplyToList(listopts)
+	}
+	if key.Namespace != "" {
+		listopts.Namespace = key.Namespace
+	}
+
+	// call reactor chain
+	err := w.react(clientgotesting.NewListAction(gvr, gvk, listopts.Namespace, metav1.ListOptions{}))
+	if err != nil {
+		return err
+	}
+
+	return w.client.ListDuck(ctx, key, obj, opts...)
 }
 
 func (w *clientWrapper) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
@@ -191,6 +227,22 @@ func (w *clientWrapper) Delete(ctx context.Context, obj client.Object, opts ...c
 	return w.client.Delete(ctx, obj, opts...)
 }
 
+func (w *clientWrapper) DeleteDuck(ctx context.Context, key client.Key, opts ...client.DeleteOption) error {
+	// NOTE kind != resource, but for this purpose it's good enough
+	gvr := key.GroupVersionKind().GroupVersion().WithResource(key.Kind)
+
+	// capture action
+	w.deleteActions = append(w.deleteActions, clientgotesting.NewDeleteAction(gvr, key.Namespace, key.Name))
+
+	// call reactor chain
+	err := w.react(clientgotesting.NewDeleteAction(gvr, key.Namespace, key.Name))
+	if err != nil {
+		return err
+	}
+
+	return w.client.DeleteDuck(ctx, key, opts...)
+}
+
 func (w *clientWrapper) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	gvr, namespace, _, err := w.objmeta(obj)
 	if err != nil {
@@ -208,8 +260,48 @@ func (w *clientWrapper) Update(ctx context.Context, obj client.Object, opts ...c
 
 	return w.client.Update(ctx, obj, opts...)
 }
+
 func (w *clientWrapper) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-	panic(fmt.Errorf("Patch() is not implemented"))
+	gvr, namespace, name, err := w.objmeta(obj)
+	if err != nil {
+		return err
+	}
+
+	// capture action
+	data, err := patch.Data(obj)
+	if err != nil {
+		return err
+	}
+	w.patchActions = append(w.patchActions, clientgotesting.NewPatchAction(gvr, namespace, name, patch.Type(), data))
+
+	// call reactor chain
+	err = w.react(clientgotesting.NewPatchAction(gvr, namespace, name, patch.Type(), data))
+	if err != nil {
+		return err
+	}
+
+	return w.client.Patch(ctx, obj, patch, opts...)
+}
+
+func (w *clientWrapper) PatchDuck(ctx context.Context, duck client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	gvr := duck.GetObjectKind().GroupVersionKind().GroupVersion().WithResource(duck.GetObjectKind().GroupVersionKind().Kind)
+	namespace := duck.(metav1.Object).GetNamespace()
+	name := duck.(metav1.Object).GetName()
+
+	// capture action
+	data, err := patch.Data(duck)
+	if err != nil {
+		return err
+	}
+	w.patchActions = append(w.patchActions, clientgotesting.NewPatchAction(gvr, namespace, name, patch.Type(), data))
+
+	// call reactor chain
+	err = w.react(clientgotesting.NewPatchAction(gvr, namespace, name, patch.Type(), data))
+	if err != nil {
+		return err
+	}
+
+	return w.client.PatchDuck(ctx, duck, patch, opts...)
 }
 
 func (w *clientWrapper) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
