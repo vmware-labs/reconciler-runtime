@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package tracker_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -14,16 +15,15 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
-func TestWatchingTracker_Ok(t *testing.T) {
-	mockTracker := rtesting.CreateTracker()
+func TestWatchingTracker_Watching(t *testing.T) {
+	mockTracker := rtesting.CreateTracker(rtesting.MaxDuration)
 	watches := []schema.GroupVersionKind{}
 
-	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
+	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind) (context.CancelFunc, error) {
 		watches = append(watches, gvk)
-		return nil
+		return nil, nil
 	})
 
 	gvk1 := schema.GroupVersionKind{
@@ -98,13 +98,90 @@ func TestWatchingTracker_Ok(t *testing.T) {
 	}
 }
 
+func TestWatchingTracker_CancelGarbageWatches(t *testing.T) {
+	mockTracker := rtesting.CreateTracker(0) // trackers expire before first lookup
+
+	gk1 := schema.GroupKind{
+		Group: "trackedGroup",
+		Kind:  "trackedKind",
+	}
+	watching1 := true
+	stopWatch1 := func() {
+		watching1 = false
+	}
+	cancelFuncs := map[schema.GroupKind]context.CancelFunc{gk1: stopWatch1}
+
+	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind) (context.CancelFunc, error) {
+		return cancelFuncs[gvk.GroupKind()], nil
+	})
+
+	gvk1 := schema.GroupVersionKind{
+		Group:   gk1.Group,
+		Version: "trackedVersion1",
+		Kind:    gk1.Kind,
+	}
+	n1 := types.NamespacedName{
+		Namespace: "trackedNamespace",
+		Name:      "trackedName",
+	}
+
+	tracked1 := tracker.NewKey(gvk1, n1)
+
+	tracking1 := types.NamespacedName{
+		Namespace: "trackingnamespace1",
+		Name:      "trackingname1",
+	}
+
+	if err := wt.Track(tracked1, tracking1); err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
+
+	wt.Lookup(tracked1)
+	if watching1 {
+		t.Errorf("watch not cancelled")
+	}
+
+	if err := wt.Track(tracked1, tracking1); err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
+
+	gvk2 := schema.GroupVersionKind{
+		Group:   gk1.Group,
+		Version: "trackedVersion2",
+		Kind:    gk1.Kind,
+	}
+	n2 := types.NamespacedName{
+		Namespace: "trackedNamespace2",
+		Name:      "trackedName2",
+	}
+	tracked2 := tracker.NewKey(gvk2, n2)
+	tracking2 := types.NamespacedName{
+		Namespace: "trackingnamespace2",
+		Name:      "trackingname2",
+	}
+	if err := wt.Track(tracked2, tracking2); err != nil {
+		t.Errorf("unexpected error %v", err)
+	}
+	watching1 = true
+
+	wt.Lookup(tracked1)
+	if !watching1 {
+		t.Errorf("watch cancelled incorrectly")
+	}
+
+	wt.Lookup(tracked2)
+	if watching1 {
+		t.Errorf("watch not cancelled")
+	}
+}
+
 func TestWatchingTracker_WatchError(t *testing.T) {
-	mockTracker := rtesting.CreateTracker()
+	mockTracker := rtesting.CreateTracker(rtesting.MaxDuration)
 	watches := []schema.GroupVersionKind{}
 
-	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
+	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind) (context.CancelFunc, error) {
 		watches = append(watches, gvk)
-		return errors.New("failed")
+		return nil, errors.New("failed")
 	})
 
 	gvk1 := schema.GroupVersionKind{

@@ -24,6 +24,7 @@ package tracker
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -144,4 +145,21 @@ func (i *impl) Lookup(ref Key) []types.NamespacedName {
 	i.log.V(1).Info("found tracked items", "ref", ref.UnversionedString(), "items", items)
 
 	return items
+}
+
+// Tracking returns true if and only if any references with the given group and
+// kind are being tracked.
+func (i *impl) Tracking(groupKind schema.GroupKind) bool {
+	i.m.Lock()
+	defer i.m.Unlock()
+
+	prefix := fmt.Sprintf("%s/", groupKind)
+
+	for ref := range i.mapping {
+		if strings.HasPrefix(ref, prefix) {
+			return true
+		}
+	}
+
+	return false
 }

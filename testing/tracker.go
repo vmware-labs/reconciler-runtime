@@ -50,10 +50,10 @@ func NewTrackRequest(t, b Factory, scheme *runtime.Scheme) TrackRequest {
 	}
 }
 
-const maxDuration = time.Duration(1<<63 - 1)
+const MaxDuration = time.Duration(1<<63 - 1)
 
-func CreateTracker() *MockTracker {
-	return &MockTracker{Tracker: tracker.New(maxDuration, testing.NullLogger{}), reqs: []TrackRequest{}}
+func CreateTracker(lease time.Duration) *MockTracker {
+	return &MockTracker{Tracker: tracker.New(lease, testing.NullLogger{}), reqs: []TrackRequest{}}
 }
 
 type MockTracker struct {
@@ -75,4 +75,12 @@ func (t *MockTracker) GetTrackRequests() []TrackRequest {
 		result = append(result, req)
 	}
 	return result
+}
+
+type GKAware interface {
+	Tracking(groupKind schema.GroupKind) bool
+}
+
+func (t *MockTracker) Tracking(groupKind schema.GroupKind) bool {
+	return t.Tracker.(GKAware).Tracking(groupKind)
 }

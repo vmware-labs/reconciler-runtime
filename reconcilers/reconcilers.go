@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/vmware-labs/reconciler-runtime/client"
-	"github.com/vmware-labs/reconciler-runtime/inject"
+	"github.com/vmware-labs/reconciler-runtime/manager"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
 
@@ -49,7 +49,7 @@ type Config struct {
 
 // NewConfig creates a Config for a specific API type. Typically passed into a
 // reconciler.
-func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration) Config {
+func NewConfig(mgr manager.SuperManager, apiType client.Object, syncPeriod time.Duration) Config {
 	name := typeName(apiType)
 	log := ctrl.Log.WithName("controllers").WithName(name)
 	scheme := mgr.GetScheme()
@@ -58,7 +58,7 @@ func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration
 		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
 		Recorder:   mgr.GetEventRecorderFor(name),
 		Log:        log,
-		Tracker: tracker.NewWatcher(syncPeriod, log.WithName("tracker"), scheme, func(by client.Object, t tracker.Tracker) handler.EventHandler {
+		Tracker: tracker.NewWatcher(mgr, syncPeriod, log.WithName("tracker"), scheme, func(by client.Object, t tracker.Tracker) handler.EventHandler {
 			return EnqueueTracked(by, t, scheme)
 		}),
 	}
@@ -88,15 +88,7 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return err
 	}
-	ctrl, err := bldr.Build(r)
-	if err != nil {
-		return err
-	}
-	_, err = inject.ControllerInto(ctrl, r.Config.Tracker)
-	if err != nil {
-		return err
-	}
-	return nil
+	return bldr.Complete(r)
 }
 
 func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
