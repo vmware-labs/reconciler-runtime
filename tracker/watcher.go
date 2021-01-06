@@ -6,52 +6,63 @@ SPDX-License-Identifier: Apache-2.0
 package tracker
 
 import (
-	"fmt"
+	"context"
 	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/vmware-labs/reconciler-runtime/client"
-	"github.com/vmware-labs/reconciler-runtime/inject"
+	"github.com/vmware-labs/reconciler-runtime/manager"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-type watchFunc func(gvk schema.GroupVersionKind, controller controller.Controller) error
+type watchFunc func(gvk schema.GroupVersionKind) (context.CancelFunc, error)
 
 type watcher struct {
 	tracker Tracker
 	watch   watchFunc
 
-	m          sync.Mutex // protects watches and controller
-	watches    map[schema.GroupKind]struct{}
-	controller controller.Controller
+	m       sync.Mutex // protects watches
+	watches map[schema.GroupKind]context.CancelFunc
 }
 
 var (
-	_ Tracker           = (*watcher)(nil)
-	_ inject.Controller = (*watcher)(nil)
+	_ Tracker = (*watcher)(nil)
 )
 
 // NewWatcher returns an implementation of Tracker that lets a Reconciler register a
 // particular resource as watching a resource for a particular lease duration.
 // This watch must be refreshed periodically (e.g. by a controller resync) or
 // it will expire.
-func NewWatcher(lease time.Duration, log logr.Logger, scheme *runtime.Scheme, enqueueTracked func(by client.Object, t Tracker) handler.EventHandler) Tracker {
+func NewWatcher(sm manager.SuperManager, lease time.Duration, log logr.Logger, scheme *runtime.Scheme, enqueueTracked func(by client.Object, t Tracker) handler.EventHandler) Tracker {
 	tracker := New(lease, log)
-	return NewWatchingTracker(tracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
+	return NewWatchingTracker(tracker, func(gvk schema.GroupVersionKind) (context.CancelFunc, error) {
 		rObj, err := scheme.New(gvk)
 		obj := rObj.(crclient.Object)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		return controller.Watch(&source.Kind{Type: obj}, enqueueTracked(obj, tracker))
+		ctrl, err := builder.ControllerManagedBy(sm).Build(nil /*FIXME: supply dummy reconciler*/)
+		if err != nil {
+			return nil, err
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go ctrl.Start(ctx) // FIXME: handle error
+
+		if err := ctrl.Watch(&source.Kind{Type: obj}, enqueueTracked(obj, tracker)); err != nil {
+			cancel()
+			return nil, err
+		}
+
+		return cancel, nil
 	})
 }
 
@@ -60,20 +71,8 @@ func NewWatchingTracker(tracker Tracker, watch watchFunc) Tracker {
 	return &watcher{
 		tracker: tracker,
 		watch:   watch,
-		watches: map[schema.GroupKind]struct{}{},
+		watches: map[schema.GroupKind]context.CancelFunc{},
 	}
-}
-
-// InjectController injects a controller into this tracker which will be used to
-// start watches.
-func (i *watcher) InjectController(controller controller.Controller) error {
-	i.m.Lock()
-	defer i.m.Unlock()
-	if i.controller != nil {
-		return fmt.Errorf("controller may not be mutated once injected")
-	}
-	i.controller = controller
-	return nil
 }
 
 // Track tells us that "obj" is tracking changes to the referenced object
@@ -98,11 +97,12 @@ func (i *watcher) startWatch(ref Key) error {
 		return nil
 	}
 
-	if err := i.watch(ref.GroupVersionKind, i.controller); err != nil {
+	cancel, err := i.watch(ref.GroupVersionKind)
+	if err != nil {
 		return err
 	}
 
-	i.watches[ref.GroupKind()] = struct{}{}
+	i.watches[ref.GroupKind()] = cancel
 	return nil
 }
 

@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package tracker_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -14,16 +15,15 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
 func TestWatchingTracker_Ok(t *testing.T) {
 	mockTracker := rtesting.CreateTracker()
 	watches := []schema.GroupVersionKind{}
 
-	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
+	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind) (context.CancelFunc, error) {
 		watches = append(watches, gvk)
-		return nil
+		return nil, nil
 	})
 
 	gvk1 := schema.GroupVersionKind{
@@ -102,9 +102,9 @@ func TestWatchingTracker_WatchError(t *testing.T) {
 	mockTracker := rtesting.CreateTracker()
 	watches := []schema.GroupVersionKind{}
 
-	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
+	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind) (context.CancelFunc, error) {
 		watches = append(watches, gvk)
-		return errors.New("failed")
+		return nil, errors.New("failed")
 	})
 
 	gvk1 := schema.GroupVersionKind{
