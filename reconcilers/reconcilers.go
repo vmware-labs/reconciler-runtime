@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/cache"
 	"k8s.io/client-go/tools/record"
@@ -29,7 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/vmware-labs/reconciler-runtime/client"
-	"github.com/vmware-labs/reconciler-runtime/inject"
+	"github.com/vmware-labs/reconciler-runtime/informers"
+	"github.com/vmware-labs/reconciler-runtime/manager"
+	"github.com/vmware-labs/reconciler-runtime/reconcilers/stash"
+	"github.com/vmware-labs/reconciler-runtime/reconcilers/stash/parent"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
 
@@ -49,17 +53,16 @@ type Config struct {
 
 // NewConfig creates a Config for a specific API type. Typically passed into a
 // reconciler.
-func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration) Config {
+func NewConfig(sm manager.SuperManager, informers informers.Informers, apiType client.Object, syncPeriod time.Duration) Config {
 	name := typeName(apiType)
 	log := ctrl.Log.WithName("controllers").WithName(name)
-	scheme := mgr.GetScheme()
 	return Config{
-		DuckClient: client.NewDuckClient(mgr.GetClient()),
-		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
-		Recorder:   mgr.GetEventRecorderFor(name),
+		DuckClient: client.NewDuckClient(sm.GetClient()),
+		APIReader:  client.NewDuckReader(sm.GetAPIReader()),
+		Recorder:   sm.GetEventRecorderFor(name),
 		Log:        log,
-		Tracker: tracker.NewWatcher(syncPeriod, log.WithName("tracker"), scheme, func(by client.Object, t tracker.Tracker) handler.EventHandler {
-			return EnqueueTracked(by, t, scheme)
+		Tracker: tracker.NewWatcher(informers, syncPeriod, log.WithName("watcher"), func(trackedGVK schema.GroupVersionKind, t tracker.Tracker) handler.EventHandler {
+			return EnqueueTracked(trackedGVK, t)
 		}),
 	}
 }
@@ -88,23 +91,16 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return err
 	}
-	ctrl, err := bldr.Build(r)
-	if err != nil {
-		return err
-	}
-	_, err = inject.ControllerInto(ctrl, r.Config.Tracker)
-	if err != nil {
-		return err
-	}
-	return nil
+	return bldr.Complete(r)
 }
 
 func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	ctx = WithStash(ctx)
+	ctx = stash.WithStash(ctx)
 	log := r.Log.WithValues("request", req.NamespacedName)
 
 	ctx = StashParentType(ctx, r.Type)
 	ctx = StashCastParentType(ctx, r.Type)
+	ctx = parent.StashParentReconciler(ctx, r)
 	originalParent := r.Type.DeepCopyObject().(client.Object)
 
 	if err := r.Get(ctx, req.NamespacedName, originalParent); err != nil {
@@ -174,8 +170,8 @@ func (r *ParentReconciler) status(obj client.Object) interface{} {
 	return reflect.ValueOf(obj).Elem().FieldByName("Status").Addr().Interface()
 }
 
-const parentTypeStashKey StashKey = "reconciler-runtime:parentType"
-const castParentTypeStashKey StashKey = "reconciler-runtime:castParentType"
+const parentTypeStashKey stash.StashKey = "reconciler-runtime:parentType"
+const castParentTypeStashKey stash.StashKey = "reconciler-runtime:castParentType"
 
 func StashParentType(ctx context.Context, parentType client.Object) context.Context {
 	return context.WithValue(ctx, parentTypeStashKey, parentType)

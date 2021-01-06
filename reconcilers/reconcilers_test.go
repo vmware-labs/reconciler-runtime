@@ -14,6 +14,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/vmware-labs/reconciler-runtime/apis"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
+	"github.com/vmware-labs/reconciler-runtime/reconcilers/stash"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	"github.com/vmware-labs/reconciler-runtime/testing/factories"
 	appsv1 "k8s.io/api/apps/v1"
@@ -238,9 +239,9 @@ func TestParentReconciler(t *testing.T) {
 				return &reconcilers.SyncReconciler{
 					Config: c,
 					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
-						var key reconcilers.StashKey = "foo"
+						var key stash.StashKey = "foo"
 						// StashValue will panic if the context is not setup correctly
-						reconcilers.StashValue(ctx, key, "bar")
+						stash.StashValue(ctx, key, "bar")
 						return nil
 					},
 				}

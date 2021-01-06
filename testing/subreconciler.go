@@ -12,6 +12,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
+	"github.com/vmware-labs/reconciler-runtime/reconcilers/stash"
 	"k8s.io/apimachinery/pkg/runtime"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -35,7 +36,7 @@ type SubReconcilerTestCase struct {
 	// Parent is the initial object passed to the sub reconciler
 	Parent Factory
 	// GivenStashedValues adds these items to the stash passed into the reconciler. Factories are resolved to their object.
-	GivenStashedValues map[reconcilers.StashKey]interface{}
+	GivenStashedValues map[stash.StashKey]interface{}
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
@@ -49,7 +50,7 @@ type SubReconcilerTestCase struct {
 	// ExpectParent is the expected parent as mutated after the sub reconciler, or nil if no modification
 	ExpectParent Factory
 	// ExpectStashedValues ensures each value is stashed. Values in the stash that are not expected are ignored. Factories are resolved to their object.
-	ExpectStashedValues map[reconcilers.StashKey]interface{}
+	ExpectStashedValues map[stash.StashKey]interface{}
 	// ExpectTracks holds the ordered list of Track calls expected during reconciliation
 	ExpectTracks []TrackRequest
 	// ExpectEvents holds the ordered list of events recorded during the reconciliation
@@ -116,7 +117,7 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 		clientWrapper.PrependReactor("*", "*", reactor)
 	}
 	apiReader := newClientWrapperWithScheme(scheme, apiGivenObjects...)
-	tracker := CreateTracker()
+	tracker := CreateTracker(MaxDuration)
 	recorder := &eventRecorder{
 		events: []Event{},
 		scheme: scheme,
@@ -143,12 +144,12 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 		}
 	}
 
-	ctx := reconcilers.WithStash(context.Background())
+	ctx := stash.WithStash(context.Background())
 	for k, v := range tc.GivenStashedValues {
 		if f, ok := v.(Factory); ok {
 			v = f.CreateObject()
 		}
-		reconcilers.StashValue(ctx, k, v)
+		stash.StashValue(ctx, k, v)
 	}
 
 	parent := tc.Parent.CreateObject()
@@ -194,7 +195,7 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 		if f, ok := expected.(Factory); ok {
 			expected = f.CreateObject()
 		}
-		actual := reconcilers.RetrieveValue(ctx, key)
+		actual := stash.RetrieveValue(ctx, key)
 		if diff := cmp.Diff(expected, actual, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, cmpopts.EquateEmpty()); diff != "" {
 			t.Errorf("Unexpected stash value %q (-expected, +actual): %s", key, diff)
 		}

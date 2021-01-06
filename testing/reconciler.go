@@ -117,7 +117,7 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 		clientWrapper.PrependReactor("*", "*", reactor)
 	}
 	apiReader := newClientWrapperWithScheme(scheme, apiGivenObjects...)
-	tracker := CreateTracker()
+	tracker := CreateTracker(MaxDuration)
 	recorder := &eventRecorder{
 		events: []Event{},
 		scheme: scheme,

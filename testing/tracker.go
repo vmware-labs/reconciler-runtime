@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package testing
 
 import (
+	"context"
 	"time"
 
 	"github.com/go-logr/logr/testing"
@@ -50,10 +51,10 @@ func NewTrackRequest(t, b Factory, scheme *runtime.Scheme) TrackRequest {
 	}
 }
 
-const maxDuration = time.Duration(1<<63 - 1)
+const MaxDuration = time.Duration(1<<63 - 1)
 
-func CreateTracker() *MockTracker {
-	return &MockTracker{Tracker: tracker.New(maxDuration, testing.NullLogger{}), reqs: []TrackRequest{}}
+func CreateTracker(lease time.Duration) *MockTracker {
+	return &MockTracker{Tracker: tracker.New(lease, testing.NullLogger{}), reqs: []TrackRequest{}}
 }
 
 type MockTracker struct {
@@ -63,8 +64,8 @@ type MockTracker struct {
 
 var _ tracker.Tracker = &MockTracker{}
 
-func (t *MockTracker) Track(ref tracker.Key, obj types.NamespacedName) error {
-	t.Tracker.Track(ref, obj)
+func (t *MockTracker) Track(ctx context.Context, ref tracker.Key, obj types.NamespacedName) error {
+	t.Tracker.Track(ctx, ref, obj)
 	t.reqs = append(t.reqs, TrackRequest{Tracked: ref, Tracker: obj})
 	return nil
 }
@@ -75,4 +76,12 @@ func (t *MockTracker) GetTrackRequests() []TrackRequest {
 		result = append(result, req)
 	}
 	return result
+}
+
+type GKAware interface {
+	Tracking(groupKind schema.GroupKind) bool
+}
+
+func (t *MockTracker) Tracking(groupKind schema.GroupKind) bool {
+	return t.Tracker.(GKAware).Tracking(groupKind)
 }
