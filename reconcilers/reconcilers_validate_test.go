@@ -118,13 +118,12 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:       "empty",
 			parent:     &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{},
-			shouldErr:  "IndexField must be defined",
+			shouldErr:  "ChildType must be defined",
 		},
 		{
 			name:   "valid",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -132,26 +131,11 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
 			},
-		},
-		{
-			name:   "IndexField missing",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				// IndexField:                 ".metadata.foo",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
-			},
-			shouldErr: "IndexField must be defined",
 		},
 		{
 			name:   "ChildType missing",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField: ".metadata.foo",
 				// ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -165,8 +149,7 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "ChildListType missing",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField: ".metadata.foo",
-				ChildType:  &corev1.Pod{},
+				ChildType: &corev1.Pod{},
 				// ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
 				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
@@ -179,7 +162,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "DesiredChild missing",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:    ".metadata.foo",
 				ChildType:     &corev1.Pod{},
 				ChildListType: &corev1.PodList{},
 				// DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -193,7 +175,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "DesiredChild num in",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func() (*corev1.Pod, error) { return nil, nil },
@@ -207,7 +188,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "DesiredChild in 0",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx string, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -221,7 +201,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "DesiredChild in 1",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.Secret) (*corev1.Pod, error) { return nil, nil },
@@ -235,7 +214,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "DesiredChild num out",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) {},
@@ -249,7 +227,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "DesiredChild out 0",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Secret, error) { return nil, nil },
@@ -263,7 +240,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "DesiredChild out 1",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, string) { return nil, "" },
@@ -277,7 +253,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "ReflectChildStatusOnParent missing",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:    ".metadata.foo",
 				ChildType:     &corev1.Pod{},
 				ChildListType: &corev1.PodList{},
 				DesiredChild:  func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -291,7 +266,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "ReflectChildStatusOnParent num in",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -305,7 +279,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "ReflectChildStatusOnParent in 0",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -319,7 +292,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "ReflectChildStatusOnParent in 1",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -333,7 +305,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "ReflectChildStatusOnParent in 2",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -347,7 +318,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "ReflectChildStatusOnParent num out",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -361,7 +331,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "MergeBeforeUpdate missing",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -375,7 +344,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "MergeBeforeUpdate num in",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -389,7 +357,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "MergeBeforeUpdate in 0",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -403,7 +370,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "MergeBeforeUpdate in 1",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -417,7 +383,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "MergeBeforeUpdate num out",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -431,7 +396,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "SemanticEquals missing",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -445,7 +409,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "SemanticEquals num in",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -459,7 +422,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "SemanticEquals in 0",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -473,7 +435,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "SemanticEquals in 1",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -487,7 +448,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "SemanticEquals num out",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -501,7 +461,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "SemanticEquals out 0",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -515,7 +474,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "HarmonizeImmutableFields",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -529,7 +487,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "HarmonizeImmutableFields num in",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -544,7 +501,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "HarmonizeImmutableFields in 0",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -559,7 +515,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "HarmonizeImmutableFields in 1",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -574,7 +529,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "HarmonizeImmutableFields num out",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -589,7 +543,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "Sanitize",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -603,7 +556,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "Sanitize num in",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -618,7 +570,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "Sanitize in 1",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -633,7 +584,6 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "Sanitize num out",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
-				IndexField:                 ".metadata.foo",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
