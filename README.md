@@ -193,7 +193,6 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 		},
 		
 		Config:     c,
-		IndexField: ".metadata.functionController",
 	}
 }
 ```

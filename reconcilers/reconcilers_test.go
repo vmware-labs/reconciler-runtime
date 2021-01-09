@@ -406,8 +406,7 @@ func TestChildReconciler(t *testing.T) {
 				return equality.Semantic.DeepEqual(r1.Data, r2.Data)
 			},
 
-			Config:     c,
-			IndexField: ".metadata.testResourceController",
+			Config: c,
 		}
 	}
 

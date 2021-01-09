@@ -330,8 +330,7 @@ var (
 //    - MergeBeforeUpdate
 // - ReflectChildStatusOnParent
 //
-// During setup, the child resource type is registered to watch for changes. A
-// field indexer is configured for the owner on the IndexField.
+// During setup, the child resource type is registered to watch for changes.
 type ChildReconciler struct {
 	// ChildType is the resource being created/updated/deleted by the
 	// reconciler. For example, a parent Deployment would have a ReplicaSet as a
@@ -403,10 +402,6 @@ type ChildReconciler struct {
 
 	Config
 
-	// IndexField is used to index objects of the child's type based on their
-	// controlling owner. This field needs to be unique within the manager.
-	IndexField string
-
 	// mutationCache holds patches received from updates to a resource made by
 	// mutation webhooks. This cache is used to avoid unnecessary update calls
 	// that would actually have no effect.
@@ -420,11 +415,6 @@ func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 
 	bldr.Owns(r.ChildType)
 
-	parentType := RetrieveParentType(ctx)
-	if err := IndexControllersOfType(ctx, mgr, r.IndexField, parentType, r.ChildType, r.Scheme()); err != nil {
-		return err
-	}
-
 	if r.Setup == nil {
 		return nil
 	}
@@ -433,11 +423,6 @@ func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 
 func (r *ChildReconciler) validate(ctx context.Context) error {
 	castParentType := RetrieveCastParentType(ctx)
-
-	// validate IndexField value
-	if r.IndexField == "" {
-		return fmt.Errorf("IndexField must be defined")
-	}
 
 	// validate ChildType value
 	if r.ChildType == nil {
@@ -565,11 +550,11 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (
 func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (client.Object, error) {
 	actual := r.ChildType.DeepCopyObject().(client.Object)
 	children := r.ChildListType.DeepCopyObject().(client.ObjectList)
-	if err := r.List(ctx, children, client.InNamespace(parent.GetNamespace()), client.MatchingFields{r.IndexField: parent.GetName()}); err != nil {
+	if err := r.List(ctx, children, client.InNamespace(parent.GetNamespace())); err != nil {
 		return nil, err
 	}
 	// TODO do we need to remove resources pending deletion?
-	items := r.items(children)
+	items := r.controlled(parent, children)
 	if len(items) == 1 {
 		actual = items[0]
 	} else if len(items) > 1 {
@@ -758,12 +743,15 @@ func (r *ChildReconciler) sanitize(child client.Object) interface{} {
 	return sanitized
 }
 
-func (r *ChildReconciler) items(children client.ObjectList) []client.Object {
+func (r *ChildReconciler) controlled(parent client.Object, children client.ObjectList) []client.Object {
 	childrenValue := reflect.ValueOf(children).Elem()
 	itemsValue := childrenValue.FieldByName("Items")
-	items := make([]client.Object, itemsValue.Len())
-	for i := range items {
-		items[i] = itemsValue.Index(i).Addr().Interface().(client.Object)
+	items := []client.Object{}
+	for i := 0; i < itemsValue.Len(); i++ {
+		obj := itemsValue.Index(i).Addr().Interface().(client.Object)
+		if metav1.IsControlledBy(obj, parent) {
+			items = append(items, obj)
+		}
 	}
 	return items
 }
