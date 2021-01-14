@@ -13,11 +13,10 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/vmware-labs/reconciler-runtime/client"
 	"github.com/vmware-labs/reconciler-runtime/manager"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -45,33 +44,35 @@ var nopReconciler = reconcile.Func(func(context.Context, reconcile.Request) (rec
 // particular resource as watching a resource for a particular lease duration.
 // This watch must be refreshed periodically (e.g. by a controller resync) or
 // it will expire.
-func NewWatcher(sm manager.SuperManager, lease time.Duration, log logr.Logger, scheme *runtime.Scheme, enqueueTracked func(by client.Object, t Tracker) handler.EventHandler) Tracker {
+func NewWatcher(sm manager.SuperManager, lease time.Duration, log logr.Logger, enqueueTracked func(by client.Object, t Tracker) handler.EventHandler) Tracker {
 	tracker := New(lease, log).(GKAwareTracker)
 	return NewWatchingTracker(tracker, func(gvk schema.GroupVersionKind) (context.CancelFunc, error) {
-		rObj, err := scheme.New(gvk)
-		obj := rObj.(crclient.Object)
-		if err != nil {
-			return nil, err
-		}
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(gvk)
 
 		// Create a new manager with its own cache which can be stopped when watches need to be stopped.
+		/* TODO: Can we share these managers/informer caches between trackers?
+		Since a new tracker is created for every reconciler, if different
+		resources watch the same duck types we'll end up with duplicate informer
+		caches. It will make the eviction logic more complex, but as implemented
+		I suspect this approach will consume more memory with duplicate informer
+		caches than will be gained by garbage collecting stale informer caches.
+		*/
 		mgr, err := sm.NewManager()
 		if err != nil {
 			return nil, err
 		}
 
-		ctrl, err := builder.ControllerManagedBy(mgr).Build(nopReconciler)
-		if err != nil {
-			return nil, err
-		}
-
-		// Start the manager. This will start the above controller.
+		// Start the manager.
 		cancel, err := sm.AddCancelable(mgr)
 		if err != nil {
 			return nil, err
 		}
 
-		if err := ctrl.Watch(&source.Kind{Type: obj}, enqueueTracked(obj, tracker)); err != nil {
+		// Create a controller with a suitable watch. This will start the controller.
+		if _, err = builder.ControllerManagedBy(mgr).
+			Watches(&source.Kind{Type: obj}, enqueueTracked(obj, tracker), builder.OnlyMetadata).
+			Build(nopReconciler); err != nil {
 			cancel()
 			return nil, err
 		}

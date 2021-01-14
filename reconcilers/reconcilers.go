@@ -52,14 +52,13 @@ type Config struct {
 func NewConfig(mgr manager.SuperManager, apiType client.Object, syncPeriod time.Duration) Config {
 	name := typeName(apiType)
 	log := ctrl.Log.WithName("controllers").WithName(name)
-	scheme := mgr.GetScheme()
 	return Config{
 		DuckClient: client.NewDuckClient(mgr.GetClient()),
 		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
 		Recorder:   mgr.GetEventRecorderFor(name),
 		Log:        log,
-		Tracker: tracker.NewWatcher(mgr, syncPeriod, log.WithName("tracker"), scheme, func(by client.Object, t tracker.Tracker) handler.EventHandler {
-			return EnqueueTracked(by, t, scheme)
+		Tracker: tracker.NewWatcher(mgr, syncPeriod, log.WithName("tracker"), func(by client.Object, t tracker.Tracker) handler.EventHandler {
+			return EnqueueTracked(by, t, mgr.GetScheme())
 		}),
 	}
 }
