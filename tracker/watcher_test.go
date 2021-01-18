@@ -21,7 +21,7 @@ func TestWatchingTracker_Watching(t *testing.T) {
 	mockTracker := rtesting.CreateTracker(rtesting.MaxDuration)
 	watches := []schema.GroupVersionKind{}
 
-	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind) (context.CancelFunc, error) {
+	wt := tracker.NewWatchingTracker(mockTracker, func(ctx context.Context, gvk schema.GroupVersionKind) (context.CancelFunc, error) {
 		watches = append(watches, gvk)
 		return nil, nil
 	})
@@ -43,8 +43,9 @@ func TestWatchingTracker_Watching(t *testing.T) {
 		Name:      "trackingname1",
 	}
 
+	ctx := context.Background()
 	// Tracking should delegate to the underlying tracker and start watching
-	if err := wt.Track(tracked1, tracking1); err != nil {
+	if err := wt.Track(ctx, tracked1, tracking1); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
 
@@ -63,7 +64,7 @@ func TestWatchingTracker_Watching(t *testing.T) {
 	}
 
 	// Repeating the track request should delegate to the underlying tracker, but produce no new watches
-	if err := wt.Track(tracked1, tracking1); err != nil {
+	if err := wt.Track(ctx, tracked1, tracking1); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
 	if diff := cmp.Diff([]rtesting.TrackRequest{tr, tr}, mockTracker.GetTrackRequests()); diff != "" {
@@ -85,7 +86,7 @@ func TestWatchingTracker_Watching(t *testing.T) {
 		Namespace: "trackingnamespace2",
 		Name:      "trackingname2",
 	}
-	if err := wt.Track(tracked2, tracking2); err != nil {
+	if err := wt.Track(ctx, tracked2, tracking2); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
 	tr2 := rtesting.CreateTrackRequest(gvk2.Group, gvk2.Version, gvk2.Kind, n2.Namespace, n2.Name).By(tracking2.Namespace, tracking2.Name)
@@ -111,7 +112,7 @@ func TestWatchingTracker_CancelGarbageWatches(t *testing.T) {
 	}
 	cancelFuncs := map[schema.GroupKind]context.CancelFunc{gk1: stopWatch1}
 
-	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind) (context.CancelFunc, error) {
+	wt := tracker.NewWatchingTracker(mockTracker, func(ctx context.Context, gvk schema.GroupVersionKind) (context.CancelFunc, error) {
 		return cancelFuncs[gvk.GroupKind()], nil
 	})
 
@@ -132,7 +133,8 @@ func TestWatchingTracker_CancelGarbageWatches(t *testing.T) {
 		Name:      "trackingname1",
 	}
 
-	if err := wt.Track(tracked1, tracking1); err != nil {
+	ctx := context.Background()
+	if err := wt.Track(ctx, tracked1, tracking1); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
 
@@ -141,7 +143,7 @@ func TestWatchingTracker_CancelGarbageWatches(t *testing.T) {
 		t.Errorf("watch not cancelled")
 	}
 
-	if err := wt.Track(tracked1, tracking1); err != nil {
+	if err := wt.Track(ctx, tracked1, tracking1); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
 
@@ -159,7 +161,7 @@ func TestWatchingTracker_CancelGarbageWatches(t *testing.T) {
 		Namespace: "trackingnamespace2",
 		Name:      "trackingname2",
 	}
-	if err := wt.Track(tracked2, tracking2); err != nil {
+	if err := wt.Track(ctx, tracked2, tracking2); err != nil {
 		t.Errorf("unexpected error %v", err)
 	}
 	watching1 = true
@@ -179,7 +181,7 @@ func TestWatchingTracker_WatchError(t *testing.T) {
 	mockTracker := rtesting.CreateTracker(rtesting.MaxDuration)
 	watches := []schema.GroupVersionKind{}
 
-	wt := tracker.NewWatchingTracker(mockTracker, func(gvk schema.GroupVersionKind) (context.CancelFunc, error) {
+	wt := tracker.NewWatchingTracker(mockTracker, func(ctx context.Context, gvk schema.GroupVersionKind) (context.CancelFunc, error) {
 		watches = append(watches, gvk)
 		return nil, errors.New("failed")
 	})
@@ -201,7 +203,9 @@ func TestWatchingTracker_WatchError(t *testing.T) {
 		Name:      "trackingname1",
 	}
 
-	if err := wt.Track(tracked1, tracking1); err.Error() != "failed" {
+	ctx := context.Background()
+
+	if err := wt.Track(ctx, tracked1, tracking1); err.Error() != "failed" {
 		t.Errorf("unexpected error %v", err)
 	}
 

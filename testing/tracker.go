@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package testing
 
 import (
+	"context"
 	"time"
 
 	"github.com/go-logr/logr/testing"
@@ -63,8 +64,8 @@ type MockTracker struct {
 
 var _ tracker.Tracker = &MockTracker{}
 
-func (t *MockTracker) Track(ref tracker.Key, obj types.NamespacedName) error {
-	t.Tracker.Track(ref, obj)
+func (t *MockTracker) Track(ctx context.Context, ref tracker.Key, obj types.NamespacedName) error {
+	t.Tracker.Track(ctx, ref, obj)
 	t.reqs = append(t.reqs, TrackRequest{Tracked: ref, Tracker: obj})
 	return nil
 }

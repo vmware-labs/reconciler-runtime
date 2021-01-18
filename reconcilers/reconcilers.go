@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/cache"
 	"k8s.io/client-go/tools/record"
@@ -57,8 +58,8 @@ func NewConfig(mgr manager.SuperManager, apiType client.Object, syncPeriod time.
 		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
 		Recorder:   mgr.GetEventRecorderFor(name),
 		Log:        log,
-		Tracker: tracker.NewWatcher(mgr, syncPeriod, log.WithName("tracker"), func(by client.Object, t tracker.Tracker) handler.EventHandler {
-			return EnqueueTracked(by, t, mgr.GetScheme())
+		Tracker: tracker.NewWatcher(mgr, syncPeriod, log.WithName("tracker"), func(trackedGVK schema.GroupVersionKind, t tracker.Tracker) handler.EventHandler {
+			return EnqueueTracked(trackedGVK, t)
 		}),
 	}
 }
@@ -96,6 +97,7 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	ctx = StashParentType(ctx, r.Type)
 	ctx = StashCastParentType(ctx, r.Type)
+	ctx = StashParentReconciler(ctx, r)
 	originalParent := r.Type.DeepCopyObject().(client.Object)
 
 	if err := r.Get(ctx, req.NamespacedName, originalParent); err != nil {
@@ -167,6 +169,7 @@ func (r *ParentReconciler) status(obj client.Object) interface{} {
 
 const parentTypeStashKey StashKey = "reconciler-runtime:parentType"
 const castParentTypeStashKey StashKey = "reconciler-runtime:castParentType"
+const parentReconcilerStashKey StashKey = "reconciler-runtime:parentReconciler"
 
 func StashParentType(ctx context.Context, parentType client.Object) context.Context {
 	return context.WithValue(ctx, parentTypeStashKey, parentType)
@@ -174,6 +177,10 @@ func StashParentType(ctx context.Context, parentType client.Object) context.Cont
 
 func StashCastParentType(ctx context.Context, currentType client.Object) context.Context {
 	return context.WithValue(ctx, castParentTypeStashKey, currentType)
+}
+
+func StashParentReconciler(ctx context.Context, parent reconcile.Reconciler) context.Context {
+	return context.WithValue(ctx, parentReconcilerStashKey, parent)
 }
 
 func RetrieveParentType(ctx context.Context) client.Object {
@@ -188,6 +195,14 @@ func RetrieveCastParentType(ctx context.Context) client.Object {
 	value := ctx.Value(castParentTypeStashKey)
 	if currentType, ok := value.(client.Object); ok {
 		return currentType
+	}
+	return nil
+}
+
+func RetrieveParentReconciler(ctx context.Context) reconcile.Reconciler {
+	value := ctx.Value(parentReconcilerStashKey)
+	if parentReconciler, ok := value.(reconcile.Reconciler); ok {
+		return parentReconciler
 	}
 	return nil
 }

@@ -23,6 +23,7 @@ SPDX-License-Identifier: Apache-2.0
 package tracker
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -38,9 +39,9 @@ import (
 type Tracker interface {
 	// Track tells us that "obj" is tracking changes to the
 	// referenced object.
-	Track(ref Key, obj types.NamespacedName) error
+	Track(ctx context.Context, ref Key, obj types.NamespacedName) error
 
-	// Lookup returns actively tracked objects for the reference.
+	// Lookup returns any objects which are tracking the referenced object.
 	Lookup(ref Key) []types.NamespacedName
 }
 
@@ -91,7 +92,7 @@ var _ Tracker = (*impl)(nil)
 type set map[types.NamespacedName]time.Time
 
 // Track implements Tracker.
-func (i *impl) Track(ref Key, obj types.NamespacedName) error {
+func (i *impl) Track(_ context.Context, ref Key, obj types.NamespacedName) error {
 	i.m.Lock()
 	defer i.m.Unlock()
 	if i.mapping == nil {
