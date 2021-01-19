@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/vmware-labs/reconciler-runtime/client"
+	"github.com/vmware-labs/reconciler-runtime/informers"
 	"github.com/vmware-labs/reconciler-runtime/manager"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
@@ -50,15 +51,16 @@ type Config struct {
 
 // NewConfig creates a Config for a specific API type. Typically passed into a
 // reconciler.
-func NewConfig(mgr manager.SuperManager, apiType client.Object, syncPeriod time.Duration) Config {
+func NewConfig(sm manager.SuperManager, apiType client.Object, syncPeriod time.Duration) Config {
 	name := typeName(apiType)
 	log := ctrl.Log.WithName("controllers").WithName(name)
+	informers := informers.New(syncPeriod, sm)
 	return Config{
-		DuckClient: client.NewDuckClient(mgr.GetClient()),
-		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
-		Recorder:   mgr.GetEventRecorderFor(name),
+		DuckClient: client.NewDuckClient(sm.GetClient()),
+		APIReader:  client.NewDuckReader(sm.GetAPIReader()),
+		Recorder:   sm.GetEventRecorderFor(name),
 		Log:        log,
-		Tracker: tracker.NewWatcher(mgr, syncPeriod, log.WithName("tracker"), func(trackedGVK schema.GroupVersionKind, t tracker.Tracker) handler.EventHandler {
+		Tracker: tracker.NewWatcher(informers, syncPeriod, log.WithName("tracker"), func(trackedGVK schema.GroupVersionKind, t tracker.Tracker) handler.EventHandler {
 			return EnqueueTracked(trackedGVK, t)
 		}),
 	}

@@ -12,14 +12,11 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/vmware-labs/reconciler-runtime/manager"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"github.com/vmware-labs/reconciler-runtime/informers"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 type watchFunc func(ctx context.Context, gvk schema.GroupVersionKind) (context.CancelFunc, error)
@@ -64,7 +61,7 @@ func reconcilerToReconcileFunc(reconciler reconcile.Reconciler) reconcile.Func {
 // particular resource as watching a resource for a particular lease duration.
 // This watch must be refreshed periodically (e.g. by a controller resync) or
 // it will expire.
-func NewWatcher(sm manager.SuperManager, lease time.Duration, log logr.Logger, enqueueTracked func(trackedGVK schema.GroupVersionKind, t Tracker) handler.EventHandler) Tracker {
+func NewWatcher(is informers.Informers, lease time.Duration, log logr.Logger, enqueueTracked func(trackedGVK schema.GroupVersionKind, t Tracker) handler.EventHandler) Tracker {
 	tracker := New(lease, log).(GKAwareTracker)
 	return NewWatchingTracker(tracker, func(ctx context.Context, gvk schema.GroupVersionKind) (context.CancelFunc, error) {
 		parentReconciler := RetrieveParentReconciler(ctx)
@@ -72,34 +69,12 @@ func NewWatcher(sm manager.SuperManager, lease time.Duration, log logr.Logger, e
 			return nil, errors.New("parent reconciler not retrieved from context")
 		}
 
-		obj := &unstructured.Unstructured{}
-		obj.SetGroupVersionKind(gvk)
-
-		// Create a new manager with its own cache which can be stopped when watches need to be stopped.
-		/* TODO(@scothis): Can we share these managers/informer caches between trackers?
-		Since a new tracker is created for every reconciler, if different
-		resources watch the same duck types we'll end up with duplicate informer
-		caches. It will make the eviction logic more complex, but as implemented
-		I suspect this approach will consume more memory with duplicate informer
-		caches than will be gained by garbage collecting stale informer caches.
-		*/
-		mgr, err := sm.NewManager()
+		informer, cancel, err := is.GetInformer(gvk)
 		if err != nil {
 			return nil, err
 		}
 
-		// Start the manager.
-		cancel, err := sm.AddCancelable(mgr)
-		if err != nil {
-			return nil, err
-		}
-
-		// Create a controller with a suitable watch. This will start the controller.
-		// The controller will delegate reconciliations to the parent reconciler under which
-		// the current tracking request was issued.
-		if _, err = builder.ControllerManagedBy(mgr).
-			Watches(&source.Kind{Type: obj}, enqueueTracked(gvk, tracker), builder.OnlyMetadata).
-			Build(reconcilerToReconcileFunc(parentReconciler)); err != nil {
+		if err := informer.AddEventHandler(enqueueTracked(gvk, tracker), parentReconciler); err != nil {
 			cancel()
 			return nil, err
 		}
