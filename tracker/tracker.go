@@ -23,7 +23,9 @@ SPDX-License-Identifier: Apache-2.0
 package tracker
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,9 +39,9 @@ import (
 type Tracker interface {
 	// Track tells us that "obj" is tracking changes to the
 	// referenced object.
-	Track(ref Key, obj types.NamespacedName) error
+	Track(ctx context.Context, ref Key, obj types.NamespacedName) error
 
-	// Lookup returns actively tracked objects for the reference.
+	// Lookup returns any objects which are tracking the referenced object.
 	Lookup(ref Key) []types.NamespacedName
 }
 
@@ -90,7 +92,7 @@ var _ Tracker = (*impl)(nil)
 type set map[types.NamespacedName]time.Time
 
 // Track implements Tracker.
-func (i *impl) Track(ref Key, obj types.NamespacedName) error {
+func (i *impl) Track(_ context.Context, ref Key, obj types.NamespacedName) error {
 	i.m.Lock()
 	defer i.m.Unlock()
 	if i.mapping == nil {
@@ -144,4 +146,21 @@ func (i *impl) Lookup(ref Key) []types.NamespacedName {
 	i.log.V(1).Info("found tracked items", "ref", ref.UnversionedString(), "items", items)
 
 	return items
+}
+
+// Tracking returns true if and only if any references with the given group and
+// kind are being tracked.
+func (i *impl) Tracking(groupKind schema.GroupKind) bool {
+	i.m.Lock()
+	defer i.m.Unlock()
+
+	prefix := fmt.Sprintf("%s/", groupKind)
+
+	for ref := range i.mapping {
+		if strings.HasPrefix(ref, prefix) {
+			return true
+		}
+	}
+
+	return false
 }
