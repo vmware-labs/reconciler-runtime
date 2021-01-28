@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/cache"
 	"k8s.io/client-go/tools/record"
@@ -52,14 +53,13 @@ type Config struct {
 func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration) Config {
 	name := typeName(apiType)
 	log := ctrl.Log.WithName("controllers").WithName(name)
-	scheme := mgr.GetScheme()
 	return Config{
 		DuckClient: client.NewDuckClient(mgr.GetClient()),
 		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
 		Recorder:   mgr.GetEventRecorderFor(name),
 		Log:        log,
-		Tracker: tracker.NewWatcher(syncPeriod, log.WithName("tracker"), scheme, func(by client.Object, t tracker.Tracker) handler.EventHandler {
-			return EnqueueTracked(by, t, scheme)
+		Tracker: tracker.NewWatcher(syncPeriod, log.WithName("tracker"), func(gvk schema.GroupVersionKind, t tracker.Tracker) handler.EventHandler {
+			return EnqueueTracked(gvk, t)
 		}),
 	}
 }
