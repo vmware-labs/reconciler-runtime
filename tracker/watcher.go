@@ -11,12 +11,10 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/vmware-labs/reconciler-runtime/client"
 	"github.com/vmware-labs/reconciler-runtime/inject"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -42,16 +40,15 @@ var (
 // particular resource as watching a resource for a particular lease duration.
 // This watch must be refreshed periodically (e.g. by a controller resync) or
 // it will expire.
-func NewWatcher(lease time.Duration, log logr.Logger, scheme *runtime.Scheme, enqueueTracked func(by client.Object, t Tracker) handler.EventHandler) Tracker {
+func NewWatcher(lease time.Duration, log logr.Logger, enqueueTracked func(gvk schema.GroupVersionKind, t Tracker) handler.EventHandler) Tracker {
 	tracker := New(lease, log)
 	return NewWatchingTracker(tracker, func(gvk schema.GroupVersionKind, controller controller.Controller) error {
-		rObj, err := scheme.New(gvk)
-		obj := rObj.(crclient.Object)
-		if err != nil {
-			return err
-		}
+		apiVersion, kind := gvk.ToAPIVersionAndKind()
+		obj := &unstructured.Unstructured{}
+		obj.SetAPIVersion(apiVersion)
+		obj.SetKind(kind)
 
-		return controller.Watch(&source.Kind{Type: obj}, enqueueTracked(obj, tracker))
+		return controller.Watch(&source.Kind{Type: obj}, enqueueTracked(gvk, tracker))
 	})
 }
 
