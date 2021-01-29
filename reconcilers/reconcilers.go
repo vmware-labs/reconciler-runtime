@@ -377,6 +377,18 @@ type ChildReconciler struct {
 	//     func(a1, a2 client.Object) bool
 	SemanticEquals interface{}
 
+	// OurChild is used when there are multiple ChildReconciler for the same ChildType
+	// controlled by the same parent object. The function return true for child resources
+	// managed by this ChildReconciler. Objects returned from the DesiredChild function
+	// should match this function, otherwise they may be orphaned. If not specified, all
+	// children match.
+	//
+	// Expected function signature:
+	//     func(child client.Object) bool
+	//
+	// +optional
+	OurChild interface{}
+
 	// Sanitize is called with an object before logging the value. Any value may
 	// be returned. A meaningful subset of the resource is typically returned,
 	// like the Spec.
@@ -489,6 +501,18 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 		}
 	}
 
+	// validate OurChild function signature:
+	//     nil
+	//     func(child client.Object) interface{}
+	if r.OurChild != nil {
+		fn := reflect.TypeOf(r.OurChild)
+		if fn.NumIn() != 1 || fn.NumOut() != 1 ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
+			fn.Out(0).Kind() != reflect.Bool {
+			return fmt.Errorf("ChildReconciler must implement OurChild: nil | func(%s) bool, found: %s", reflect.TypeOf(r.ChildType), fn)
+		}
+	}
+
 	// validate Sanitize function signature:
 	//     nil
 	//     func(child client.Object) interface{}
@@ -540,8 +564,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	if err := r.List(ctx, children, client.InNamespace(parent.GetNamespace())); err != nil {
 		return nil, err
 	}
-	// TODO do we need to remove resources pending deletion?
-	items := r.controlled(parent, children)
+	items := r.filterChildren(parent, children)
 	if len(items) == 1 {
 		actual = items[0]
 	} else if len(items) > 1 {
@@ -568,6 +591,9 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	if desired != nil {
 		if err := ctrl.SetControllerReference(parent, desired, r.Scheme()); err != nil {
 			return nil, err
+		}
+		if !r.ourChild(parent, desired) {
+			r.Log.Info("object returned from DesiredChild does not match OurChild, this can result in orphaned children", "child", r.sanitize(desired))
 		}
 	}
 
@@ -730,17 +756,36 @@ func (r *ChildReconciler) sanitize(child client.Object) interface{} {
 	return sanitized
 }
 
-func (r *ChildReconciler) controlled(parent client.Object, children client.ObjectList) []client.Object {
+func (r *ChildReconciler) filterChildren(parent client.Object, children client.ObjectList) []client.Object {
 	childrenValue := reflect.ValueOf(children).Elem()
 	itemsValue := childrenValue.FieldByName("Items")
 	items := []client.Object{}
 	for i := 0; i < itemsValue.Len(); i++ {
 		obj := itemsValue.Index(i).Addr().Interface().(client.Object)
-		if metav1.IsControlledBy(obj, parent) {
+		if r.ourChild(parent, obj) {
 			items = append(items, obj)
 		}
 	}
 	return items
+}
+
+func (r *ChildReconciler) ourChild(parent, obj client.Object) bool {
+	if !metav1.IsControlledBy(obj, parent) {
+		return false
+	}
+	// TODO do we need to remove resources pending deletion?
+	if r.OurChild == nil {
+		return true
+	}
+	fn := reflect.ValueOf(r.OurChild)
+	out := fn.Call([]reflect.Value{
+		reflect.ValueOf(obj),
+	})
+	keep := true
+	if out[0].Kind() == reflect.Bool {
+		keep = out[0].Bool()
+	}
+	return keep
 }
 
 // Sequence is a collection of SubReconcilers called in order. If a
