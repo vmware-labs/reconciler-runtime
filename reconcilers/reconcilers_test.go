@@ -498,6 +498,21 @@ func TestChildReconciler(t *testing.T) {
 			{Group: "", Kind: "ConfigMap", Namespace: testNamespace, Name: testName},
 		},
 	}, {
+		Name:   "ignore extraneous children",
+		Parent: resourceReady,
+		GivenObjects: []rtesting.Factory{
+			configMapGiven,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.OurChild = func(child *corev1.ConfigMap) bool {
+					return false
+				}
+				return r
+			},
+		},
+	}, {
 		Name: "delete duplicate children",
 		Parent: resource.
 			AddField("foo", "bar"),

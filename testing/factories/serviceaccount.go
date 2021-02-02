@@ -77,3 +77,9 @@ func (f *serviceAccount) Secrets(secrets ...string) *serviceAccount {
 		}
 	})
 }
+
+func (f *serviceAccount) AutomountServiceAccountToken(b bool) *serviceAccount {
+	return f.mutation(func(sa *corev1.ServiceAccount) {
+		sa.AutomountServiceAccountToken = &b
+	})
+}

@@ -17,6 +17,7 @@ type PodTemplateSpec interface {
 	ObjectMeta(func(ObjectMeta)) PodTemplateSpec
 	ContainerNamed(name string, cb func(*corev1.Container)) PodTemplateSpec
 	Volumes(volumes ...corev1.Volume) PodTemplateSpec
+	ServiceAccountName(name string) PodTemplateSpec
 }
 
 type podTemplateSpecImpl struct {
@@ -88,5 +89,11 @@ func (f *podTemplateSpecImpl) ContainerNamed(name string, cb func(*corev1.Contai
 func (f *podTemplateSpecImpl) Volumes(volumes ...corev1.Volume) PodTemplateSpec {
 	return f.mutate(func(pts *corev1.PodTemplateSpec) {
 		pts.Spec.Volumes = volumes
+	})
+}
+
+func (f *podTemplateSpecImpl) ServiceAccountName(name string) PodTemplateSpec {
+	return f.mutate(func(pts *corev1.PodTemplateSpec) {
+		pts.Spec.ServiceAccountName = name
 	})
 }

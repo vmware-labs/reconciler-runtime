@@ -234,8 +234,8 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 		}
 	}
 
-	compareActions(t, "create", tc.ExpectCreates, clientWrapper.createActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, cmpopts.EquateEmpty())
-	compareActions(t, "update", tc.ExpectUpdates, clientWrapper.updateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, cmpopts.EquateEmpty())
+	compareActions(t, "create", tc.ExpectCreates, clientWrapper.createActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
+	compareActions(t, "update", tc.ExpectUpdates, clientWrapper.updateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
 
 	for i, exp := range tc.ExpectPatches {
 		if i >= len(clientWrapper.patchActions) {
@@ -272,8 +272,8 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 	}
 
 	// Validate the given objects are not mutated by reconciliation
-	if diff := cmp.Diff(originalGivenObjects, givenObjects, safeDeployDiff, cmpopts.EquateEmpty()); diff != "" {
-		t.Errorf("Given objects mutated by test %s (-expected, +actual): %v", tc.Name, diff)
+	if diff := cmp.Diff(originalGivenObjects, givenObjects, safeDeployDiff, ignoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
+		t.Errorf("Given objects mutated by test %q (-expected, +actual): %v", tc.Name, diff)
 	}
 }
 
