@@ -195,8 +195,8 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 		}
 	}
 
-	compareActions(t, "create", tc.ExpectCreates, clientWrapper.createActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, cmpopts.EquateEmpty())
-	compareActions(t, "update", tc.ExpectUpdates, clientWrapper.updateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, cmpopts.EquateEmpty())
+	compareActions(t, "create", tc.ExpectCreates, clientWrapper.createActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
+	compareActions(t, "update", tc.ExpectUpdates, clientWrapper.updateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
 
 	for i, exp := range tc.ExpectDeletes {
 		if i >= len(clientWrapper.deleteActions) {
@@ -218,8 +218,8 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 	compareActions(t, "status update", tc.ExpectStatusUpdates, clientWrapper.statusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, safeDeployDiff, cmpopts.EquateEmpty())
 
 	// Validate the given objects are not mutated by reconciliation
-	if diff := cmp.Diff(originalGivenObjects, givenObjects, safeDeployDiff, cmpopts.EquateEmpty()); diff != "" {
-		t.Errorf("Given objects mutated by test %s (-expected, +actual): %v", tc.Name, diff)
+	if diff := cmp.Diff(originalGivenObjects, givenObjects, safeDeployDiff, ignoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
+		t.Errorf("Given objects mutated by test %q (-expected, +actual): %v", tc.Name, diff)
 	}
 }
 
@@ -258,6 +258,10 @@ var (
 	ignoreTypeMeta = cmp.FilterPath(func(p cmp.Path) bool {
 		path := p.String()
 		return strings.HasSuffix(path, "TypeMeta.APIVersion") || strings.HasSuffix(path, "TypeMeta.Kind")
+	}, cmp.Ignore())
+	ignoreResourceVersion = cmp.FilterPath(func(p cmp.Path) bool {
+		path := p.String()
+		return strings.HasSuffix(path, "ObjectMeta.ResourceVersion")
 	}, cmp.Ignore())
 
 	statusSubresourceOnly = cmp.FilterPath(func(p cmp.Path) bool {
