@@ -629,11 +629,19 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	// create child if it doesn't exist
 	if actual.GetName() == "" {
 		r.Log.Info("creating child", typeName(r.ChildType), r.sanitize(desired))
+		originalDesired := desired.DeepCopyObject().(client.Object)
 		if err := r.Create(ctx, desired); err != nil {
 			r.Log.Error(err, "unable to create child", typeName(r.ChildType), r.sanitize(desired))
 			r.Recorder.Eventf(parent, corev1.EventTypeWarning, "CreationFailed",
 				"Failed to create %s %q: %v", typeName(r.ChildType), desired.GetName(), err)
 			return nil, err
+		}
+		originalDesired.SetGeneration(desired.GetGeneration())
+		patch, err := NewPatch(originalDesired, desired)
+		if err != nil {
+			r.Log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(originalDesired))
+		} else {
+			r.mutationCache.Set(desired.GetUID(), patch, 1*time.Hour)
 		}
 		r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Created",
 			"Created %s %q", typeName(r.ChildType), desired.GetName())
@@ -646,11 +654,12 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	// lookup and apply remote mutations
 	desiredPatched := desired.DeepCopyObject().(client.Object)
 	if patch, ok := r.mutationCache.Get(actual.GetUID()); ok {
+		desiredPatched.SetGeneration(actual.GetGeneration())
 		// the only object added to the cache is *Patch
 		err := patch.(*Patch).Apply(desiredPatched)
-		if err != nil {
+		if err != nil && err != PatchGenerationMismatch {
 			// there's not much we can do, but let the normal update proceed
-			r.Log.Info("unable to patch desired child from mutation cache")
+			r.Log.Error(err, "unable to patch desired child from mutation cache")
 		}
 	}
 
