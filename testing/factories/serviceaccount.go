@@ -80,7 +80,7 @@ func (f *serviceAccount) Secrets(secrets ...string) *serviceAccount {
 
 func (f *serviceAccount) ImagePullSecrets(secrets ...string) *serviceAccount {
 	return f.mutation(func(sa *corev1.ServiceAccount) {
-		sa.Secrets = make([]corev1.ObjectReference, len(secrets))
+		sa.ImagePullSecrets = make([]corev1.LocalObjectReference, len(secrets))
 		for i, secret := range secrets {
 			sa.ImagePullSecrets[i] = corev1.LocalObjectReference{Name: secret}
 		}
