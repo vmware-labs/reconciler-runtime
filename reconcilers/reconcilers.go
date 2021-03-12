@@ -111,7 +111,7 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		defaulter.Default()
 	}
 
-	if r.isStatusSet(originalParent) {
+	if r.hasStatus(originalParent) {
 		if initializeConditions := reflect.ValueOf(parent).Elem().FieldByName("Status").Addr().MethodByName("InitializeConditions"); initializeConditions.Kind() == reflect.Func {
 			// parent.Status.InitializeConditions()
 			initializeConditions.Call([]reflect.Value{})
@@ -119,7 +119,7 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	result, err := r.reconcile(ctx, parent)
 
-	if r.isStatusSet(originalParent) {
+	if r.hasStatus(originalParent) {
 		// check if status has changed before updating
 		if !equality.Semantic.DeepEqual(r.status(parent), r.status(originalParent)) && parent.GetDeletionTimestamp() == nil {
 			// update status
@@ -151,12 +151,12 @@ func (r *ParentReconciler) reconcile(ctx context.Context, parent client.Object) 
 	r.copyGeneration(parent)
 	return result, nil
 }
-func (r *ParentReconciler) isStatusSet(obj client.Object) bool {
+func (r *ParentReconciler) hasStatus(obj client.Object) bool {
 	return reflect.ValueOf(obj).Elem().FieldByName("Status").IsValid()
 }
 
 func (r *ParentReconciler) copyGeneration(obj client.Object) {
-	if r.isStatusSet(obj) {
+	if r.hasStatus(obj) {
 		// obj.Status.ObservedGeneration = obj.Generation
 		objVal := reflect.ValueOf(obj).Elem()
 		generation := objVal.FieldByName("Generation").Int()
