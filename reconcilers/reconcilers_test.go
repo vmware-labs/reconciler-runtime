@@ -29,6 +29,46 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+func TestParentReconcilerWithNoStatus(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource-no-status"
+	testKey := types.NamespacedName{Namespace: testNamespace, Name: testName}
+
+	scheme := runtime.NewScheme()
+	_ = rtesting.AddToScheme(scheme)
+
+	resource := factories.TestResourceNoStatus().
+		NamespaceName(testNamespace, testName).
+		ObjectMeta(func(om factories.ObjectMeta) {
+			om.Created(1)
+			om.AddAnnotation("blah", "blah")
+		})
+
+	rts := rtesting.ReconcilerTestSuite{{
+		Name: "resource exists",
+		Key:  testKey,
+		GivenObjects: []rtesting.Factory{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Config: c,
+					Sync: func(ctx context.Context, parent *rtesting.TestResourceNoStatus) error {
+						return nil
+					},
+				}
+			},
+		},
+	}}
+	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+		return &reconcilers.ParentReconciler{
+			Type:       &rtesting.TestResourceNoStatus{},
+			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
+			Config:     c,
+		}
+	})
+}
 func TestParentReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"

@@ -110,27 +110,30 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// parent.Default()
 		defaulter.Default()
 	}
-	if initializeConditions := reflect.ValueOf(parent).Elem().FieldByName("Status").Addr().MethodByName("InitializeConditions"); initializeConditions.Kind() == reflect.Func {
-		// parent.Status.InitializeConditions()
-		initializeConditions.Call([]reflect.Value{})
-	}
 
+	if r.hasStatus(originalParent) {
+		if initializeConditions := reflect.ValueOf(parent).Elem().FieldByName("Status").Addr().MethodByName("InitializeConditions"); initializeConditions.Kind() == reflect.Func {
+			// parent.Status.InitializeConditions()
+			initializeConditions.Call([]reflect.Value{})
+		}
+	}
 	result, err := r.reconcile(ctx, parent)
 
-	// check if status has changed before updating
-	if !equality.Semantic.DeepEqual(r.status(parent), r.status(originalParent)) && parent.GetDeletionTimestamp() == nil {
-		// update status
-		log.Info("updating status", "diff", cmp.Diff(r.status(originalParent), r.status(parent)))
-		if updateErr := r.Status().Update(ctx, parent); updateErr != nil {
-			log.Error(updateErr, "unable to update status", typeName(r.Type), parent)
-			r.Recorder.Eventf(parent, corev1.EventTypeWarning, "StatusUpdateFailed",
-				"Failed to update status: %v", updateErr)
-			return ctrl.Result{}, updateErr
+	if r.hasStatus(originalParent) {
+		// check if status has changed before updating
+		if !equality.Semantic.DeepEqual(r.status(parent), r.status(originalParent)) && parent.GetDeletionTimestamp() == nil {
+			// update status
+			log.Info("updating status", "diff", cmp.Diff(r.status(originalParent), r.status(parent)))
+			if updateErr := r.Status().Update(ctx, parent); updateErr != nil {
+				log.Error(updateErr, "unable to update status", typeName(r.Type), parent)
+				r.Recorder.Eventf(parent, corev1.EventTypeWarning, "StatusUpdateFailed",
+					"Failed to update status: %v", updateErr)
+				return ctrl.Result{}, updateErr
+			}
+			r.Recorder.Eventf(parent, corev1.EventTypeNormal, "StatusUpdated",
+				"Updated status")
 		}
-		r.Recorder.Eventf(parent, corev1.EventTypeNormal, "StatusUpdated",
-			"Updated status")
 	}
-
 	// return original reconcile result
 	return result, err
 }
@@ -146,15 +149,19 @@ func (r *ParentReconciler) reconcile(ctx context.Context, parent client.Object) 
 	}
 
 	r.copyGeneration(parent)
-
 	return result, nil
+}
+func (r *ParentReconciler) hasStatus(obj client.Object) bool {
+	return reflect.ValueOf(obj).Elem().FieldByName("Status").IsValid()
 }
 
 func (r *ParentReconciler) copyGeneration(obj client.Object) {
-	// obj.Status.ObservedGeneration = obj.Generation
-	objVal := reflect.ValueOf(obj).Elem()
-	generation := objVal.FieldByName("Generation").Int()
-	objVal.FieldByName("Status").FieldByName("ObservedGeneration").SetInt(generation)
+	if r.hasStatus(obj) {
+		// obj.Status.ObservedGeneration = obj.Generation
+		objVal := reflect.ValueOf(obj).Elem()
+		generation := objVal.FieldByName("Generation").Int()
+		objVal.FieldByName("Status").FieldByName("ObservedGeneration").SetInt(generation)
+	}
 }
 
 func (r *ParentReconciler) status(obj client.Object) interface{} {
