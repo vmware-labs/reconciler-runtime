@@ -19,15 +19,18 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/cache"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/vmware-labs/reconciler-runtime/client"
+	"github.com/vmware-labs/reconciler-runtime/inject"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
 
@@ -38,8 +41,8 @@ var (
 // Config holds common resources for controllers. The configuration may be
 // passed to sub-reconcilers.
 type Config struct {
-	client.Client
-	APIReader client.Reader
+	client.DuckClient
+	APIReader client.DuckReader
 	Recorder  record.EventRecorder
 	Log       logr.Logger
 	Tracker   tracker.Tracker
@@ -51,11 +54,13 @@ func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration
 	name := typeName(apiType)
 	log := ctrl.Log.WithName("controllers").WithName(name)
 	return Config{
-		Client:    mgr.GetClient(),
-		APIReader: mgr.GetAPIReader(),
-		Recorder:  mgr.GetEventRecorderFor(name),
-		Log:       log,
-		Tracker:   tracker.New(syncPeriod, log.WithName("tracker")),
+		DuckClient: client.NewDuckClient(mgr.GetClient()),
+		APIReader:  client.NewDuckReader(mgr.GetAPIReader()),
+		Recorder:   mgr.GetEventRecorderFor(name),
+		Log:        log,
+		Tracker: tracker.NewWatcher(syncPeriod, log.WithName("tracker"), func(gvk schema.GroupVersionKind, t tracker.Tracker) handler.EventHandler {
+			return EnqueueTracked(gvk, t)
+		}),
 	}
 }
 
@@ -83,7 +88,15 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return err
 	}
-	return bldr.Complete(r)
+	ctrl, err := bldr.Build(r)
+	if err != nil {
+		return err
+	}
+	_, err = inject.ControllerInto(ctrl, r.Config.Tracker)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -623,11 +636,19 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	// create child if it doesn't exist
 	if actual.GetName() == "" {
 		r.Log.Info("creating child", typeName(r.ChildType), r.sanitize(desired))
+		originalDesired := desired.DeepCopyObject().(client.Object)
 		if err := r.Create(ctx, desired); err != nil {
 			r.Log.Error(err, "unable to create child", typeName(r.ChildType), r.sanitize(desired))
 			r.Recorder.Eventf(parent, corev1.EventTypeWarning, "CreationFailed",
 				"Failed to create %s %q: %v", typeName(r.ChildType), desired.GetName(), err)
 			return nil, err
+		}
+		originalDesired.SetGeneration(desired.GetGeneration())
+		patch, err := NewPatch(originalDesired, desired)
+		if err != nil {
+			r.Log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(originalDesired))
+		} else {
+			r.mutationCache.Set(desired.GetUID(), patch, 1*time.Hour)
 		}
 		r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Created",
 			"Created %s %q", typeName(r.ChildType), desired.GetName())
@@ -640,11 +661,12 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	// lookup and apply remote mutations
 	desiredPatched := desired.DeepCopyObject().(client.Object)
 	if patch, ok := r.mutationCache.Get(actual.GetUID()); ok {
+		desiredPatched.SetGeneration(actual.GetGeneration())
 		// the only object added to the cache is *Patch
 		err := patch.(*Patch).Apply(desiredPatched)
-		if err != nil {
+		if err != nil && err != PatchGenerationMismatch {
 			// there's not much we can do, but let the normal update proceed
-			r.Log.Info("unable to patch desired child from mutation cache")
+			r.Log.Error(err, "unable to patch desired child from mutation cache")
 		}
 	}
 

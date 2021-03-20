@@ -37,7 +37,7 @@ import (
 type Tracker interface {
 	// Track tells us that "obj" is tracking changes to the
 	// referenced object.
-	Track(ref Key, obj types.NamespacedName)
+	Track(ref Key, obj types.NamespacedName) error
 
 	// Lookup returns actively tracked objects for the reference.
 	Lookup(ref Key) []types.NamespacedName
@@ -45,18 +45,18 @@ type Tracker interface {
 
 func NewKey(gvk schema.GroupVersionKind, namespacedName types.NamespacedName) Key {
 	return Key{
-		GroupKind:      gvk.GroupKind(),
-		NamespacedName: namespacedName,
+		GroupVersionKind: gvk,
+		NamespacedName:   namespacedName,
 	}
 }
 
 type Key struct {
-	GroupKind      schema.GroupKind
-	NamespacedName types.NamespacedName
+	schema.GroupVersionKind
+	types.NamespacedName
 }
 
-func (k *Key) String() string {
-	return fmt.Sprintf("%s/%s", k.GroupKind, k.NamespacedName)
+func (k *Key) UnversionedString() string {
+	return fmt.Sprintf("%s/%s", k.GroupKind(), k.NamespacedName)
 }
 
 // New returns an implementation of Tracker that lets a Reconciler
@@ -90,23 +90,24 @@ var _ Tracker = (*impl)(nil)
 type set map[types.NamespacedName]time.Time
 
 // Track implements Tracker.
-func (i *impl) Track(ref Key, obj types.NamespacedName) {
+func (i *impl) Track(ref Key, obj types.NamespacedName) error {
 	i.m.Lock()
 	defer i.m.Unlock()
 	if i.mapping == nil {
 		i.mapping = make(map[string]set)
 	}
 
-	l, ok := i.mapping[ref.String()]
+	l, ok := i.mapping[ref.UnversionedString()]
 	if !ok {
 		l = set{}
 	}
 	// Overwrite the key with a new expiration.
 	l[obj] = time.Now().Add(i.leaseDuration)
 
-	i.mapping[ref.String()] = l
+	i.mapping[ref.UnversionedString()] = l
 
-	i.log.Info("tracking resource", "ref", ref.String(), "obj", obj.String(), "ttl", l[obj].UTC().Format(time.RFC3339))
+	i.log.Info("tracking resource", "ref", ref.UnversionedString(), "obj", obj.String(), "ttl", l[obj].UTC().Format(time.RFC3339))
+	return nil
 }
 
 func isExpired(expiry time.Time) bool {
@@ -121,9 +122,9 @@ func (i *impl) Lookup(ref Key) []types.NamespacedName {
 	// smaller scope and leveraging a per-set lock to guard its access.
 	i.m.Lock()
 	defer i.m.Unlock()
-	s, ok := i.mapping[ref.String()]
+	s, ok := i.mapping[ref.UnversionedString()]
 	if !ok {
-		i.log.V(2).Info("no tracked items found", "ref", ref.String())
+		i.log.V(2).Info("no tracked items found", "ref", ref.UnversionedString())
 		return items
 	}
 
@@ -137,10 +138,10 @@ func (i *impl) Lookup(ref Key) []types.NamespacedName {
 	}
 
 	if len(s) == 0 {
-		delete(i.mapping, ref.String())
+		delete(i.mapping, ref.UnversionedString())
 	}
 
-	i.log.V(1).Info("found tracked items", "ref", ref.String(), "items", items)
+	i.log.V(1).Info("found tracked items", "ref", ref.UnversionedString(), "items", items)
 
 	return items
 }
