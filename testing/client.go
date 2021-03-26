@@ -19,13 +19,14 @@ import (
 )
 
 type clientWrapper struct {
-	client              client.Client
-	createActions       []objectAction
-	updateActions       []objectAction
-	deleteActions       []DeleteAction
-	statusUpdateActions []objectAction
-	genCount            int
-	reactionChain       []Reactor
+	client                  client.Client
+	CreateActions           []objectAction
+	UpdateActions           []objectAction
+	DeleteActions           []DeleteAction
+	DeleteCollectionActions []DeleteCollectionAction
+	StatusUpdateActions     []objectAction
+	genCount                int
+	reactionChain           []Reactor
 }
 
 var _ client.Client = &clientWrapper{}
@@ -37,10 +38,10 @@ func NewFakeClient(scheme *runtime.Scheme, objs ...client.Object) *clientWrapper
 	}
 	client := &clientWrapper{
 		client:              fakeclient.NewFakeClientWithScheme(scheme, o...),
-		createActions:       []objectAction{},
-		updateActions:       []objectAction{},
-		deleteActions:       []DeleteAction{},
-		statusUpdateActions: []objectAction{},
+		CreateActions:       []objectAction{},
+		UpdateActions:       []objectAction{},
+		DeleteActions:       []DeleteAction{},
+		StatusUpdateActions: []objectAction{},
 		genCount:            0,
 		reactionChain:       []Reactor{},
 	}
@@ -162,7 +163,7 @@ func (w *clientWrapper) Create(ctx context.Context, obj client.Object, opts ...c
 	}
 
 	// capture action
-	w.createActions = append(w.createActions, clientgotesting.NewCreateAction(gvr, namespace, obj.DeepCopyObject()))
+	w.CreateActions = append(w.CreateActions, clientgotesting.NewCreateAction(gvr, namespace, obj.DeepCopyObject()))
 
 	// call reactor chain
 	err = w.react(clientgotesting.NewCreateAction(gvr, namespace, obj))
@@ -180,7 +181,7 @@ func (w *clientWrapper) Delete(ctx context.Context, obj client.Object, opts ...c
 	}
 
 	// capture action
-	w.deleteActions = append(w.deleteActions, clientgotesting.NewDeleteAction(gvr, namespace, name))
+	w.DeleteActions = append(w.DeleteActions, clientgotesting.NewDeleteAction(gvr, namespace, name))
 
 	// call reactor chain
 	err = w.react(clientgotesting.NewDeleteAction(gvr, namespace, name))
@@ -198,7 +199,7 @@ func (w *clientWrapper) Update(ctx context.Context, obj client.Object, opts ...c
 	}
 
 	// capture action
-	w.updateActions = append(w.updateActions, clientgotesting.NewUpdateAction(gvr, namespace, obj.DeepCopyObject()))
+	w.UpdateActions = append(w.UpdateActions, clientgotesting.NewUpdateAction(gvr, namespace, obj.DeepCopyObject()))
 
 	// call reactor chain
 	err = w.react(clientgotesting.NewUpdateAction(gvr, namespace, obj))
@@ -208,12 +209,31 @@ func (w *clientWrapper) Update(ctx context.Context, obj client.Object, opts ...c
 
 	return w.client.Update(ctx, obj, opts...)
 }
+
 func (w *clientWrapper) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	panic(fmt.Errorf("Patch() is not implemented"))
 }
 
 func (w *clientWrapper) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
-	panic(fmt.Errorf("DeleteAllOf() is not implemented"))
+	gvr, _, _, err := w.objmeta(obj)
+	if err != nil {
+		return err
+	}
+	deleteopts := &client.DeleteAllOfOptions{}
+	for _, opt := range opts {
+		opt.ApplyToDeleteAllOf(deleteopts)
+	}
+
+	// capture action
+	w.DeleteCollectionActions = append(w.DeleteCollectionActions, clientgotesting.NewDeleteCollectionAction(gvr, deleteopts.Namespace, metav1.ListOptions{}))
+
+	// call reactor chain
+	err = w.react(clientgotesting.NewDeleteCollectionAction(gvr, deleteopts.Namespace, metav1.ListOptions{}))
+	if err != nil {
+		return err
+	}
+
+	return w.client.DeleteAllOf(ctx, obj, opts...)
 }
 
 func (w *clientWrapper) Status() client.StatusWriter {
@@ -237,7 +257,7 @@ func (w *statusWriterWrapper) Update(ctx context.Context, obj client.Object, opt
 	}
 
 	// capture action
-	w.clientWrapper.statusUpdateActions = append(w.clientWrapper.statusUpdateActions, clientgotesting.NewUpdateSubresourceAction(gvr, "status", namespace, obj.DeepCopyObject()))
+	w.clientWrapper.StatusUpdateActions = append(w.clientWrapper.StatusUpdateActions, clientgotesting.NewUpdateSubresourceAction(gvr, "status", namespace, obj.DeepCopyObject()))
 
 	// call reactor chain
 	err = w.clientWrapper.react(clientgotesting.NewUpdateSubresourceAction(gvr, "status", namespace, obj))

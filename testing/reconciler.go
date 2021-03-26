@@ -195,27 +195,27 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 		}
 	}
 
-	compareActions(t, "create", tc.ExpectCreates, clientWrapper.createActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
-	compareActions(t, "update", tc.ExpectUpdates, clientWrapper.updateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
+	compareActions(t, "create", tc.ExpectCreates, clientWrapper.CreateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
+	compareActions(t, "update", tc.ExpectUpdates, clientWrapper.UpdateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
 
 	for i, exp := range tc.ExpectDeletes {
-		if i >= len(clientWrapper.deleteActions) {
+		if i >= len(clientWrapper.DeleteActions) {
 			t.Errorf("Missing delete: %#v", exp)
 			continue
 		}
-		actual := NewDeleteRef(clientWrapper.deleteActions[i])
+		actual := NewDeleteRef(clientWrapper.DeleteActions[i])
 
 		if diff := cmp.Diff(exp, actual); diff != "" {
 			t.Errorf("Unexpected delete (-expected, +actual): %s", diff)
 		}
 	}
-	if actual, expected := len(clientWrapper.deleteActions), len(tc.ExpectDeletes); actual > expected {
-		for _, extra := range clientWrapper.deleteActions[expected:] {
+	if actual, expected := len(clientWrapper.DeleteActions), len(tc.ExpectDeletes); actual > expected {
+		for _, extra := range clientWrapper.DeleteActions[expected:] {
 			t.Errorf("Extra delete: %#v", extra)
 		}
 	}
 
-	compareActions(t, "status update", tc.ExpectStatusUpdates, clientWrapper.statusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, safeDeployDiff, cmpopts.EquateEmpty())
+	compareActions(t, "status update", tc.ExpectStatusUpdates, clientWrapper.StatusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, safeDeployDiff, cmpopts.EquateEmpty())
 
 	// Validate the given objects are not mutated by reconciliation
 	if diff := cmp.Diff(originalGivenObjects, givenObjects, safeDeployDiff, ignoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
