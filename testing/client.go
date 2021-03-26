@@ -30,7 +30,7 @@ type clientWrapper struct {
 
 var _ client.Client = &clientWrapper{}
 
-func newClientWrapperWithScheme(scheme *runtime.Scheme, objs ...client.Object) *clientWrapper {
+func NewFakeClient(scheme *runtime.Scheme, objs ...client.Object) *clientWrapper {
 	o := make([]runtime.Object, len(objs))
 	for i := range objs {
 		o[i] = objs[i]
