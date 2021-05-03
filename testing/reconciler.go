@@ -25,8 +25,8 @@ import (
 type ReconcilerTestCase struct {
 	// Name is a descriptive name for this test suitable as a first argument to t.Run()
 	Name string
-	// Focus is true if and only if only this and any other focussed tests are to be executed.
-	// If one or more tests are focussed, the overall test suite will fail.
+	// Focus is true if and only if only this and any other focused tests are to be executed.
+	// If one or more tests are focused, the overall test suite will fail.
 	Focus bool
 	// Skip is true if and only if this test should be skipped.
 	Skip bool
@@ -195,8 +195,8 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 		}
 	}
 
-	compareActions(t, "create", tc.ExpectCreates, clientWrapper.CreateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
-	compareActions(t, "update", tc.ExpectUpdates, clientWrapper.UpdateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
+	CompareActions(t, "create", tc.ExpectCreates, clientWrapper.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
+	CompareActions(t, "update", tc.ExpectUpdates, clientWrapper.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
 
 	for i, exp := range tc.ExpectDeletes {
 		if i >= len(clientWrapper.DeleteActions) {
@@ -215,10 +215,10 @@ func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory
 		}
 	}
 
-	compareActions(t, "status update", tc.ExpectStatusUpdates, clientWrapper.StatusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, safeDeployDiff, cmpopts.EquateEmpty())
+	CompareActions(t, "status update", tc.ExpectStatusUpdates, clientWrapper.StatusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, SafeDeployDiff, cmpopts.EquateEmpty())
 
 	// Validate the given objects are not mutated by reconciliation
-	if diff := cmp.Diff(originalGivenObjects, givenObjects, safeDeployDiff, ignoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
+	if diff := cmp.Diff(originalGivenObjects, givenObjects, SafeDeployDiff, IgnoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("Given objects mutated by test %q (-expected, +actual): %v", tc.Name, diff)
 	}
 }
@@ -231,7 +231,7 @@ func normalizeResult(result controllerruntime.Result) controllerruntime.Result {
 	return result
 }
 
-func compareActions(t *testing.T, actionName string, expectedActionFactories []Factory, actualActions []objectAction, diffOptions ...cmp.Option) {
+func CompareActions(t *testing.T, actionName string, expectedActionFactories []Factory, actualActions []objectAction, diffOptions ...cmp.Option) {
 	t.Helper()
 	for i, exp := range expectedActionFactories {
 		if i >= len(actualActions) {
@@ -255,11 +255,11 @@ var (
 	IgnoreLastTransitionTime = cmp.FilterPath(func(p cmp.Path) bool {
 		return strings.HasSuffix(p.String(), "LastTransitionTime.Inner.Time")
 	}, cmp.Ignore())
-	ignoreTypeMeta = cmp.FilterPath(func(p cmp.Path) bool {
+	IgnoreTypeMeta = cmp.FilterPath(func(p cmp.Path) bool {
 		path := p.String()
 		return strings.HasSuffix(path, "TypeMeta.APIVersion") || strings.HasSuffix(path, "TypeMeta.Kind")
 	}, cmp.Ignore())
-	ignoreResourceVersion = cmp.FilterPath(func(p cmp.Path) bool {
+	IgnoreResourceVersion = cmp.FilterPath(func(p cmp.Path) bool {
 		path := p.String()
 		return strings.HasSuffix(path, "ObjectMeta.ResourceVersion")
 	}, cmp.Ignore())
@@ -269,22 +269,22 @@ var (
 		return q != "" && !strings.HasPrefix(q, "Status")
 	}, cmp.Ignore())
 
-	safeDeployDiff = cmpopts.IgnoreUnexported(resource.Quantity{})
+	SafeDeployDiff = cmpopts.IgnoreUnexported(resource.Quantity{})
 )
 
 // Test executes the reconciler test suite.
 func (tb ReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
 	t.Helper()
-	focussed := ReconcilerTestSuite{}
+	focused := ReconcilerTestSuite{}
 	for _, test := range tb {
 		if test.Focus {
-			focussed = append(focussed, test)
+			focused = append(focused, test)
 			break
 		}
 	}
 	testsToExecute := tb
-	if len(focussed) > 0 {
-		testsToExecute = focussed
+	if len(focused) > 0 {
+		testsToExecute = focused
 	}
 	for _, test := range testsToExecute {
 		t.Run(test.Name, func(t *testing.T) {
@@ -292,8 +292,8 @@ func (tb ReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory
 			test.Test(t, scheme, factory)
 		})
 	}
-	if len(focussed) > 0 {
-		t.Errorf("%d tests out of %d are still focussed, so the test suite fails", len(focussed), len(tb))
+	if len(focused) > 0 {
+		t.Errorf("%d tests out of %d are still focused, so the test suite fails", len(focused), len(tb))
 	}
 }
 
