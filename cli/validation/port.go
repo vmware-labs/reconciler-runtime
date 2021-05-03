@@ -21,7 +21,7 @@ func Port(port string, field string) FieldErrors {
 func PortNumber(port int32, field string) FieldErrors {
 	errs := FieldErrors{}
 
-	if port < 0 || port > 65535 {
+	if port < 1 || port > 65535 {
 		errs = errs.Also(ErrInvalidValue(fmt.Sprint(port), field))
 	}
 
