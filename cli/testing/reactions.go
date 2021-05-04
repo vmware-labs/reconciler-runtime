@@ -22,8 +22,8 @@ func ValidateCreates(ctx context.Context, action clientgotesting.Action) (handle
 	if !ok {
 		return false, nil, nil
 	}
-	if err := obj.Validate(); err != nil {
-		return true, nil, err.ToAggregate()
+	if err := obj.Validate().ToAggregate(); err != nil {
+		return true, nil, err
 	}
 	return false, nil, nil
 }
@@ -34,8 +34,8 @@ func ValidateUpdates(ctx context.Context, action clientgotesting.Action) (handle
 	if !ok {
 		return false, nil, nil
 	}
-	if err := obj.Validate(); err != nil {
-		return true, nil, err.ToAggregate()
+	if err := obj.Validate().ToAggregate(); err != nil {
+		return true, nil, err
 	}
 	return false, nil, nil
 }
