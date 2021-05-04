@@ -3,7 +3,7 @@ module github.com/vmware-labs/reconciler-runtime
 go 1.14
 
 require (
-	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
+	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d
 	github.com/evanphx/json-patch/v5 v5.3.0
 	github.com/fatih/color v1.7.0
 	github.com/go-logr/logr v0.4.0

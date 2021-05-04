@@ -17,7 +17,7 @@ limitations under the License.
 // repackaged from https://github.com/kubernetes/kubernetes/tree/v1.15.0-beta.0/pkg/printers
 // TODO remove once we can depend directly on k8s 1.15
 
-package printer
+package table
 
 import (
 	"io"

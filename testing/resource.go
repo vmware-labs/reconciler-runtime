@@ -14,11 +14,15 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
-var _ webhook.Defaulter = &TestResource{}
+var (
+	_ webhook.Defaulter = &TestResource{}
+	_ client.Object     = &TestResource{}
+)
 
 // +kubebuilder:object:root=true
 // +genclient

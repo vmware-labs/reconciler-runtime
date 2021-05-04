@@ -74,11 +74,11 @@ func (c *client) Status() crclient.StatusWriter {
 }
 
 func (c *client) Scheme() *runtime.Scheme {
-	return c.client.Scheme()
+	return c.Client().Scheme()
 }
 
 func (c *client) RESTMapper() meta.RESTMapper {
-	return c.client.RESTMapper()
+	return c.Client().RESTMapper()
 }
 
 func NewClient(kubeConfigFile string, scheme *runtime.Scheme) Client {

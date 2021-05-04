@@ -12,4 +12,5 @@ import (
 type ReactionFunc = rtesting.ReactionFunc
 type Factory = rtesting.Factory
 
+var NewFakeClient = rtesting.NewFakeClient
 var Wrapper = rtesting.Wrapper
