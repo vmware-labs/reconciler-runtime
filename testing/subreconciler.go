@@ -87,8 +87,15 @@ type SubReconcilerTestCase struct {
 // SubReconcilerTestSuite represents a list of subreconciler test cases.
 type SubReconcilerTestSuite []SubReconcilerTestCase
 
+// Deprecated: Use Run instead
 // Test executes the test case.
 func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
+	t.Helper()
+	tc.Run(t, scheme, factory)
+}
+
+// Run executes the test case.
+func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
 	t.Helper()
 	if tc.Skip {
 		t.SkipNow()
@@ -258,28 +265,35 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 	}
 }
 
+// Deprecated: Use Run instead
 // Test executes the subreconciler test suite.
-func (tb SubReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
+func (ts SubReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
+	t.Helper()
+	ts.Run(t, scheme, factory)
+}
+
+// Run executes the subreconciler test suite.
+func (ts SubReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
 	t.Helper()
 	focussed := SubReconcilerTestSuite{}
-	for _, test := range tb {
+	for _, test := range ts {
 		if test.Focus {
 			focussed = append(focussed, test)
 			break
 		}
 	}
-	testsToExecute := tb
+	testsToExecute := ts
 	if len(focussed) > 0 {
 		testsToExecute = focussed
 	}
 	for _, test := range testsToExecute {
 		t.Run(test.Name, func(t *testing.T) {
 			t.Helper()
-			test.Test(t, scheme, factory)
+			test.Run(t, scheme, factory)
 		})
 	}
 	if len(focussed) > 0 {
-		t.Errorf("%d tests out of %d are still focussed, so the test suite fails", len(focussed), len(tb))
+		t.Errorf("%d tests out of %d are still focussed, so the test suite fails", len(focussed), len(ts))
 	}
 }
 
