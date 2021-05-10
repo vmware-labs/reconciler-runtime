@@ -19,7 +19,7 @@ import (
 func TestNewClient(t *testing.T) {
 	scheme := runtime.NewScheme()
 	rtesting.AddToScheme(scheme)
-	c := NewClient("testdata/.kube/config", scheme)
+	c := NewClient("testdata/.kube/config", "", scheme)
 	r := &rtesting.TestResource{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "my-namespace",

@@ -29,6 +29,7 @@ type Config struct {
 	Scheme          *runtime.Scheme
 	ViperConfigFile string
 	KubeConfigFile  string
+	CurrentContext  string
 	Exec            func(ctx context.Context, command string, args ...string) *exec.Cmd
 	Stdin           io.Reader
 	Stdout          io.Writer
@@ -60,6 +61,8 @@ func (c *Config) Tail(ctx context.Context, namespace string, selector labels.Sel
 	}
 
 	cmdargs := args
+	cmdargs = append(cmdargs, "--kubeconfig", c.KubeConfigFile)
+	cmdargs = append(cmdargs, "--context", c.CurrentContext)
 	cmdargs = append(cmdargs, "--since", since.String())
 	cmdargs = append(cmdargs, "--template", "[{{color .ContainerColor .ContainerName}}] {{.Message}}")
 	if color.NoColor {
@@ -72,9 +75,6 @@ func (c *Config) Tail(ctx context.Context, namespace string, selector labels.Sel
 	cmd.Stdout = c.Stdout
 	cmd.Stderr = c.Stderr
 	cmd.Env = os.Environ()
-	if c.KubeConfigFile != "" {
-		cmd.Env = append(cmd.Env, fmt.Sprintf("KUBECONFIG=%s", c.KubeConfigFile))
-	}
 
 	c.Efaintf("%s %s\n", cmd.Args[0], strings.Join(args, " "))
 	return cmd.Run()
@@ -176,6 +176,6 @@ func (c *Config) initKubeConfig() {
 
 func (c *Config) init() {
 	if c.Client == nil {
-		c.Client = NewClient(c.KubeConfigFile, c.Scheme)
+		c.Client = NewClient(c.KubeConfigFile, c.CurrentContext, c.Scheme)
 	}
 }
