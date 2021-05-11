@@ -81,9 +81,10 @@ func (c *client) RESTMapper() meta.RESTMapper {
 	return c.Client().RESTMapper()
 }
 
-func NewClient(kubeConfigFile string, scheme *runtime.Scheme) Client {
+func NewClient(kubeConfigFile string, currentContext string, scheme *runtime.Scheme) Client {
 	return &client{
 		kubeConfigFile: kubeConfigFile,
+		currentContext: currentContext,
 		scheme:         scheme,
 	}
 }
@@ -91,6 +92,7 @@ func NewClient(kubeConfigFile string, scheme *runtime.Scheme) Client {
 type client struct {
 	defaultNamespace string
 	kubeConfigFile   string
+	currentContext   string
 	scheme           *runtime.Scheme
 	kubeConfig       clientcmd.ClientConfig
 	restConfig       *rest.Config
@@ -102,7 +104,9 @@ func (c *client) lazyLoadKubeConfig() clientcmd.ClientConfig {
 	if c.kubeConfig == nil {
 		loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 		loadingRules.ExplicitPath = c.kubeConfigFile
-		configOverrides := &clientcmd.ConfigOverrides{}
+		configOverrides := &clientcmd.ConfigOverrides{
+			CurrentContext: c.currentContext,
+		}
 		c.kubeConfig = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
 	}
 	return c.kubeConfig

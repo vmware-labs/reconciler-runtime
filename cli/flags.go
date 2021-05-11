@@ -15,6 +15,7 @@ import (
 const (
 	AllFlagName                  = "--all"
 	AllNamespacesFlagName        = "--all-namespaces"
+	ContextFlagName              = "--context"
 	DryRunFlagName               = "--dry-run"
 	KubeConfigFlagName           = "--kubeconfig"
 	KubeConfigFlagNameDeprecated = "--kube-config"
