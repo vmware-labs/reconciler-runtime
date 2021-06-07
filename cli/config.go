@@ -6,9 +6,11 @@ SPDX-License-Identifier: Apache-2.0
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/fatih/color"
@@ -26,6 +28,7 @@ type Config struct {
 	ViperConfigFile string
 	KubeConfigFile  string
 	CurrentContext  string
+	Exec            func(ctx context.Context, command string, args ...string) *exec.Cmd
 	Stdin           io.Reader
 	Stdout          io.Writer
 	Stderr          io.Writer
@@ -35,6 +38,7 @@ func NewDefaultConfig(scheme *runtime.Scheme) *Config {
 	return &Config{
 		Scheme:      scheme,
 		CompiledEnv: env,
+		Exec:        exec.CommandContext,
 		Stdin:       os.Stdin,
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
