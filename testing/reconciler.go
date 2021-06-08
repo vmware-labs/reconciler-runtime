@@ -86,8 +86,15 @@ type VerifyFunc func(t *testing.T, result controllerruntime.Result, err error)
 // ReconcilerTestSuite represents a list of reconciler test cases.
 type ReconcilerTestSuite []ReconcilerTestCase
 
+// Deprecated: Use Run instead
 // Test executes the test case.
 func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
+	t.Helper()
+	tc.Run(t, scheme, factory)
+}
+
+// Run executes the test case.
+func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
 	t.Helper()
 	if tc.Skip {
 		t.SkipNow()
@@ -272,17 +279,24 @@ var (
 	SafeDeployDiff = cmpopts.IgnoreUnexported(resource.Quantity{})
 )
 
+// Deprecated: Use Run instead
 // Test executes the reconciler test suite.
-func (tb ReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
+func (ts ReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
+	t.Helper()
+	ts.Run(t, scheme, factory)
+}
+
+// Run executes the reconciler test suite.
+func (ts ReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
 	t.Helper()
 	focused := ReconcilerTestSuite{}
-	for _, test := range tb {
+	for _, test := range ts {
 		if test.Focus {
 			focused = append(focused, test)
 			break
 		}
 	}
-	testsToExecute := tb
+	testsToExecute := ts
 	if len(focused) > 0 {
 		testsToExecute = focused
 	}
@@ -293,7 +307,7 @@ func (tb ReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory
 		})
 	}
 	if len(focused) > 0 {
-		t.Errorf("%d tests out of %d are still focused, so the test suite fails", len(focused), len(tb))
+		t.Errorf("%d tests out of %d are still focused, so the test suite fails", len(focused), len(ts))
 	}
 }
 

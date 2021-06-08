@@ -87,8 +87,15 @@ type SubReconcilerTestCase struct {
 // SubReconcilerTestSuite represents a list of subreconciler test cases.
 type SubReconcilerTestSuite []SubReconcilerTestCase
 
+// Deprecated: Use Run instead
 // Test executes the test case.
 func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
+	t.Helper()
+	tc.Run(t, scheme, factory)
+}
+
+// Run executes the test case.
+func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
 	t.Helper()
 	if tc.Skip {
 		t.SkipNow()
@@ -258,8 +265,15 @@ func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, fact
 	}
 }
 
+// Deprecated: Use Run instead
 // Test executes the subreconciler test suite.
 func (ts SubReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
+	t.Helper()
+	ts.Run(t, scheme, factory)
+}
+
+// Run executes the subreconciler test suite.
+func (ts SubReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
 	t.Helper()
 	focused := SubReconcilerTestSuite{}
 	for _, test := range ts {
@@ -275,7 +289,7 @@ func (ts SubReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, fact
 	for _, test := range testsToExecute {
 		t.Run(test.Name, func(t *testing.T) {
 			t.Helper()
-			test.Test(t, scheme, factory)
+			test.Run(t, scheme, factory)
 		})
 	}
 	if len(focused) > 0 {

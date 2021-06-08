@@ -25,7 +25,7 @@ package apis
 // WARNING: Adding fields to this struct will add them to all resources.
 // +k8s:deepcopy-gen=true
 type Status struct {
-	// ObservedGeneration is the 'Generation' of the Service that
+	// ObservedGeneration is the 'Generation' of the resource that
 	// was last processed by the controller.
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
