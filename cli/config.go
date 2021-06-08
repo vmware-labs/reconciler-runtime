@@ -12,14 +12,12 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/fatih/color"
 	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/vmware-labs/reconciler-runtime/cli/printer"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -45,39 +43,6 @@ func NewDefaultConfig(scheme *runtime.Scheme) *Config {
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
 	}
-}
-
-func (c *Config) Tail(ctx context.Context, namespace string, selector labels.Selector, containers []string, since time.Duration) error {
-	if _, err := exec.LookPath("stern"); err != nil {
-		c.Infof("Install stern to view logs: https://github.com/stern/stern")
-		<-ctx.Done()
-	}
-
-	args := []string{}
-	args = append(args, "--namespace", namespace)
-	args = append(args, "--selector", selector.String())
-	for _, c := range containers {
-		args = append(args, "--container", c)
-	}
-
-	cmdargs := args
-	cmdargs = append(cmdargs, "--kubeconfig", c.KubeConfigFile)
-	cmdargs = append(cmdargs, "--context", c.CurrentContext)
-	cmdargs = append(cmdargs, "--since", since.String())
-	cmdargs = append(cmdargs, "--template", "[{{color .ContainerColor .ContainerName}}] {{.Message}}")
-	if color.NoColor {
-		cmdargs = append(cmdargs, "--color", "never")
-	} else {
-		cmdargs = append(cmdargs, "--color", "always")
-	}
-
-	cmd := c.Exec(ctx, "stern", cmdargs...)
-	cmd.Stdout = c.Stdout
-	cmd.Stderr = c.Stderr
-	cmd.Env = os.Environ()
-
-	c.Efaintf("%s %s\n", cmd.Args[0], strings.Join(args, " "))
-	return cmd.Run()
 }
 
 func (c *Config) Printf(format string, a ...interface{}) (n int, err error) {
