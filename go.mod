@@ -1,6 +1,6 @@
 module github.com/vmware-labs/reconciler-runtime
 
-go 1.14
+go 1.16
 
 require (
 	github.com/evanphx/json-patch/v5 v5.5.0
