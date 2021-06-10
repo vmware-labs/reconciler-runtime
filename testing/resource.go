@@ -11,14 +11,20 @@ import (
 	"time"
 
 	"github.com/vmware-labs/reconciler-runtime/apis"
+	"github.com/vmware-labs/reconciler-runtime/validation"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
-var _ webhook.Defaulter = &TestResource{}
+var (
+	_ webhook.Defaulter         = &TestResource{}
+	_ client.Object             = &TestResource{}
+	_ validation.FieldValidator = &TestResource{}
+)
 
 // +kubebuilder:object:root=true
 // +genclient
@@ -36,6 +42,18 @@ func (r *TestResource) Default() {
 		r.Spec.Fields = map[string]string{}
 	}
 	r.Spec.Fields["Defaulter"] = "ran"
+}
+
+func (r *TestResource) Validate() validation.FieldErrors {
+	errs := validation.FieldErrors{}
+
+	if r.Spec.Fields != nil {
+		if _, ok := r.Spec.Fields["invalid"]; ok {
+			errs = errs.Also(validation.ErrInvalidValue(r.Spec.Fields["invalid"], "spec.fields.invalid"))
+		}
+	}
+
+	return errs
 }
 
 // +kubebuilder:object:generate=true

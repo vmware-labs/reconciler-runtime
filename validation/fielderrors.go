@@ -82,7 +82,11 @@ func (e FieldErrors) ErrorList() field.ErrorList {
 }
 
 func (e FieldErrors) ToAggregate() error {
-	return e.ErrorList().ToAggregate()
+	l := e.ErrorList()
+	if len(l) == 0 {
+		return nil
+	}
+	return l.ToAggregate()
 }
 
 type Validatable = interface {
