@@ -9,8 +9,8 @@ import (
 	"fmt"
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type role struct {
