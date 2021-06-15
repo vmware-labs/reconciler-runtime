@@ -3,15 +3,14 @@ Copyright 2019 VMware, Inc.
 SPDX-License-Identifier: Apache-2.0
 */
 
-
 package factories
 
 import (
 	"fmt"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type rolebinding struct {
