@@ -62,6 +62,8 @@ type CommandTestCase struct {
 	// Focus executes this record skipping all unfocused records. The containing test will fail to
 	// prevent accidental check-in.
 	Focus bool
+	// Metadata contains arbitrary value that are stored with the test case
+	Metadata map[string]interface{}
 
 	// environment
 
@@ -143,11 +145,11 @@ type CommandTestCase struct {
 	// Prepare is called before the command is executed. It is intended to prepare that broader
 	// environment before the specific table record is executed. For example, chaning the working
 	// directory or setting mock expectations.
-	Prepare func(t *testing.T, ctx context.Context, config *cli.Config) (context.Context, error)
+	Prepare func(t *testing.T, ctx context.Context, config *cli.Config, tc *CommandTestCase) (context.Context, error)
 	// CleanUp is called after the table record is finished and all defined assertions complete.
 	// It is indended to clean up any state created in the Prepare step or during the test
 	// execution, or to make assertions for mocks.
-	CleanUp func(t *testing.T, ctx context.Context, config *cli.Config) error
+	CleanUp func(t *testing.T, ctx context.Context, config *cli.Config, tc *CommandTestCase) error
 }
 
 // Run each record for the table. Tables with a focused record will run only the focused records
@@ -203,14 +205,14 @@ func (tc CommandTestCase) Run(t *testing.T, scheme *runtime.Scheme, cmdFactory f
 
 		if tc.CleanUp != nil {
 			defer func() {
-				if err := tc.CleanUp(t, ctx, c); err != nil {
+				if err := tc.CleanUp(t, ctx, c, &tc); err != nil {
 					t.Errorf("error during clean up: %s", err)
 				}
 			}()
 		}
 		if tc.Prepare != nil {
 			var err error
-			if ctx, err = tc.Prepare(t, ctx, c); err != nil {
+			if ctx, err = tc.Prepare(t, ctx, c, &tc); err != nil {
 				t.Errorf("error during prepare: %s", err)
 			}
 		}
