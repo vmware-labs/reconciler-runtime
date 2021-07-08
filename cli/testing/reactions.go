@@ -16,6 +16,8 @@ import (
 
 var InduceFailure = rtesting.InduceFailure
 
+type InduceFailureOpts = rtesting.InduceFailureOpts
+
 func ValidateCreates(ctx context.Context, action clientgotesting.Action) (handled bool, ret runtime.Object, err error) {
 	got := action.(clientgotesting.CreateAction).GetObject()
 	obj, ok := got.(validation.FieldValidator)
