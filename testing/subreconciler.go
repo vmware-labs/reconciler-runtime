@@ -22,8 +22,8 @@ import (
 type SubReconcilerTestCase struct {
 	// Name is a descriptive name for this test suitable as a first argument to t.Run()
 	Name string
-	// Focus is true if and only if only this and any other focussed tests are to be executed.
-	// If one or more tests are focussed, the overall test suite will fail.
+	// Focus is true if and only if only this and any other focused tests are to be executed.
+	// If one or more tests are focused, the overall test suite will fail.
 	Focus bool
 	// Skip is true if and only if this test should be skipped.
 	Skip bool
@@ -191,7 +191,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	if tc.ExpectParent != nil {
 		expectedParent = tc.ExpectParent.CreateObject()
 	}
-	if diff := cmp.Diff(expectedParent, parent, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, cmpopts.EquateEmpty()); diff != "" {
+	if diff := cmp.Diff(expectedParent, parent, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("Unexpected parent mutations(-expected, +actual): %s", diff)
 	}
 
@@ -200,7 +200,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 			expected = f.CreateObject()
 		}
 		actual := reconcilers.RetrieveValue(ctx, key)
-		if diff := cmp.Diff(expected, actual, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
+		if diff := cmp.Diff(expected, actual, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, cmpopts.EquateEmpty()); diff != "" {
 			t.Errorf("Unexpected stash value %q (-expected, +actual): %s", key, diff)
 		}
 	}
@@ -239,8 +239,8 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		}
 	}
 
-	compareActions(t, "create", tc.ExpectCreates, clientWrapper.CreateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
-	compareActions(t, "update", tc.ExpectUpdates, clientWrapper.UpdateActions, IgnoreLastTransitionTime, safeDeployDiff, ignoreTypeMeta, ignoreResourceVersion, cmpopts.EquateEmpty())
+	CompareActions(t, "create", tc.ExpectCreates, clientWrapper.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
+	CompareActions(t, "update", tc.ExpectUpdates, clientWrapper.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
 
 	for i, exp := range tc.ExpectDeletes {
 		if i >= len(clientWrapper.DeleteActions) {
@@ -260,7 +260,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	}
 
 	// Validate the given objects are not mutated by reconciliation
-	if diff := cmp.Diff(originalGivenObjects, givenObjects, safeDeployDiff, ignoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
+	if diff := cmp.Diff(originalGivenObjects, givenObjects, SafeDeployDiff, IgnoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("Given objects mutated by test %q (-expected, +actual): %v", tc.Name, diff)
 	}
 }
@@ -275,16 +275,16 @@ func (ts SubReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, fact
 // Run executes the subreconciler test suite.
 func (ts SubReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
 	t.Helper()
-	focussed := SubReconcilerTestSuite{}
+	focused := SubReconcilerTestSuite{}
 	for _, test := range ts {
 		if test.Focus {
-			focussed = append(focussed, test)
+			focused = append(focused, test)
 			break
 		}
 	}
 	testsToExecute := ts
-	if len(focussed) > 0 {
-		testsToExecute = focussed
+	if len(focused) > 0 {
+		testsToExecute = focused
 	}
 	for _, test := range testsToExecute {
 		t.Run(test.Name, func(t *testing.T) {
@@ -292,8 +292,8 @@ func (ts SubReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, facto
 			test.Run(t, scheme, factory)
 		})
 	}
-	if len(focussed) > 0 {
-		t.Errorf("%d tests out of %d are still focussed, so the test suite fails", len(focussed), len(ts))
+	if len(focused) > 0 {
+		t.Errorf("%d tests out of %d are still focused, so the test suite fails", len(focused), len(ts))
 	}
 }
 
