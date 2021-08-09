@@ -18,6 +18,7 @@ type PodTemplateSpec interface {
 	ContainerNamed(name string, cb func(*corev1.Container)) PodTemplateSpec
 	Volumes(volumes ...corev1.Volume) PodTemplateSpec
 	ServiceAccountName(name string) PodTemplateSpec
+	ImagePullSecrets(imagePullSecrets ...corev1.LocalObjectReference) PodTemplateSpec
 }
 
 type podTemplateSpecImpl struct {
@@ -95,5 +96,11 @@ func (f *podTemplateSpecImpl) Volumes(volumes ...corev1.Volume) PodTemplateSpec 
 func (f *podTemplateSpecImpl) ServiceAccountName(name string) PodTemplateSpec {
 	return f.mutate(func(pts *corev1.PodTemplateSpec) {
 		pts.Spec.ServiceAccountName = name
+	})
+}
+
+func(f *podTemplateSpecImpl) ImagePullSecrets(imagePullSecrets ...corev1.LocalObjectReference) PodTemplateSpec {
+	return f.mutate(func(pts *corev1.PodTemplateSpec) {
+		pts.Spec.ImagePullSecrets = imagePullSecrets
 	})
 }
