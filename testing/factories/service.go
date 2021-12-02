@@ -10,14 +10,13 @@ import (
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type service struct {
+	NullObjectMeta
 	target *corev1.Service
 }
 
@@ -42,40 +41,13 @@ func Service(seed ...*corev1.Service) *service {
 	}
 }
 
-func (f *service) DeepCopyObject() runtime.Object                  { return f.CreateObject() }
-func (f *service) GetObjectKind() schema.ObjectKind                { return f.CreateObject().GetObjectKind() }
-func (f *service) GetNamespace() string                            { panic("not implemeneted") }
-func (f *service) SetNamespace(namespace string)                   { panic("not implemeneted") }
-func (f *service) GetName() string                                 { panic("not implemeneted") }
-func (f *service) SetName(name string)                             { panic("not implemeneted") }
-func (f *service) GetGenerateName() string                         { panic("not implemeneted") }
-func (f *service) SetGenerateName(name string)                     { panic("not implemeneted") }
-func (f *service) GetUID() types.UID                               { panic("not implemeneted") }
-func (f *service) SetUID(uid types.UID)                            { panic("not implemeneted") }
-func (f *service) GetResourceVersion() string                      { panic("not implemeneted") }
-func (f *service) SetResourceVersion(version string)               { panic("not implemeneted") }
-func (f *service) GetGeneration() int64                            { panic("not implemeneted") }
-func (f *service) SetGeneration(generation int64)                  { panic("not implemeneted") }
-func (f *service) GetSelfLink() string                             { panic("not implemeneted") }
-func (f *service) SetSelfLink(selfLink string)                     { panic("not implemeneted") }
-func (f *service) GetCreationTimestamp() metav1.Time               { panic("not implemeneted") }
-func (f *service) SetCreationTimestamp(timestamp metav1.Time)      { panic("not implemeneted") }
-func (f *service) GetDeletionTimestamp() *metav1.Time              { panic("not implemeneted") }
-func (f *service) SetDeletionTimestamp(timestamp *metav1.Time)     { panic("not implemeneted") }
-func (f *service) GetDeletionGracePeriodSeconds() *int64           { panic("not implemeneted") }
-func (f *service) SetDeletionGracePeriodSeconds(*int64)            { panic("not implemeneted") }
-func (f *service) GetLabels() map[string]string                    { panic("not implemeneted") }
-func (f *service) SetLabels(labels map[string]string)              { panic("not implemeneted") }
-func (f *service) GetAnnotations() map[string]string               { panic("not implemeneted") }
-func (f *service) SetAnnotations(annotations map[string]string)    { panic("not implemeneted") }
-func (f *service) GetFinalizers() []string                         { panic("not implemeneted") }
-func (f *service) SetFinalizers(finalizers []string)               { panic("not implemeneted") }
-func (f *service) GetOwnerReferences() []metav1.OwnerReference     { panic("not implemeneted") }
-func (f *service) SetOwnerReferences([]metav1.OwnerReference)      { panic("not implemeneted") }
-func (f *service) GetClusterName() string                          { panic("not implemeneted") }
-func (f *service) SetClusterName(clusterName string)               { panic("not implemeneted") }
-func (f *service) GetManagedFields() []metav1.ManagedFieldsEntry   { panic("not implemeneted") }
-func (f *service) SetManagedFields(mf []metav1.ManagedFieldsEntry) { panic("not implemeneted") }
+func (f *service) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *service) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
+}
 
 func (f *service) deepCopy() *service {
 	return Service(f.target.DeepCopy())

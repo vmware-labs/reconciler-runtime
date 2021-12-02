@@ -5,14 +5,13 @@ import (
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type clusterRoleBinding struct {
+	NullObjectMeta
 	target *rbacv1.ClusterRoleBinding
 }
 
@@ -37,45 +36,12 @@ func ClusterRoleBinding(seed ...*rbacv1.ClusterRoleBinding) *clusterRoleBinding 
 	}
 }
 
-func (f *clusterRoleBinding) DeepCopyObject() runtime.Object { return f.CreateObject() }
+func (f *clusterRoleBinding) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
 func (f *clusterRoleBinding) GetObjectKind() schema.ObjectKind {
 	return f.CreateObject().GetObjectKind()
-}
-func (f *clusterRoleBinding) GetNamespace() string                         { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetNamespace(namespace string)                { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetName() string                              { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetName(name string)                          { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetGenerateName() string                      { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetGenerateName(name string)                  { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetUID() types.UID                            { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetUID(uid types.UID)                         { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetResourceVersion() string                   { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetResourceVersion(version string)            { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetGeneration() int64                         { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetGeneration(generation int64)               { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetSelfLink() string                          { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetSelfLink(selfLink string)                  { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetCreationTimestamp() metav1.Time            { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetCreationTimestamp(timestamp metav1.Time)   { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetDeletionTimestamp() *metav1.Time           { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetDeletionTimestamp(timestamp *metav1.Time)  { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetDeletionGracePeriodSeconds() *int64        { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetDeletionGracePeriodSeconds(*int64)         { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetLabels() map[string]string                 { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetLabels(labels map[string]string)           { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetAnnotations() map[string]string            { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetAnnotations(annotations map[string]string) { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetFinalizers() []string                      { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetFinalizers(finalizers []string)            { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetOwnerReferences() []metav1.OwnerReference  { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetOwnerReferences([]metav1.OwnerReference)   { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetClusterName() string                       { panic("not implemeneted") }
-func (f *clusterRoleBinding) SetClusterName(clusterName string)            { panic("not implemeneted") }
-func (f *clusterRoleBinding) GetManagedFields() []metav1.ManagedFieldsEntry {
-	panic("not implemeneted")
-}
-func (f *clusterRoleBinding) SetManagedFields(mf []metav1.ManagedFieldsEntry) {
-	panic("not implemeneted")
 }
 
 func (f *clusterRoleBinding) deepCopy() *clusterRoleBinding {

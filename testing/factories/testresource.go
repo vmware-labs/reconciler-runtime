@@ -10,14 +10,13 @@ import (
 
 	"github.com/vmware-labs/reconciler-runtime/apis"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type testresource struct {
+	NullObjectMeta
 	target *rtesting.TestResource
 }
 
@@ -42,40 +41,13 @@ func TestResource(seed ...*rtesting.TestResource) *testresource {
 	}
 }
 
-func (f *testresource) DeepCopyObject() runtime.Object                  { return f.CreateObject() }
-func (f *testresource) GetObjectKind() schema.ObjectKind                { return f.CreateObject().GetObjectKind() }
-func (f *testresource) GetNamespace() string                            { panic("not implemeneted") }
-func (f *testresource) SetNamespace(namespace string)                   { panic("not implemeneted") }
-func (f *testresource) GetName() string                                 { panic("not implemeneted") }
-func (f *testresource) SetName(name string)                             { panic("not implemeneted") }
-func (f *testresource) GetGenerateName() string                         { panic("not implemeneted") }
-func (f *testresource) SetGenerateName(name string)                     { panic("not implemeneted") }
-func (f *testresource) GetUID() types.UID                               { panic("not implemeneted") }
-func (f *testresource) SetUID(uid types.UID)                            { panic("not implemeneted") }
-func (f *testresource) GetResourceVersion() string                      { panic("not implemeneted") }
-func (f *testresource) SetResourceVersion(version string)               { panic("not implemeneted") }
-func (f *testresource) GetGeneration() int64                            { panic("not implemeneted") }
-func (f *testresource) SetGeneration(generation int64)                  { panic("not implemeneted") }
-func (f *testresource) GetSelfLink() string                             { panic("not implemeneted") }
-func (f *testresource) SetSelfLink(selfLink string)                     { panic("not implemeneted") }
-func (f *testresource) GetCreationTimestamp() metav1.Time               { panic("not implemeneted") }
-func (f *testresource) SetCreationTimestamp(timestamp metav1.Time)      { panic("not implemeneted") }
-func (f *testresource) GetDeletionTimestamp() *metav1.Time              { panic("not implemeneted") }
-func (f *testresource) SetDeletionTimestamp(timestamp *metav1.Time)     { panic("not implemeneted") }
-func (f *testresource) GetDeletionGracePeriodSeconds() *int64           { panic("not implemeneted") }
-func (f *testresource) SetDeletionGracePeriodSeconds(*int64)            { panic("not implemeneted") }
-func (f *testresource) GetLabels() map[string]string                    { panic("not implemeneted") }
-func (f *testresource) SetLabels(labels map[string]string)              { panic("not implemeneted") }
-func (f *testresource) GetAnnotations() map[string]string               { panic("not implemeneted") }
-func (f *testresource) SetAnnotations(annotations map[string]string)    { panic("not implemeneted") }
-func (f *testresource) GetFinalizers() []string                         { panic("not implemeneted") }
-func (f *testresource) SetFinalizers(finalizers []string)               { panic("not implemeneted") }
-func (f *testresource) GetOwnerReferences() []metav1.OwnerReference     { panic("not implemeneted") }
-func (f *testresource) SetOwnerReferences([]metav1.OwnerReference)      { panic("not implemeneted") }
-func (f *testresource) GetClusterName() string                          { panic("not implemeneted") }
-func (f *testresource) SetClusterName(clusterName string)               { panic("not implemeneted") }
-func (f *testresource) GetManagedFields() []metav1.ManagedFieldsEntry   { panic("not implemeneted") }
-func (f *testresource) SetManagedFields(mf []metav1.ManagedFieldsEntry) { panic("not implemeneted") }
+func (f *testresource) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *testresource) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
+}
 
 func (f *testresource) deepCopy() *testresource {
 	return TestResource(f.target.DeepCopy())
