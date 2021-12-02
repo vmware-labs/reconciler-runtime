@@ -12,17 +12,22 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type deployment struct {
+	NullObjectMeta
 	target *appsv1.Deployment
 }
 
 var (
 	_ rtesting.Factory = (*deployment)(nil)
+	_ client.Object    = (*deployment)(nil)
 )
 
+// Deprecated
 func Deployment(seed ...*appsv1.Deployment) *deployment {
 	var target *appsv1.Deployment
 	switch len(seed) {
@@ -36,6 +41,14 @@ func Deployment(seed ...*appsv1.Deployment) *deployment {
 	return &deployment{
 		target: target,
 	}
+}
+
+func (f *deployment) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *deployment) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
 }
 
 func (f *deployment) deepCopy() *deployment {

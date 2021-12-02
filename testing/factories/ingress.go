@@ -11,18 +11,23 @@ import (
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1beta1 "k8s.io/api/networking/v1beta1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ingress struct {
+	NullObjectMeta
 	target *networkingv1beta1.Ingress
 }
 
 var (
 	_ rtesting.Factory = (*ingress)(nil)
+	_ client.Object    = (*ingress)(nil)
 )
 
+// Deprecated
 func Ingress(seed ...*networkingv1beta1.Ingress) *ingress {
 	var target *networkingv1beta1.Ingress
 	switch len(seed) {
@@ -36,6 +41,14 @@ func Ingress(seed ...*networkingv1beta1.Ingress) *ingress {
 	return &ingress{
 		target: target,
 	}
+}
+
+func (f *ingress) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *ingress) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
 }
 
 func (f *ingress) deepCopy() *ingress {

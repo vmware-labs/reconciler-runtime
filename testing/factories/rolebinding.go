@@ -10,17 +10,22 @@ import (
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type rolebinding struct {
+	NullObjectMeta
 	target *rbacv1.RoleBinding
 }
 
 var (
 	_ rtesting.Factory = (*rolebinding)(nil)
+	_ client.Object    = (*rolebinding)(nil)
 )
 
+// Deprecated
 func RoleBinding(seed ...*rbacv1.RoleBinding) *rolebinding {
 	var target *rbacv1.RoleBinding
 	switch len(seed) {
@@ -34,6 +39,14 @@ func RoleBinding(seed ...*rbacv1.RoleBinding) *rolebinding {
 	return &rolebinding{
 		target: target,
 	}
+}
+
+func (f *rolebinding) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *rolebinding) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
 }
 
 func (f *rolebinding) deepCopy() *rolebinding {

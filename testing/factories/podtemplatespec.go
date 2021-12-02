@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// Deprecated
 type PodTemplateSpec interface {
 	Create() corev1.PodTemplateSpec
 
@@ -25,6 +26,7 @@ type podTemplateSpecImpl struct {
 	target *corev1.PodTemplateSpec
 }
 
+// Deprecated
 func PodTemplateSpecFactory(seed corev1.PodTemplateSpec) PodTemplateSpec {
 	return &podTemplateSpecImpl{
 		target: &seed,
@@ -99,7 +101,7 @@ func (f *podTemplateSpecImpl) ServiceAccountName(name string) PodTemplateSpec {
 	})
 }
 
-func(f *podTemplateSpecImpl) ImagePullSecrets(imagePullSecrets ...corev1.LocalObjectReference) PodTemplateSpec {
+func (f *podTemplateSpecImpl) ImagePullSecrets(imagePullSecrets ...corev1.LocalObjectReference) PodTemplateSpec {
 	return f.mutate(func(pts *corev1.PodTemplateSpec) {
 		pts.Spec.ImagePullSecrets = imagePullSecrets
 	})

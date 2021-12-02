@@ -41,9 +41,9 @@ type ReconcilerTestCase struct {
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
 	// GivenObjects build the kubernetes objects which are present at the onset of reconciliation
-	GivenObjects []Factory
+	GivenObjects []client.Object
 	// APIGivenObjects contains objects that are only available via an API reader instead of the normal cache
-	APIGivenObjects []Factory
+	APIGivenObjects []client.Object
 
 	// side effects
 
@@ -52,13 +52,13 @@ type ReconcilerTestCase struct {
 	// ExpectEvents holds the ordered list of events recorded during the reconciliation
 	ExpectEvents []Event
 	// ExpectCreates builds the ordered list of objects expected to be created during reconciliation
-	ExpectCreates []Factory
+	ExpectCreates []client.Object
 	// ExpectUpdates builds the ordered list of objects expected to be updated during reconciliation
-	ExpectUpdates []Factory
+	ExpectUpdates []client.Object
 	// ExpectDeletes holds the ordered list of objects expected to be deleted during reconciliation
 	ExpectDeletes []DeleteRef
 	// ExpectStatusUpdates builds the ordered list of objects whose status is updated during reconciliation
-	ExpectStatusUpdates []Factory
+	ExpectStatusUpdates []client.Object
 
 	// outputs
 
@@ -106,13 +106,13 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	givenObjects := make([]client.Object, 0, len(tc.GivenObjects))
 	originalGivenObjects := make([]client.Object, 0, len(tc.GivenObjects))
 	for _, f := range tc.GivenObjects {
-		object := f.CreateObject()
+		object := f.DeepCopyObject().(client.Object)
 		givenObjects = append(givenObjects, object.DeepCopyObject().(client.Object))
 		originalGivenObjects = append(originalGivenObjects, object.DeepCopyObject().(client.Object))
 	}
 	apiGivenObjects := make([]client.Object, 0, len(tc.APIGivenObjects))
 	for _, f := range tc.APIGivenObjects {
-		apiGivenObjects = append(apiGivenObjects, f.CreateObject())
+		apiGivenObjects = append(apiGivenObjects, f.DeepCopyObject().(client.Object))
 	}
 
 	clientWrapper := NewFakeClient(scheme, givenObjects...)
@@ -238,16 +238,16 @@ func normalizeResult(result controllerruntime.Result) controllerruntime.Result {
 	return result
 }
 
-func CompareActions(t *testing.T, actionName string, expectedActionFactories []Factory, actualActions []objectAction, diffOptions ...cmp.Option) {
+func CompareActions(t *testing.T, actionName string, expectedActionFactories []client.Object, actualActions []objectAction, diffOptions ...cmp.Option) {
 	t.Helper()
 	for i, exp := range expectedActionFactories {
 		if i >= len(actualActions) {
-			t.Errorf("Missing %s: %#v", actionName, exp.CreateObject())
+			t.Errorf("Missing %s: %#v", actionName, exp.DeepCopyObject())
 			continue
 		}
 		actual := actualActions[i].GetObject()
 
-		if diff := cmp.Diff(exp.CreateObject(), actual, diffOptions...); diff != "" {
+		if diff := cmp.Diff(exp.DeepCopyObject(), actual, diffOptions...); diff != "" {
 			t.Errorf("Unexpected %s (-expected, +actual): %s", actionName, diff)
 		}
 	}

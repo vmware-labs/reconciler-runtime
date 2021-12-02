@@ -10,17 +10,22 @@ import (
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type configMap struct {
+	NullObjectMeta
 	target *corev1.ConfigMap
 }
 
 var (
 	_ rtesting.Factory = (*configMap)(nil)
+	_ client.Object    = (*configMap)(nil)
 )
 
+// Deprecated
 func ConfigMap(seed ...*corev1.ConfigMap) *configMap {
 	var target *corev1.ConfigMap
 	switch len(seed) {
@@ -34,6 +39,14 @@ func ConfigMap(seed ...*corev1.ConfigMap) *configMap {
 	return &configMap{
 		target: target,
 	}
+}
+
+func (f *configMap) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *configMap) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
 }
 
 func (f *configMap) deepCopy() *configMap {

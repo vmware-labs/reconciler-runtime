@@ -5,17 +5,22 @@ import (
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type clusterRoleBinding struct {
+	NullObjectMeta
 	target *rbacv1.ClusterRoleBinding
 }
 
 var (
 	_ rtesting.Factory = (*clusterRoleBinding)(nil)
+	_ client.Object    = (*clusterRoleBinding)(nil)
 )
 
+// Deprecated
 func ClusterRoleBinding(seed ...*rbacv1.ClusterRoleBinding) *clusterRoleBinding {
 	var target *rbacv1.ClusterRoleBinding
 	switch len(seed) {
@@ -29,6 +34,14 @@ func ClusterRoleBinding(seed ...*rbacv1.ClusterRoleBinding) *clusterRoleBinding 
 	return &clusterRoleBinding{
 		target: target,
 	}
+}
+
+func (f *clusterRoleBinding) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *clusterRoleBinding) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
 }
 
 func (f *clusterRoleBinding) deepCopy() *clusterRoleBinding {

@@ -10,17 +10,22 @@ import (
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type secret struct {
+	NullObjectMeta
 	target *corev1.Secret
 }
 
 var (
 	_ rtesting.Factory = (*secret)(nil)
+	_ client.Object    = (*secret)(nil)
 )
 
+// Deprecated
 func Secret(seed ...*corev1.Secret) *secret {
 	var target *corev1.Secret
 	switch len(seed) {
@@ -34,6 +39,14 @@ func Secret(seed ...*corev1.Secret) *secret {
 	return &secret{
 		target: target,
 	}
+}
+
+func (f *secret) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *secret) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
 }
 
 func (f *secret) deepCopy() *secret {

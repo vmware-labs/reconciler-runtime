@@ -10,17 +10,22 @@ import (
 
 	"github.com/vmware-labs/reconciler-runtime/apis"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type testresource struct {
+	NullObjectMeta
 	target *rtesting.TestResource
 }
 
 var (
 	_ rtesting.Factory = (*testresource)(nil)
+	_ client.Object    = (*testresource)(nil)
 )
 
+// Deprecated
 func TestResource(seed ...*rtesting.TestResource) *testresource {
 	var target *rtesting.TestResource
 	switch len(seed) {
@@ -34,6 +39,14 @@ func TestResource(seed ...*rtesting.TestResource) *testresource {
 	return &testresource{
 		target: target,
 	}
+}
+
+func (f *testresource) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *testresource) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
 }
 
 func (f *testresource) deepCopy() *testresource {

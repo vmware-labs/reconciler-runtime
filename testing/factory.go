@@ -9,12 +9,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Factory creates Kubernetes objects
+// Deprecated Factory creates Kubernetes objects
 type Factory interface {
 	// CreateObject creates a new Kubernetes object
 	CreateObject() client.Object
 }
 
+// Deprecated
 func Wrapper(obj client.Object) Factory {
 	return &wrapper{obj: obj}
 }

@@ -10,17 +10,22 @@ import (
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type role struct {
+	NullObjectMeta
 	target *rbacv1.Role
 }
 
 var (
 	_ rtesting.Factory = (*role)(nil)
+	_ client.Object    = (*role)(nil)
 )
 
+// Deprecated
 func Role(seed ...*rbacv1.Role) *role {
 	var target *rbacv1.Role
 	switch len(seed) {
@@ -34,6 +39,14 @@ func Role(seed ...*rbacv1.Role) *role {
 	return &role{
 		target: target,
 	}
+}
+
+func (f *role) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *role) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
 }
 
 func (f *role) deepCopy() *role {

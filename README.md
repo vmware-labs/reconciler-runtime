@@ -267,35 +267,7 @@ While `controller-runtime` focuses its testing efforts on integration testing by
 
 The table test pattern is used to declare each test case in a test suite with the resource being reconciled, other given resources in the cluster, and all expected resource mutations (create, update, delete).
 
-The tests make extensive use of factories to reduce boilerplate code and to highlight the delta unique to each test. Factories are themselves an immutable fluent API that returns a new factory with mutated the underlying state. This makes it safe to take an existing factory and extend it for use in a new test case without impacting the original use. Changes to the original object before the extension will cascade to you.
-
-```go
-deploymentCreate := factories.Deployment().
-	ObjectMeta(func(om factories.ObjectMeta) {
-		om.Namespace(testNamespace)
-		om.GenerateName("%s-gateway-", testName)
-		om.AddLabel(streamingv1alpha1.GatewayLabelKey, testName)
-		om.ControlledBy(gateway, scheme)
-	}).
-	AddSelectorLabel(streamingv1alpha1.GatewayLabelKey, testName).
-	PodTemplateSpec(func(pts factories.PodTemplateSpec) {
-		pts.ContainerNamed("test", func(c *corev1.Container) {
-			c.Image = "scratch"
-		})
-	})
-deploymentGiven := deploymentCreate.
-	ObjectMeta(func(om factories.ObjectMeta) {
-		om.Name("%s-gateway-000", testName)
-		om.Created(1)
-	})
-```
-[full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/gateway_reconciler_test.go#L84-L101)
-
-Factories are provided for some common k8s types like Deployment, ConfigMap, ServiceAccount (contributions for more are welcome). Resources that don't have a factory can be wrapped.
-
-```go
-factory := rtesting.Wrapper(fullyDefinedResource)
-```
+The tests make extensive use of given and mutated resources. It is recommended to use a library like [dies](https://dies.dev) to reduce boilerplate code and to highlight the delta unique to each test.
 
 There are two test suites, one for reconcilers and an optimized harness for testing sub reconcilers.
 
@@ -305,9 +277,9 @@ There are two test suites, one for reconcilers and an optimized harness for test
 
 ```go
 testKey := ... // NamesapcedName of the resource to reconcile
-inMemoryGatewayImagesConfigMap := ... // factory holding ConfigMap with images
-inMemoryGateway := ... // factory holding resource to reconcile
-gatewayCreate := ... // factory holding gateway expected to be created
+inMemoryGatewayImagesConfigMap := ... // ConfigMap with images
+inMemoryGateway := ... // resource to reconcile
+gatewayCreate := ... // expected to be created
 scheme := ... // scheme registered with all resource types the reconcile interacts with
 
 rts := rtesting.ReconcilerTestSuite{{
@@ -315,11 +287,11 @@ rts := rtesting.ReconcilerTestSuite{{
 }, {
 	Name: "creates gateway",
 	Key:  testKey,
-	GivenObjects: []rtesting.Factory{
-		inMemoryGatewayMinimal,
+	GivenObjects: []client.Object{
+		inMemoryGateway,
 		inMemoryGatewayImagesConfigMap,
 	},
-	ExpectTracks: []rtesting.TrackRequest{
+	ExpectTracks: []client.Object{
 		rtesting.NewTrackRequest(inMemoryGatewayImagesConfigMap, inMemoryGateway, scheme),
 	},
 	ExpectEvents: []rtesting.Event{
@@ -328,19 +300,22 @@ rts := rtesting.ReconcilerTestSuite{{
 		rtesting.NewEvent(inMemoryGateway, scheme, corev1.EventTypeNormal, "StatusUpdated",
 			`Updated status`),
 	},
-	ExpectCreates: []rtesting.Factory{
+	ExpectCreates: []client.Object{
 		gatewayCreate,
 	},
-	ExpectStatusUpdates: []rtesting.Factory{
+	ExpectStatusUpdates: []client.Object{
+		// example using an https://dies.dev style die to mutate the resource
 		inMemoryGateway.
-			StatusObservedGeneration(1).
-			StatusConditions(
-				// the condition will be unknown since the child resource
-				// was just created and hasn't been reconciled by its
-				// controller yet
-				inMemoryGatewayConditionGatewayReady.Unknown(),
-				inMemoryGatewayConditionReady.Unknown(),
-			),
+			StatusDie(func(d *diestreamingv1alpha1.InMemoryGatewayStatusDie) {
+				d.ObservedGeneration(1)
+				d.ConditionsDie(
+					// the condition will be unknown since the child resource
+					// was just created and hasn't been reconciled by its
+					// controller yet
+					inMemoryGatewayConditionGatewayReady.Unknown(),
+					inMemoryGatewayConditionReady.Unknown(),
+				)
+			}),
 	},
 }, {
 	...
@@ -380,7 +355,7 @@ rts := rtesting.SubReconcilerTestSuite{
 	{
 		Name:   "stash processor image",
 		Parent: processor,
-		GivenObjects: []rtesting.Factory{
+		GivenObjects: []client.Object{
 			processorImagesConfigMap,
 		},
 		ExpectTracks: []rtesting.TrackRequest{

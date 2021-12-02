@@ -33,21 +33,21 @@ type SubReconcilerTestCase struct {
 	// inputs
 
 	// Parent is the initial object passed to the sub reconciler
-	Parent Factory
+	Parent client.Object
 	// GivenStashedValues adds these items to the stash passed into the reconciler. Factories are resolved to their object.
 	GivenStashedValues map[reconcilers.StashKey]interface{}
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
 	// GivenObjects build the kubernetes objects which are present at the onset of reconciliation
-	GivenObjects []Factory
+	GivenObjects []client.Object
 	// APIGivenObjects contains objects that are only available via an API reader instead of the normal cache
-	APIGivenObjects []Factory
+	APIGivenObjects []client.Object
 
 	// side effects
 
 	// ExpectParent is the expected parent as mutated after the sub reconciler, or nil if no modification
-	ExpectParent Factory
+	ExpectParent client.Object
 	// ExpectStashedValues ensures each value is stashed. Values in the stash that are not expected are ignored. Factories are resolved to their object.
 	ExpectStashedValues map[reconcilers.StashKey]interface{}
 	// ExpectTracks holds the ordered list of Track calls expected during reconciliation
@@ -55,9 +55,9 @@ type SubReconcilerTestCase struct {
 	// ExpectEvents holds the ordered list of events recorded during the reconciliation
 	ExpectEvents []Event
 	// ExpectCreates builds the ordered list of objects expected to be created during reconciliation
-	ExpectCreates []Factory
+	ExpectCreates []client.Object
 	// ExpectUpdates builds the ordered list of objects expected to be updated during reconciliation
-	ExpectUpdates []Factory
+	ExpectUpdates []client.Object
 	// ExpectDeletes holds the ordered list of objects expected to be deleted during reconciliation
 	ExpectDeletes []DeleteRef
 
@@ -105,13 +105,13 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	givenObjects := make([]client.Object, 0, len(tc.GivenObjects))
 	originalGivenObjects := make([]client.Object, 0, len(tc.GivenObjects))
 	for _, f := range tc.GivenObjects {
-		object := f.CreateObject()
+		object := f.DeepCopyObject()
 		givenObjects = append(givenObjects, object.DeepCopyObject().(client.Object))
 		originalGivenObjects = append(originalGivenObjects, object.DeepCopyObject().(client.Object))
 	}
 	apiGivenObjects := make([]client.Object, 0, len(tc.APIGivenObjects))
 	for _, f := range tc.APIGivenObjects {
-		apiGivenObjects = append(apiGivenObjects, f.CreateObject())
+		apiGivenObjects = append(apiGivenObjects, f.DeepCopyObject().(client.Object))
 	}
 
 	clientWrapper := NewFakeClient(scheme, givenObjects...)
@@ -156,7 +156,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		reconcilers.StashValue(ctx, k, v)
 	}
 
-	parent := tc.Parent.CreateObject()
+	parent := tc.Parent.DeepCopyObject().(client.Object)
 	ctx = reconcilers.StashParentType(ctx, parent.DeepCopyObject().(client.Object))
 	ctx = reconcilers.StashCastParentType(ctx, parent.DeepCopyObject().(client.Object))
 
@@ -187,9 +187,9 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		tc.Verify(t, result, err)
 	}
 
-	expectedParent := tc.Parent.CreateObject()
+	expectedParent := tc.Parent.DeepCopyObject().(client.Object)
 	if tc.ExpectParent != nil {
-		expectedParent = tc.ExpectParent.CreateObject()
+		expectedParent = tc.ExpectParent.DeepCopyObject().(client.Object)
 	}
 	if diff := cmp.Diff(expectedParent, parent, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("Unexpected parent mutations(-expected, +actual): %s", diff)

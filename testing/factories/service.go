@@ -10,17 +10,22 @@ import (
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type service struct {
+	NullObjectMeta
 	target *corev1.Service
 }
 
 var (
 	_ rtesting.Factory = (*service)(nil)
+	_ client.Object    = (*service)(nil)
 )
 
+// Deprecated
 func Service(seed ...*corev1.Service) *service {
 	var target *corev1.Service
 	switch len(seed) {
@@ -34,6 +39,14 @@ func Service(seed ...*corev1.Service) *service {
 	return &service{
 		target: target,
 	}
+}
+
+func (f *service) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *service) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
 }
 
 func (f *service) deepCopy() *service {

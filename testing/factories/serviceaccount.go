@@ -10,17 +10,22 @@ import (
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type serviceAccount struct {
+	NullObjectMeta
 	target *corev1.ServiceAccount
 }
 
 var (
 	_ rtesting.Factory = (*serviceAccount)(nil)
+	_ client.Object    = (*serviceAccount)(nil)
 )
 
+// Deprecated
 func ServiceAccount(seed ...*corev1.ServiceAccount) *serviceAccount {
 	var target *corev1.ServiceAccount
 	switch len(seed) {
@@ -34,6 +39,14 @@ func ServiceAccount(seed ...*corev1.ServiceAccount) *serviceAccount {
 	return &serviceAccount{
 		target: target,
 	}
+}
+
+func (f *serviceAccount) DeepCopyObject() runtime.Object {
+	return f.CreateObject()
+}
+
+func (f *serviceAccount) GetObjectKind() schema.ObjectKind {
+	return f.CreateObject().GetObjectKind()
 }
 
 func (f *serviceAccount) deepCopy() *serviceAccount {

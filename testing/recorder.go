@@ -23,8 +23,8 @@ type Event struct {
 	Message string
 }
 
-func NewEvent(factory Factory, scheme *runtime.Scheme, eventtype, reason, messageFormat string, a ...interface{}) Event {
-	obj := factory.CreateObject()
+func NewEvent(factory client.Object, scheme *runtime.Scheme, eventtype, reason, messageFormat string, a ...interface{}) Event {
+	obj := factory.DeepCopyObject().(client.Object)
 	gvks, _, _ := scheme.ObjectKinds(obj)
 	apiVersion, kind := gvks[0].ToAPIVersionAndKind()
 
