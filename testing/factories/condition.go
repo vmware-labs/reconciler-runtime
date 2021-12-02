@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// Deprecated
 type ConditionFactory interface {
 	Create() apis.Condition
 
@@ -29,6 +30,7 @@ type conditionImpl struct {
 	target *apis.Condition
 }
 
+// Deprecated
 func Condition(seed ...apis.Condition) ConditionFactory {
 	var target *apis.Condition
 	switch len(seed) {

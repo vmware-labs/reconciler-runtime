@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // TrackRequest records that one object is tracking another object.
@@ -38,8 +39,8 @@ func CreateTrackRequest(trackedObjGroup, trackedObjKind, trackedObjNamespace, tr
 	}
 }
 
-func NewTrackRequest(t, b Factory, scheme *runtime.Scheme) TrackRequest {
-	tracked, by := t.CreateObject(), b.CreateObject()
+func NewTrackRequest(t, b client.Object, scheme *runtime.Scheme) TrackRequest {
+	tracked, by := t.DeepCopyObject().(client.Object), b.DeepCopyObject().(client.Object)
 	gvks, _, err := scheme.ObjectKinds(tracked)
 	if err != nil {
 		panic(err)

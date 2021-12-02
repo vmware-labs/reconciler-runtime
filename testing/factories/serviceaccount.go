@@ -10,6 +10,10 @@ import (
 
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -19,8 +23,10 @@ type serviceAccount struct {
 
 var (
 	_ rtesting.Factory = (*serviceAccount)(nil)
+	_ client.Object    = (*serviceAccount)(nil)
 )
 
+// Deprecated
 func ServiceAccount(seed ...*corev1.ServiceAccount) *serviceAccount {
 	var target *corev1.ServiceAccount
 	switch len(seed) {
@@ -35,6 +41,41 @@ func ServiceAccount(seed ...*corev1.ServiceAccount) *serviceAccount {
 		target: target,
 	}
 }
+
+func (f *serviceAccount) DeepCopyObject() runtime.Object                  { return f.CreateObject() }
+func (f *serviceAccount) GetObjectKind() schema.ObjectKind                { return f.CreateObject().GetObjectKind() }
+func (f *serviceAccount) GetNamespace() string                            { panic("not implemeneted") }
+func (f *serviceAccount) SetNamespace(namespace string)                   { panic("not implemeneted") }
+func (f *serviceAccount) GetName() string                                 { panic("not implemeneted") }
+func (f *serviceAccount) SetName(name string)                             { panic("not implemeneted") }
+func (f *serviceAccount) GetGenerateName() string                         { panic("not implemeneted") }
+func (f *serviceAccount) SetGenerateName(name string)                     { panic("not implemeneted") }
+func (f *serviceAccount) GetUID() types.UID                               { panic("not implemeneted") }
+func (f *serviceAccount) SetUID(uid types.UID)                            { panic("not implemeneted") }
+func (f *serviceAccount) GetResourceVersion() string                      { panic("not implemeneted") }
+func (f *serviceAccount) SetResourceVersion(version string)               { panic("not implemeneted") }
+func (f *serviceAccount) GetGeneration() int64                            { panic("not implemeneted") }
+func (f *serviceAccount) SetGeneration(generation int64)                  { panic("not implemeneted") }
+func (f *serviceAccount) GetSelfLink() string                             { panic("not implemeneted") }
+func (f *serviceAccount) SetSelfLink(selfLink string)                     { panic("not implemeneted") }
+func (f *serviceAccount) GetCreationTimestamp() metav1.Time               { panic("not implemeneted") }
+func (f *serviceAccount) SetCreationTimestamp(timestamp metav1.Time)      { panic("not implemeneted") }
+func (f *serviceAccount) GetDeletionTimestamp() *metav1.Time              { panic("not implemeneted") }
+func (f *serviceAccount) SetDeletionTimestamp(timestamp *metav1.Time)     { panic("not implemeneted") }
+func (f *serviceAccount) GetDeletionGracePeriodSeconds() *int64           { panic("not implemeneted") }
+func (f *serviceAccount) SetDeletionGracePeriodSeconds(*int64)            { panic("not implemeneted") }
+func (f *serviceAccount) GetLabels() map[string]string                    { panic("not implemeneted") }
+func (f *serviceAccount) SetLabels(labels map[string]string)              { panic("not implemeneted") }
+func (f *serviceAccount) GetAnnotations() map[string]string               { panic("not implemeneted") }
+func (f *serviceAccount) SetAnnotations(annotations map[string]string)    { panic("not implemeneted") }
+func (f *serviceAccount) GetFinalizers() []string                         { panic("not implemeneted") }
+func (f *serviceAccount) SetFinalizers(finalizers []string)               { panic("not implemeneted") }
+func (f *serviceAccount) GetOwnerReferences() []metav1.OwnerReference     { panic("not implemeneted") }
+func (f *serviceAccount) SetOwnerReferences([]metav1.OwnerReference)      { panic("not implemeneted") }
+func (f *serviceAccount) GetClusterName() string                          { panic("not implemeneted") }
+func (f *serviceAccount) SetClusterName(clusterName string)               { panic("not implemeneted") }
+func (f *serviceAccount) GetManagedFields() []metav1.ManagedFieldsEntry   { panic("not implemeneted") }
+func (f *serviceAccount) SetManagedFields(mf []metav1.ManagedFieldsEntry) { panic("not implemeneted") }
 
 func (f *serviceAccount) deepCopy() *serviceAccount {
 	return ServiceAccount(f.target.DeepCopy())
