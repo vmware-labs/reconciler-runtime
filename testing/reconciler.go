@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	logrtesting "github.com/go-logr/logr/testing"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
@@ -127,7 +128,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		events: []Event{},
 		scheme: scheme,
 	}
-	log := TestLogger(t)
+	log := logrtesting.NewTestLogger(t)
 	c := factory(t, tc, reconcilers.Config{
 		Client:    clientWrapper,
 		APIReader: apiReader,
