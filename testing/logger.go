@@ -6,13 +6,14 @@ SPDX-License-Identifier: Apache-2.0
 package testing
 
 import (
-	gotesting "testing"
+	"testing"
 
 	"github.com/go-logr/logr"
 	logrtesting "github.com/go-logr/logr/testing"
 )
 
-// TestLogger gets a logger to use in unit and end to end tests
-func TestLogger(t *gotesting.T) logr.Logger {
-	return logrtesting.TestLogger{T: t}
+// Deprecated TestLogger gets a logger to use in unit and end to end tests.
+// Use https://pkg.go.dev/github.com/go-logr/logr@v1.2.2/testing#NewTestLogger instead
+func TestLogger(t *testing.T) logr.Logger {
+	return logrtesting.NewTestLogger(t)
 }

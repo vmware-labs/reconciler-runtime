@@ -8,7 +8,7 @@ package testing
 import (
 	"time"
 
-	"github.com/go-logr/logr/testing"
+	"github.com/go-logr/logr"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -54,7 +54,7 @@ func NewTrackRequest(t, b client.Object, scheme *runtime.Scheme) TrackRequest {
 const maxDuration = time.Duration(1<<63 - 1)
 
 func createTracker() *mockTracker {
-	return &mockTracker{Tracker: tracker.New(maxDuration, testing.NullLogger{}), reqs: []TrackRequest{}}
+	return &mockTracker{Tracker: tracker.New(maxDuration, logr.Discard()), reqs: []TrackRequest{}}
 }
 
 type mockTracker struct {
