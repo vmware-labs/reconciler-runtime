@@ -110,31 +110,31 @@ type TestResourceStatus struct {
 }
 
 func (rs *TestResourceStatus) InitializeConditions() {
-	condSet := apis.NewLivingConditionSet()
+	condSet := apis.NewLivingConditionSetWithHappyReason("Happy")
 	condSet.Manage(rs).InitializeConditions()
 }
 
 func (rs *TestResourceStatus) MarkReady() {
-	rs.SetConditions(apis.Conditions{
+	rs.SetConditions([]metav1.Condition{
 		{
 			Type:               apis.ConditionReady,
-			Status:             corev1.ConditionTrue,
-			LastTransitionTime: apis.VolatileTime{Inner: metav1.NewTime(time.Now())},
+			Status:             metav1.ConditionTrue,
+			LastTransitionTime: metav1.NewTime(time.Now()),
 		},
 	})
 }
 
 func (rs *TestResourceStatus) MarkNotReady(reason, message string, messageA ...interface{}) {
-	rs.SetConditions(apis.Conditions{
+	rs.SetConditions([]metav1.Condition{
 		{
 			Type:               apis.ConditionReady,
-			Status:             corev1.ConditionFalse,
+			Status:             metav1.ConditionFalse,
 			Reason:             reason,
 			Message:            fmt.Sprintf(message, messageA...),
-			LastTransitionTime: apis.VolatileTime{Inner: metav1.NewTime(time.Now())},
+			LastTransitionTime: metav1.NewTime(time.Now()),
 		},
 	})
-	condSet := apis.NewLivingConditionSet()
+	condSet := apis.NewLivingConditionSetWithHappyReason("Happy")
 	condSet.Manage(rs).MarkFalse(apis.ConditionReady, reason, message, messageA...)
 }
 

@@ -20,6 +20,8 @@ SPDX-License-Identifier: Apache-2.0
 
 package apis
 
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 // Status shows how we expect folks to embed Conditions in
 // their Status field.
 // WARNING: Adding fields to this struct will add them to all resources.
@@ -34,23 +36,23 @@ type Status struct {
 	// +optional
 	// +patchMergeKey=type
 	// +patchStrategy=merge
-	Conditions Conditions `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
 }
 
 var _ ConditionsAccessor = (*Status)(nil)
 
 // GetConditions implements ConditionsAccessor
-func (s *Status) GetConditions() Conditions {
-	return Conditions(s.Conditions)
+func (s *Status) GetConditions() []metav1.Condition {
+	return s.Conditions
 }
 
 // SetConditions implements ConditionsAccessor
-func (s *Status) SetConditions(c Conditions) {
-	s.Conditions = Conditions(c)
+func (s *Status) SetConditions(c []metav1.Condition) {
+	s.Conditions = c
 }
 
 // GetCondition fetches the condition of the specified type.
-func (s *Status) GetCondition(t ConditionType) *Condition {
+func (s *Status) GetCondition(t string) *metav1.Condition {
 	for _, cond := range s.Conditions {
 		if cond.Type == t {
 			return &cond

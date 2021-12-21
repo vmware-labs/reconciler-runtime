@@ -261,7 +261,7 @@ func CompareActions(t *testing.T, actionName string, expectedActionFactories []c
 
 var (
 	IgnoreLastTransitionTime = cmp.FilterPath(func(p cmp.Path) bool {
-		return strings.HasSuffix(p.String(), "LastTransitionTime.Inner.Time")
+		return strings.HasSuffix(p.String(), "LastTransitionTime")
 	}, cmp.Ignore())
 	IgnoreTypeMeta = cmp.FilterPath(func(p cmp.Path) bool {
 		path := p.String()

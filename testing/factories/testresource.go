@@ -8,8 +8,8 @@ package factories
 import (
 	"fmt"
 
-	"github.com/vmware-labs/reconciler-runtime/apis"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -108,7 +108,7 @@ func (f *testresource) ErrorOn(marshal, unmarshal bool) *testresource {
 
 func (f *testresource) StatusConditions(conditions ...ConditionFactory) *testresource {
 	return f.mutation(func(testresource *rtesting.TestResource) {
-		c := make([]apis.Condition, len(conditions))
+		c := make([]metav1.Condition, len(conditions))
 		for i, cg := range conditions {
 			c[i] = cg.Create()
 		}
