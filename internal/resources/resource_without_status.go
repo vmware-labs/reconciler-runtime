@@ -3,7 +3,7 @@ Copyright 2021 VMware, Inc.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package testing
+package resources
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

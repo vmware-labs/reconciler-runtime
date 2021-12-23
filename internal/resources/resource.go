@@ -3,7 +3,7 @@ Copyright 2019 VMware, Inc.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package testing
+package resources
 
 import (
 	"encoding/json"

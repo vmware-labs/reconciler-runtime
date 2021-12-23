@@ -8,7 +8,9 @@ package factories
 import (
 	"fmt"
 
+	"github.com/vmware-labs/reconciler-runtime/internal/resources"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
+	"github.com/vmware-labs/reconciler-runtime/testing/factories"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -16,8 +18,8 @@ import (
 )
 
 type testresource struct {
-	NullObjectMeta
-	target *rtesting.TestResource
+	factories.NullObjectMeta
+	target *resources.TestResource
 }
 
 var (
@@ -26,11 +28,11 @@ var (
 )
 
 // Deprecated
-func TestResource(seed ...*rtesting.TestResource) *testresource {
-	var target *rtesting.TestResource
+func TestResource(seed ...*resources.TestResource) *testresource {
+	var target *resources.TestResource
 	switch len(seed) {
 	case 0:
-		target = &rtesting.TestResource{}
+		target = &resources.TestResource{}
 	case 1:
 		target = seed[0]
 	default:
@@ -53,7 +55,7 @@ func (f *testresource) deepCopy() *testresource {
 	return TestResource(f.target.DeepCopy())
 }
 
-func (f *testresource) Create() *rtesting.TestResource {
+func (f *testresource) Create() *resources.TestResource {
 	return f.deepCopy().target
 }
 
@@ -61,29 +63,29 @@ func (f *testresource) CreateObject() client.Object {
 	return f.Create()
 }
 
-func (f *testresource) mutation(m func(*rtesting.TestResource)) *testresource {
+func (f *testresource) mutation(m func(*resources.TestResource)) *testresource {
 	f = f.deepCopy()
 	m(f.target)
 	return f
 }
 
 func (f *testresource) NamespaceName(namespace, name string) *testresource {
-	return f.mutation(func(sa *rtesting.TestResource) {
+	return f.mutation(func(sa *resources.TestResource) {
 		sa.ObjectMeta.Namespace = namespace
 		sa.ObjectMeta.Name = name
 	})
 }
 
-func (f *testresource) ObjectMeta(nf func(ObjectMeta)) *testresource {
-	return f.mutation(func(sa *rtesting.TestResource) {
-		omf := ObjectMetaFactory(sa.ObjectMeta)
+func (f *testresource) ObjectMeta(nf func(factories.ObjectMeta)) *testresource {
+	return f.mutation(func(sa *resources.TestResource) {
+		omf := factories.ObjectMetaFactory(sa.ObjectMeta)
 		nf(omf)
 		sa.ObjectMeta = omf.Create()
 	})
 }
 
 func (f *testresource) AddField(key string, value string) *testresource {
-	return f.mutation(func(r *rtesting.TestResource) {
+	return f.mutation(func(r *resources.TestResource) {
 		if r.Spec.Fields == nil {
 			r.Spec.Fields = map[string]string{}
 		}
@@ -91,23 +93,23 @@ func (f *testresource) AddField(key string, value string) *testresource {
 	})
 }
 
-func (f *testresource) PodTemplateSpec(nf func(PodTemplateSpec)) *testresource {
-	return f.mutation(func(r *rtesting.TestResource) {
-		ptsf := PodTemplateSpecFactory(r.Spec.Template)
+func (f *testresource) PodTemplateSpec(nf func(factories.PodTemplateSpec)) *testresource {
+	return f.mutation(func(r *resources.TestResource) {
+		ptsf := factories.PodTemplateSpecFactory(r.Spec.Template)
 		nf(ptsf)
 		r.Spec.Template = ptsf.Create()
 	})
 }
 
 func (f *testresource) ErrorOn(marshal, unmarshal bool) *testresource {
-	return f.mutation(func(r *rtesting.TestResource) {
+	return f.mutation(func(r *resources.TestResource) {
 		r.Spec.ErrOnMarshal = marshal
 		r.Spec.ErrOnUnmarshal = unmarshal
 	})
 }
 
-func (f *testresource) StatusConditions(conditions ...ConditionFactory) *testresource {
-	return f.mutation(func(testresource *rtesting.TestResource) {
+func (f *testresource) StatusConditions(conditions ...factories.ConditionFactory) *testresource {
+	return f.mutation(func(testresource *resources.TestResource) {
 		c := make([]metav1.Condition, len(conditions))
 		for i, cg := range conditions {
 			c[i] = cg.Create()
@@ -117,7 +119,7 @@ func (f *testresource) StatusConditions(conditions ...ConditionFactory) *testres
 }
 
 func (f *testresource) AddStatusField(key string, value string) *testresource {
-	return f.mutation(func(r *rtesting.TestResource) {
+	return f.mutation(func(r *resources.TestResource) {
 		if r.Status.Fields == nil {
 			r.Status.Fields = map[string]string{}
 		}
