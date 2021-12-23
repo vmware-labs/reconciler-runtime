@@ -8,15 +8,17 @@ package factories
 import (
 	"fmt"
 
+	"github.com/vmware-labs/reconciler-runtime/internal/resources"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
+	"github.com/vmware-labs/reconciler-runtime/testing/factories"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type testresourcenostatus struct {
-	NullObjectMeta
-	target *rtesting.TestResourceNoStatus
+	factories.NullObjectMeta
+	target *resources.TestResourceNoStatus
 }
 
 var (
@@ -25,11 +27,11 @@ var (
 )
 
 // Deprecated
-func TestResourceNoStatus(seed ...*rtesting.TestResourceNoStatus) *testresourcenostatus {
-	var target *rtesting.TestResourceNoStatus
+func TestResourceNoStatus(seed ...*resources.TestResourceNoStatus) *testresourcenostatus {
+	var target *resources.TestResourceNoStatus
 	switch len(seed) {
 	case 0:
-		target = &rtesting.TestResourceNoStatus{}
+		target = &resources.TestResourceNoStatus{}
 	case 1:
 		target = seed[0]
 	default:
@@ -52,7 +54,7 @@ func (f *testresourcenostatus) deepCopy() *testresourcenostatus {
 	return TestResourceNoStatus(f.target.DeepCopy())
 }
 
-func (f *testresourcenostatus) Create() *rtesting.TestResourceNoStatus {
+func (f *testresourcenostatus) Create() *resources.TestResourceNoStatus {
 	return f.deepCopy().target
 }
 
@@ -60,22 +62,22 @@ func (f *testresourcenostatus) CreateObject() client.Object {
 	return f.Create()
 }
 
-func (f *testresourcenostatus) mutation(m func(*rtesting.TestResourceNoStatus)) *testresourcenostatus {
+func (f *testresourcenostatus) mutation(m func(*resources.TestResourceNoStatus)) *testresourcenostatus {
 	f = f.deepCopy()
 	m(f.target)
 	return f
 }
 
 func (f *testresourcenostatus) NamespaceName(namespace, name string) *testresourcenostatus {
-	return f.mutation(func(sa *rtesting.TestResourceNoStatus) {
+	return f.mutation(func(sa *resources.TestResourceNoStatus) {
 		sa.ObjectMeta.Namespace = namespace
 		sa.ObjectMeta.Name = name
 	})
 }
 
-func (f *testresourcenostatus) ObjectMeta(nf func(ObjectMeta)) *testresourcenostatus {
-	return f.mutation(func(sa *rtesting.TestResourceNoStatus) {
-		omf := ObjectMetaFactory(sa.ObjectMeta)
+func (f *testresourcenostatus) ObjectMeta(nf func(factories.ObjectMeta)) *testresourcenostatus {
+	return f.mutation(func(sa *resources.TestResourceNoStatus) {
+		omf := factories.ObjectMetaFactory(sa.ObjectMeta)
 		nf(omf)
 		sa.ObjectMeta = omf.Create()
 	})
