@@ -27,26 +27,35 @@ import (
 
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+const (
+	// ConditionReady specifies that the resource is ready.
+	// For long-running resources.
+	ConditionReady = "Ready"
+	// ConditionSucceeded specifies that the resource has finished.
+	// For resource which run to completion.
+	ConditionSucceeded = "Succeeded"
 )
 
 // Conditions is the interface for a Resource that implements the getter and
 // setter for accessing a Condition collection.
-// +k8s:deepcopy-gen=false
 type ConditionsAccessor interface {
-	GetConditions() Conditions
-	SetConditions(Conditions)
+	GetConditions() []metav1.Condition
+	SetConditions([]metav1.Condition)
 }
+
+type NowFunc func() time.Time
 
 // ConditionSet is an abstract collection of the possible ConditionType values
 // that a particular resource might expose.  It also holds the "happy condition"
 // for that resource, which we define to be one of Ready or Succeeded depending
 // on whether it is a Living or Batch process respectively.
-// +k8s:deepcopy-gen=false
 type ConditionSet struct {
-	happy      ConditionType
-	dependents []ConditionType
+	happyType   string
+	happyReason string
+	dependents  []string
 }
 
 // ConditionManager allows a resource to operate on its Conditions using higher
@@ -58,25 +67,25 @@ type ConditionManager interface {
 
 	// GetCondition finds and returns the Condition that matches the ConditionType
 	// previously set on Conditions.
-	GetCondition(t ConditionType) *Condition
+	GetCondition(t string) *metav1.Condition
 
 	// SetCondition sets or updates the Condition on Conditions for Condition.Type.
 	// If there is an update, Conditions are stored back sorted.
-	SetCondition(new Condition)
+	SetCondition(new metav1.Condition)
 
 	// ClearCondition removes the non terminal condition that matches the ConditionType
-	ClearCondition(t ConditionType) error
+	ClearCondition(t string) error
 
 	// MarkTrue sets the status of t to true, and then marks the happy condition to
 	// true if all dependents are true.
-	MarkTrue(t ConditionType)
+	MarkTrue(t string, reason, messageFormat string, messageA ...interface{})
 
 	// MarkUnknown sets the status of t to Unknown and also sets the happy condition
 	// to Unknown if no other dependent condition is in an error state.
-	MarkUnknown(t ConditionType, reason, messageFormat string, messageA ...interface{})
+	MarkUnknown(t string, reason, messageFormat string, messageA ...interface{})
 
 	// MarkFalse sets the status of t and the happy condition to False.
-	MarkFalse(t ConditionType, reason, messageFormat string, messageA ...interface{})
+	MarkFalse(t string, reason, messageFormat string, messageA ...interface{})
 
 	// InitializeConditions updates all Conditions in the ConditionSet to Unknown
 	// if not set.
@@ -86,36 +95,51 @@ type ConditionManager interface {
 // NewLivingConditionSet returns a ConditionSet to hold the conditions for the
 // living resource. ConditionReady is used as the happy condition.
 // The set of condition types provided are those of the terminal subconditions.
-func NewLivingConditionSet(d ...ConditionType) ConditionSet {
-	return newConditionSet(ConditionReady, d...)
+func NewLivingConditionSet(d ...string) ConditionSet {
+	return NewLivingConditionSetWithHappyReason("Ready", d...)
+}
+
+// NewLivingConditionSetWithHappyReason returns a ConditionSet to hold the conditions for the
+// living resource. ConditionReady is used as the happy condition with the provided happy reason.
+// The set of condition types provided are those of the terminal subconditions.
+func NewLivingConditionSetWithHappyReason(happyReason string, d ...string) ConditionSet {
+	return newConditionSet(ConditionReady, happyReason, d...)
 }
 
 // NewBatchConditionSet returns a ConditionSet to hold the conditions for the
 // batch resource. ConditionSucceeded is used as the happy condition.
 // The set of condition types provided are those of the terminal subconditions.
-func NewBatchConditionSet(d ...ConditionType) ConditionSet {
-	return newConditionSet(ConditionSucceeded, d...)
+func NewBatchConditionSet(d ...string) ConditionSet {
+	return NewBatchConditionSetWithHappyReason("Succeeded", d...)
+}
+
+// NewBatchConditionSetWithHappyReason returns a ConditionSet to hold the conditions for the
+// batch resource. ConditionSucceeded is used as the happy condition with the provided happy reason.
+// The set of condition types provided are those of the terminal subconditions.
+func NewBatchConditionSetWithHappyReason(happyReason string, d ...string) ConditionSet {
+	return newConditionSet(ConditionSucceeded, happyReason, d...)
 }
 
 // newConditionSet returns a ConditionSet to hold the conditions that are
 // important for the caller. The first ConditionType is the overarching status
 // for that will be used to signal the resources' status is Ready or Succeeded.
-func newConditionSet(happy ConditionType, dependents ...ConditionType) ConditionSet {
-	var deps []ConditionType
+func newConditionSet(happyType, happyReason string, dependents ...string) ConditionSet {
+	var deps []string
 	for _, d := range dependents {
 		// Skip duplicates
-		if d == happy || contains(deps, d) {
+		if d == happyType || contains(deps, d) {
 			continue
 		}
 		deps = append(deps, d)
 	}
 	return ConditionSet{
-		happy:      happy,
-		dependents: deps,
+		happyType:   happyType,
+		happyReason: happyReason,
+		dependents:  deps,
 	}
 }
 
-func contains(ct []ConditionType, t ConditionType) bool {
+func contains(ct []string, t string) bool {
 	for _, c := range ct {
 		if c == t {
 			return true
@@ -146,7 +170,7 @@ func (r ConditionSet) Manage(status ConditionsAccessor) ConditionManager {
 // IsHappy looks at the happy condition and returns true if that condition is
 // set to true.
 func (r conditionsImpl) IsHappy() bool {
-	if c := r.GetCondition(r.happy); c == nil || !c.IsTrue() {
+	if c := r.GetCondition(r.happyType); c == nil || !ConditionIsTrue(c) {
 		return false
 	}
 	return true
@@ -154,7 +178,7 @@ func (r conditionsImpl) IsHappy() bool {
 
 // GetCondition finds and returns the Condition that matches the ConditionType
 // previously set on Conditions.
-func (r conditionsImpl) GetCondition(t ConditionType) *Condition {
+func (r conditionsImpl) GetCondition(t string) *metav1.Condition {
 	if r.accessor == nil {
 		return nil
 	}
@@ -169,12 +193,12 @@ func (r conditionsImpl) GetCondition(t ConditionType) *Condition {
 
 // SetCondition sets or updates the Condition on Conditions for Condition.Type.
 // If there is an update, Conditions are stored back sorted.
-func (r conditionsImpl) SetCondition(new Condition) {
+func (r conditionsImpl) SetCondition(new metav1.Condition) {
 	if r.accessor == nil {
 		return
 	}
 	t := new.Type
-	var conditions Conditions
+	var conditions []metav1.Condition
 	for _, c := range r.accessor.GetConditions() {
 		if c.Type != t {
 			conditions = append(conditions, c)
@@ -186,33 +210,26 @@ func (r conditionsImpl) SetCondition(new Condition) {
 			}
 		}
 	}
-	new.LastTransitionTime = VolatileTime{Inner: metav1.NewTime(time.Now())}
+	new.LastTransitionTime = metav1.NewTime(time.Now())
 	conditions = append(conditions, new)
 	// Sorted for convenience of the consumer, i.e. kubectl.
 	sort.Slice(conditions, func(i, j int) bool { return conditions[i].Type < conditions[j].Type })
 	r.accessor.SetConditions(conditions)
 }
 
-func (r conditionsImpl) isTerminal(t ConditionType) bool {
+func (r conditionsImpl) isTerminal(t string) bool {
 	for _, cond := range r.dependents {
 		if cond == t {
 			return true
 		}
 	}
-	return t == r.happy
-}
-
-func (r conditionsImpl) severity(t ConditionType) ConditionSeverity {
-	if r.isTerminal(t) {
-		return ConditionSeverityError
-	}
-	return ConditionSeverityInfo
+	return t == r.happyType
 }
 
 // RemoveCondition removes the non terminal condition that matches the ConditionType
 // Not implemented for terminal conditions
-func (r conditionsImpl) ClearCondition(t ConditionType) error {
-	var conditions Conditions
+func (r conditionsImpl) ClearCondition(t string) error {
+	var conditions []metav1.Condition
 
 	if r.accessor == nil {
 		return nil
@@ -240,41 +257,41 @@ func (r conditionsImpl) ClearCondition(t ConditionType) error {
 
 // MarkTrue sets the status of t to true, and then marks the happy condition to
 // true if all other dependents are also true.
-func (r conditionsImpl) MarkTrue(t ConditionType) {
+func (r conditionsImpl) MarkTrue(t string, reason, messageFormat string, messageA ...interface{}) {
 	// set the specified condition
-	r.SetCondition(Condition{
-		Type:     t,
-		Status:   corev1.ConditionTrue,
-		Severity: r.severity(t),
+	r.SetCondition(metav1.Condition{
+		Type:    t,
+		Status:  metav1.ConditionTrue,
+		Reason:  reason,
+		Message: fmt.Sprintf(messageFormat, messageA...),
 	})
 
 	// check the dependents.
 	for _, cond := range r.dependents {
 		c := r.GetCondition(cond)
 		// Failed or Unknown conditions trump true conditions
-		if !c.IsTrue() {
+		if !ConditionIsTrue(c) {
 			return
 		}
 	}
 
 	// set the happy condition
-	r.SetCondition(Condition{
-		Type:     r.happy,
-		Status:   corev1.ConditionTrue,
-		Severity: r.severity(r.happy),
+	r.SetCondition(metav1.Condition{
+		Type:   r.happyType,
+		Reason: r.happyReason,
+		Status: metav1.ConditionTrue,
 	})
 }
 
 // MarkUnknown sets the status of t to Unknown and also sets the happy condition
 // to Unknown if no other dependent condition is in an error state.
-func (r conditionsImpl) MarkUnknown(t ConditionType, reason, messageFormat string, messageA ...interface{}) {
+func (r conditionsImpl) MarkUnknown(t string, reason, messageFormat string, messageA ...interface{}) {
 	// set the specified condition
-	r.SetCondition(Condition{
-		Type:     t,
-		Status:   corev1.ConditionUnknown,
-		Reason:   reason,
-		Message:  fmt.Sprintf(messageFormat, messageA...),
-		Severity: r.severity(t),
+	r.SetCondition(metav1.Condition{
+		Type:    t,
+		Status:  metav1.ConditionUnknown,
+		Reason:  reason,
+		Message: fmt.Sprintf(messageFormat, messageA...),
 	})
 
 	// check the dependents.
@@ -282,11 +299,11 @@ func (r conditionsImpl) MarkUnknown(t ConditionType, reason, messageFormat strin
 	for _, cond := range r.dependents {
 		c := r.GetCondition(cond)
 		// Failed conditions trump Unknown conditions
-		if c.IsFalse() {
+		if ConditionIsFalse(c) {
 			// Double check that the happy condition is also false.
-			happy := r.GetCondition(r.happy)
-			if !happy.IsFalse() {
-				r.MarkFalse(r.happy, reason, messageFormat, messageA...)
+			happy := r.GetCondition(r.happyType)
+			if !ConditionIsFalse(happy) {
+				r.MarkFalse(r.happyType, reason, messageFormat, messageA...)
 			}
 			return
 		}
@@ -297,32 +314,30 @@ func (r conditionsImpl) MarkUnknown(t ConditionType, reason, messageFormat strin
 
 	if isDependent {
 		// set the happy condition, if it is one of our dependent subconditions.
-		r.SetCondition(Condition{
-			Type:     r.happy,
-			Status:   corev1.ConditionUnknown,
-			Reason:   reason,
-			Message:  fmt.Sprintf(messageFormat, messageA...),
-			Severity: r.severity(r.happy),
+		r.SetCondition(metav1.Condition{
+			Type:    r.happyType,
+			Status:  metav1.ConditionUnknown,
+			Reason:  reason,
+			Message: fmt.Sprintf(messageFormat, messageA...),
 		})
 	}
 }
 
 // MarkFalse sets the status of t and the happy condition to False.
-func (r conditionsImpl) MarkFalse(t ConditionType, reason, messageFormat string, messageA ...interface{}) {
-	types := []ConditionType{t}
+func (r conditionsImpl) MarkFalse(t string, reason, messageFormat string, messageA ...interface{}) {
+	types := []string{t}
 	for _, cond := range r.dependents {
 		if cond == t {
-			types = append(types, r.happy)
+			types = append(types, r.happyType)
 		}
 	}
 
 	for _, t := range types {
-		r.SetCondition(Condition{
-			Type:     t,
-			Status:   corev1.ConditionFalse,
-			Reason:   reason,
-			Message:  fmt.Sprintf(messageFormat, messageA...),
-			Severity: r.severity(t),
+		r.SetCondition(metav1.Condition{
+			Type:    t,
+			Status:  metav1.ConditionFalse,
+			Reason:  reason,
+			Message: fmt.Sprintf(messageFormat, messageA...),
 		})
 	}
 }
@@ -330,37 +345,52 @@ func (r conditionsImpl) MarkFalse(t ConditionType, reason, messageFormat string,
 // InitializeConditions updates all Conditions in the ConditionSet to Unknown
 // if not set.
 func (r conditionsImpl) InitializeConditions() {
-	happy := r.GetCondition(r.happy)
+	happy := r.GetCondition(r.happyType)
 	if happy == nil {
-		happy = &Condition{
-			Type:     r.happy,
-			Status:   corev1.ConditionUnknown,
-			Severity: ConditionSeverityError,
+		happy = &metav1.Condition{
+			Type:   r.happyType,
+			Status: metav1.ConditionUnknown,
+			Reason: "Initializing",
 		}
 		r.SetCondition(*happy)
 	}
 	// If the happy state is true, it implies that all of the terminal
 	// subconditions must be true, so initialize any unset conditions to
 	// true if our happy condition is true, otherwise unknown.
-	status := corev1.ConditionUnknown
-	if happy.Status == corev1.ConditionTrue {
-		status = corev1.ConditionTrue
+	status := metav1.ConditionUnknown
+	if happy.Status == metav1.ConditionTrue {
+		status = metav1.ConditionTrue
 	}
 	for _, t := range r.dependents {
-		r.initializeTerminalCondition(t, status)
+		r.initializeTerminalCondition(t, "Initializing", status)
 	}
 }
 
 // initializeTerminalCondition initializes a Condition to the given status if unset.
-func (r conditionsImpl) initializeTerminalCondition(t ConditionType, status corev1.ConditionStatus) *Condition {
+func (r conditionsImpl) initializeTerminalCondition(t, reason string, status metav1.ConditionStatus) *metav1.Condition {
 	if c := r.GetCondition(t); c != nil {
 		return c
 	}
-	c := Condition{
-		Type:     t,
-		Status:   status,
-		Severity: ConditionSeverityError,
+	c := metav1.Condition{
+		Type:   t,
+		Reason: reason,
+		Status: status,
 	}
 	r.SetCondition(c)
 	return &c
+}
+
+// ConditionIsTrue returns true if the condition's status is True
+func ConditionIsTrue(c *metav1.Condition) bool {
+	return c != nil && c.Status == metav1.ConditionTrue
+}
+
+// ConditionIsFalse returns true if the condition's status is False
+func ConditionIsFalse(c *metav1.Condition) bool {
+	return c != nil && c.Status == metav1.ConditionFalse
+}
+
+// ConditionIsUnknown returns true if the condition's status is Unknown or not known
+func ConditionIsUnknown(c *metav1.Condition) bool {
+	return !ConditionIsTrue(c) && !ConditionIsFalse(c)
 }

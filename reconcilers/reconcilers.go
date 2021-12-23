@@ -120,6 +120,9 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	result, err := r.reconcile(ctx, parent)
 
 	if r.hasStatus(originalParent) {
+		// restore last transition time for unchanged conditions
+		r.syncLastTransitionTime(r.statusConditions(parent), r.statusConditions(originalParent))
+
 		// check if status has changed before updating
 		if !equality.Semantic.DeepEqual(r.status(parent), r.status(originalParent)) && parent.GetDeletionTimestamp() == nil {
 			// update status
@@ -166,6 +169,40 @@ func (r *ParentReconciler) copyGeneration(obj client.Object) {
 
 func (r *ParentReconciler) status(obj client.Object) interface{} {
 	return reflect.ValueOf(obj).Elem().FieldByName("Status").Addr().Interface()
+}
+
+func (r *ParentReconciler) statusConditions(obj client.Object) []metav1.Condition {
+	statusValue := reflect.ValueOf(r.status(obj)).Elem()
+	conditionsValue := statusValue.FieldByName("Conditions")
+	if conditionsValue.IsZero() {
+		return nil
+	}
+	conditions, ok := conditionsValue.Interface().([]metav1.Condition)
+	if !ok {
+		return nil
+	}
+	return conditions
+}
+
+// syncLastTransitionTime restores a condition's LastTransitionTime value for
+// each proposed condition that is otherwise equivlent to the original value.
+// This method is useful to prevent updating the status for a resource that is
+// otherwise unchanged.
+func (r *ParentReconciler) syncLastTransitionTime(proposed, original []metav1.Condition) {
+	for _, o := range original {
+		for i := range proposed {
+			p := &proposed[i]
+			if o.Type == p.Type {
+				if o.Status == p.Status &&
+					o.Reason == p.Reason &&
+					o.Message == p.Message &&
+					o.ObservedGeneration == p.ObservedGeneration {
+					p.LastTransitionTime = o.LastTransitionTime
+				}
+				break
+			}
+		}
+	}
 }
 
 const parentTypeStashKey StashKey = "reconciler-runtime:parentType"

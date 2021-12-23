@@ -121,7 +121,7 @@ func (f *deployment) StatusConditions(conditions ...ConditionFactory) *deploymen
 			dc := cg.Create()
 			c[i] = appsv1.DeploymentCondition{
 				Type:    appsv1.DeploymentConditionType(dc.Type),
-				Status:  dc.Status,
+				Status:  corev1.ConditionStatus(dc.Status),
 				Reason:  dc.Reason,
 				Message: dc.Message,
 			}

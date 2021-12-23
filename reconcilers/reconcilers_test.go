@@ -70,6 +70,7 @@ func TestParentReconcilerWithNoStatus(t *testing.T) {
 		}
 	})
 }
+
 func TestParentReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
@@ -84,7 +85,7 @@ func TestParentReconciler(t *testing.T) {
 			om.Created(1)
 		}).
 		StatusConditions(
-			factories.Condition().Type(apis.ConditionReady).Unknown(),
+			factories.Condition().Type(apis.ConditionReady).Unknown().Reason("Initializing", ""),
 		)
 
 	rts := rtesting.ReconcilerTestSuite{{
@@ -173,8 +174,8 @@ func TestParentReconciler(t *testing.T) {
 				return &reconcilers.SyncReconciler{
 					Config: c,
 					Sync: func(ctx context.Context, parent *rtesting.TestResource) error {
-						expected := apis.Conditions{
-							{Type: apis.ConditionReady, Status: corev1.ConditionUnknown},
+						expected := []metav1.Condition{
+							{Type: apis.ConditionReady, Status: metav1.ConditionUnknown, Reason: "Initializing"},
 						}
 						if diff := cmp.Diff(expected, parent.Status.Conditions, rtesting.IgnoreLastTransitionTime); diff != "" {
 							t.Errorf("Unexpected condition (-expected, +actual): %s", diff)
