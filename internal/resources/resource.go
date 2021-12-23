@@ -8,7 +8,6 @@ package resources
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/vmware-labs/reconciler-runtime/apis"
 	"github.com/vmware-labs/reconciler-runtime/validation"
@@ -110,8 +109,14 @@ type TestResourceStatus struct {
 }
 
 func (rs *TestResourceStatus) InitializeConditions() {
-	condSet := apis.NewLivingConditionSetWithHappyReason("Happy")
-	condSet.Manage(rs).InitializeConditions()
+	rs.SetConditions([]metav1.Condition{
+		{
+			Type:               apis.ConditionReady,
+			Status:             metav1.ConditionUnknown,
+			Reason:             "Initializing",
+			LastTransitionTime: metav1.Now(),
+		},
+	})
 }
 
 func (rs *TestResourceStatus) MarkReady() {
@@ -119,7 +124,8 @@ func (rs *TestResourceStatus) MarkReady() {
 		{
 			Type:               apis.ConditionReady,
 			Status:             metav1.ConditionTrue,
-			LastTransitionTime: metav1.NewTime(time.Now()),
+			Reason:             "Ready",
+			LastTransitionTime: metav1.Now(),
 		},
 	})
 }
@@ -131,11 +137,9 @@ func (rs *TestResourceStatus) MarkNotReady(reason, message string, messageA ...i
 			Status:             metav1.ConditionFalse,
 			Reason:             reason,
 			Message:            fmt.Sprintf(message, messageA...),
-			LastTransitionTime: metav1.NewTime(time.Now()),
+			LastTransitionTime: metav1.Now(),
 		},
 	})
-	condSet := apis.NewLivingConditionSetWithHappyReason("Happy")
-	condSet.Manage(rs).MarkFalse(apis.ConditionReady, reason, message, messageA...)
 }
 
 // +kubebuilder:object:root=true

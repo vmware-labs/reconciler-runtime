@@ -11,10 +11,12 @@ import (
 	"testing"
 	"time"
 
+	diecorev1 "dies.dev/apis/core/v1"
+	diemetav1 "dies.dev/apis/meta/v1"
 	"github.com/google/go-cmp/cmp"
 	"github.com/vmware-labs/reconciler-runtime/apis"
 	"github.com/vmware-labs/reconciler-runtime/internal/resources"
-	"github.com/vmware-labs/reconciler-runtime/internal/resources/factories"
+	"github.com/vmware-labs/reconciler-runtime/internal/resources/dies"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	rtesting "github.com/vmware-labs/reconciler-runtime/testing"
 	appsv1 "k8s.io/api/apps/v1"
@@ -39,11 +41,12 @@ func TestParentReconcilerWithNoStatus(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
 
-	resource := factories.TestResourceNoStatus().
-		NamespaceName(testNamespace, testName).
-		ObjectMeta(func(om factories.ObjectMeta) {
-			om.Created(1)
-			om.AddAnnotation("blah", "blah")
+	resource := dies.TestResourceNoStatusBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
+			d.AddAnnotation("blah", "blah")
 		})
 
 	rts := rtesting.ReconcilerTestSuite{{
@@ -80,14 +83,18 @@ func TestParentReconciler(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
 
-	resource := factories.TestResource().
-		NamespaceName(testNamespace, testName).
-		ObjectMeta(func(om factories.ObjectMeta) {
-			om.Created(1)
+	resource := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
-		StatusConditions(
-			factories.Condition().Type(apis.ConditionReady).Unknown().Reason("Initializing", ""),
-		)
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionUnknown).Reason("Initializing"),
+			)
+		})
+	deletedAt := metav1.NewTime(time.UnixMilli(2000))
 
 	rts := rtesting.ReconcilerTestSuite{{
 		Name: "resource does not exist",
@@ -107,8 +114,8 @@ func TestParentReconciler(t *testing.T) {
 		Name: "ignore deleted resource",
 		Key:  testKey,
 		GivenObjects: []client.Object{
-			resource.ObjectMeta(func(om factories.ObjectMeta) {
-				om.Deleted(1)
+			resource.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&deletedAt)
 			}),
 		},
 		Metadata: map[string]interface{}{
@@ -126,8 +133,8 @@ func TestParentReconciler(t *testing.T) {
 		Name: "error fetching resource",
 		Key:  testKey,
 		GivenObjects: []client.Object{
-			resource.ObjectMeta(func(om factories.ObjectMeta) {
-				om.Deleted(1)
+			resource.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&deletedAt)
 			}),
 		},
 		WithReactors: []rtesting.ReactionFunc{
@@ -168,7 +175,9 @@ func TestParentReconciler(t *testing.T) {
 		Name: "status conditions are initialized",
 		Key:  testKey,
 		GivenObjects: []client.Object{
-			resource.StatusConditions(),
+			resource.StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.ConditionsDie()
+			}),
 		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
@@ -218,7 +227,9 @@ func TestParentReconciler(t *testing.T) {
 				`Updated status`),
 		},
 		ExpectStatusUpdates: []client.Object{
-			resource.AddStatusField("Reconciler", "ran"),
+			resource.StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("Reconciler", "ran")
+			}),
 		},
 	}, {
 		Name: "sub reconciler erred",
@@ -267,7 +278,9 @@ func TestParentReconciler(t *testing.T) {
 				`Failed to update status: inducing failure for update TestResource`),
 		},
 		ExpectStatusUpdates: []client.Object{
-			resource.AddStatusField("Reconciler", "ran"),
+			resource.StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("Reconciler", "ran")
+			}),
 		},
 		ShouldErr: true,
 	}, {
@@ -307,14 +320,17 @@ func TestSyncReconciler(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
 
-	resource := factories.TestResource().
-		NamespaceName(testNamespace, testName).
-		ObjectMeta(func(om factories.ObjectMeta) {
-			om.Created(1)
+	resource := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
-		StatusConditions(
-			factories.Condition().Type(apis.ConditionReady).Unknown(),
-		)
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionUnknown).Reason("Initializing"),
+			)
+		})
 
 	rts := rtesting.SubReconcilerTestSuite{{
 		Name:   "sync success",
@@ -384,28 +400,34 @@ func TestChildReconciler(t *testing.T) {
 	_ = resources.AddToScheme(scheme)
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	resource := factories.TestResource().
-		NamespaceName(testNamespace, testName).
-		ObjectMeta(func(om factories.ObjectMeta) {
-			om.Created(1)
+	resource := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
-		StatusConditions(
-			factories.Condition().Type(apis.ConditionReady).Unknown(),
-		)
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionUnknown).Reason("Initializing"),
+			)
+		})
 	resourceReady := resource.
-		StatusConditions(
-			factories.Condition().Type(apis.ConditionReady).True(),
-		)
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionTrue).Reason("Ready"),
+			)
+		})
 
-	configMapCreate := factories.ConfigMap().
-		NamespaceName(testNamespace, testName).
-		ObjectMeta(func(om factories.ObjectMeta) {
-			om.ControlledBy(resource, scheme)
+	configMapCreate := diecorev1.ConfigMapBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.ControlledBy(resource, scheme)
 		}).
 		AddData("foo", "bar")
 	configMapGiven := configMapCreate.
-		ObjectMeta(func(om factories.ObjectMeta) {
-			om.Created(1)
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		})
 
 	defaultChildReconciler := func(c reconcilers.Config) *reconcilers.ChildReconciler {
@@ -465,8 +487,12 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name: "child is in sync",
 		Parent: resourceReady.
-			AddField("foo", "bar").
-			AddStatusField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
 		GivenObjects: []client.Object{
 			configMapGiven,
 		},
@@ -478,7 +504,9 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name: "create child",
 		Parent: resource.
-			AddField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}),
 		GivenObjects: []client.Object{},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
@@ -490,17 +518,25 @@ func TestChildReconciler(t *testing.T) {
 				`Created ConfigMap %q`, testName),
 		},
 		ExpectParent: resourceReady.
-			AddField("foo", "bar").
-			AddStatusField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
 		ExpectCreates: []client.Object{
 			configMapCreate,
 		},
 	}, {
 		Name: "update child",
 		Parent: resourceReady.
-			AddField("foo", "bar").
-			AddField("new", "field").
-			AddStatusField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+				d.AddField("new", "field")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
 		GivenObjects: []client.Object{
 			configMapGiven,
 		},
@@ -514,10 +550,14 @@ func TestChildReconciler(t *testing.T) {
 				`Updated ConfigMap %q`, testName),
 		},
 		ExpectParent: resourceReady.
-			AddField("foo", "bar").
-			AddField("new", "field").
-			AddStatusField("foo", "bar").
-			AddStatusField("new", "field"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+				d.AddField("new", "field")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+				d.AddField("new", "field")
+			}),
 		ExpectUpdates: []client.Object{
 			configMapGiven.
 				AddData("new", "field"),
@@ -558,12 +598,18 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name: "delete duplicate children",
 		Parent: resource.
-			AddField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}),
 		GivenObjects: []client.Object{
 			configMapGiven.
-				NamespaceName(testNamespace, "extra-child-1"),
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.Name("extra-child-1")
+				}),
 			configMapGiven.
-				NamespaceName(testNamespace, "extra-child-2"),
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.Name("extra-child-2")
+				}),
 		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
@@ -571,8 +617,12 @@ func TestChildReconciler(t *testing.T) {
 			},
 		},
 		ExpectParent: resourceReady.
-			AddField("foo", "bar").
-			AddStatusField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
 		ExpectEvents: []rtesting.Event{
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Deleted",
 				`Deleted ConfigMap %q`, "extra-child-1"),
@@ -591,7 +641,9 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name: "child name collision",
 		Parent: resourceReady.
-			AddField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}),
 		GivenObjects: []client.Object{},
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("create", "ConfigMap", rtesting.InduceFailureOpts{
@@ -604,11 +656,15 @@ func TestChildReconciler(t *testing.T) {
 			},
 		},
 		ExpectParent: resourceReady.
-			AddField("foo", "bar").
-			StatusConditions(
-				factories.Condition().Type(apis.ConditionReady).False().
-					Reason("NameConflict", `"test-resource" already exists`),
-			),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.ConditionsDie(
+					diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionFalse).
+						Reason("NameConflict").Message(`"test-resource" already exists`),
+				)
+			}),
 		ExpectEvents: []rtesting.Event{
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "CreationFailed",
 				"Failed to create ConfigMap %q:  %q already exists", testName, testName),
@@ -619,7 +675,9 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name: "child name collision, stale informer cache",
 		Parent: resourceReady.
-			AddField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}),
 		GivenObjects: []client.Object{},
 		APIGivenObjects: []client.Object{
 			configMapGiven,
@@ -645,9 +703,13 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name: "preserve immutable fields",
 		Parent: resourceReady.
-			AddField("foo", "bar").
-			AddStatusField("foo", "bar").
-			AddStatusField("immutable", "field"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+				d.AddField("immutable", "field")
+			}),
 		GivenObjects: []client.Object{
 			configMapGiven.
 				AddData("immutable", "field"),
@@ -668,7 +730,9 @@ func TestChildReconciler(t *testing.T) {
 			configMapGiven,
 		},
 		ExpectParent: resourceReady.
-			AddStatusField("foo", "bar"),
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
@@ -681,7 +745,9 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name: "sanitize child before logging",
 		Parent: resource.
-			AddField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}),
 		GivenObjects: []client.Object{},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
@@ -697,8 +763,12 @@ func TestChildReconciler(t *testing.T) {
 				`Created ConfigMap %q`, testName),
 		},
 		ExpectParent: resourceReady.
-			AddField("foo", "bar").
-			AddStatusField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
 		ExpectCreates: []client.Object{
 			configMapCreate,
 		},
@@ -718,7 +788,9 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name: "error creating child",
 		Parent: resource.
-			AddField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}),
 		GivenObjects: []client.Object{},
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("create", "ConfigMap"),
@@ -739,9 +811,13 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name: "error updating child",
 		Parent: resourceReady.
-			AddField("foo", "bar").
-			AddField("new", "field").
-			AddStatusField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+				d.AddField("new", "field")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
 		GivenObjects: []client.Object{
 			configMapGiven,
 		},
@@ -787,12 +863,18 @@ func TestChildReconciler(t *testing.T) {
 	}, {
 		Name: "error deleting duplicate children",
 		Parent: resource.
-			AddField("foo", "bar"),
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}),
 		GivenObjects: []client.Object{
 			configMapGiven.
-				NamespaceName(testNamespace, "extra-child-1"),
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.Name("extra-child-1")
+				}),
 			configMapGiven.
-				NamespaceName(testNamespace, "extra-child-2"),
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.Name("extra-child-2")
+				}),
 		},
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("delete", "ConfigMap"),
@@ -838,14 +920,17 @@ func TestSequence(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
 
-	resource := factories.TestResource().
-		NamespaceName(testNamespace, testName).
-		ObjectMeta(func(om factories.ObjectMeta) {
-			om.Created(1)
+	resource := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
-		StatusConditions(
-			factories.Condition().Type(apis.ConditionReady).Unknown(),
-		)
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionUnknown).Reason("Initializing"),
+			)
+		})
 
 	rts := rtesting.SubReconcilerTestSuite{{
 		Name:   "sub reconciler erred",
@@ -1136,27 +1221,35 @@ func TestCastParent(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
 
-	resource := factories.TestResource().
-		NamespaceName(testNamespace, testName).
-		ObjectMeta(func(om factories.ObjectMeta) {
-			om.Created(1)
+	resource := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
-		StatusConditions(
-			factories.Condition().Type(apis.ConditionReady).Unknown(),
-		)
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionUnknown).Reason("Initializing"),
+			)
+		})
 
 	rts := rtesting.SubReconcilerTestSuite{{
 		Name: "sync success",
-		Parent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
-			pts.ContainerNamed("test-container", func(c *corev1.Container) {})
-		}),
+		Parent: resource.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.TemplateDie(func(d *diecorev1.PodTemplateSpecDie) {
+					d.SpecDie(func(d *diecorev1.PodSpecDie) {
+						d.ContainerDie("test-container", func(d *diecorev1.ContainerDie) {})
+					})
+				})
+			}),
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return &reconcilers.CastParent{
 					Type: &appsv1.Deployment{},
 					Reconciler: &reconcilers.SyncReconciler{
 						Sync: func(ctx context.Context, parent *appsv1.Deployment) error {
-							c.Recorder.Event(resource.Create(), corev1.EventTypeNormal, "Test",
+							c.Recorder.Event(resource, corev1.EventTypeNormal, "Test",
 								parent.Spec.Template.Spec.Containers[0].Name)
 							return nil
 						},
@@ -1171,11 +1264,14 @@ func TestCastParent(t *testing.T) {
 	}, {
 		Name:   "cast mutation",
 		Parent: resource,
-		ExpectParent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
-			pts.ObjectMeta(func(om factories.ObjectMeta) {
-				om.Name("mutation")
-			})
-		}),
+		ExpectParent: resource.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.TemplateDie(func(d *diecorev1.PodTemplateSpecDie) {
+					d.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+						d.Name("mutation")
+					})
+				})
+			}),
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return &reconcilers.CastParent{
@@ -1229,9 +1325,14 @@ func TestCastParent(t *testing.T) {
 		ShouldErr: true,
 	}, {
 		Name: "subreconcilers must be compatible with cast value, not parent",
-		Parent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
-			pts.ContainerNamed("test-container", func(c *corev1.Container) {})
-		}),
+		Parent: resource.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.TemplateDie(func(d *diecorev1.PodTemplateSpecDie) {
+					d.SpecDie(func(d *diecorev1.PodSpecDie) {
+						d.ContainerDie("test-container", func(d *diecorev1.ContainerDie) {})
+					})
+				})
+			}),
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return &reconcilers.CastParent{
@@ -1248,9 +1349,14 @@ func TestCastParent(t *testing.T) {
 		ShouldPanic: true,
 	}, {
 		Name: "error for cast to different type than expected by sub reconciler",
-		Parent: resource.PodTemplateSpec(func(pts factories.PodTemplateSpec) {
-			pts.ContainerNamed("test-container", func(c *corev1.Container) {})
-		}),
+		Parent: resource.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.TemplateDie(func(d *diecorev1.PodTemplateSpecDie) {
+					d.SpecDie(func(d *diecorev1.PodSpecDie) {
+						d.ContainerDie("test-container", func(d *diecorev1.ContainerDie) {})
+					})
+				})
+			}),
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return &reconcilers.CastParent{
@@ -1266,15 +1372,18 @@ func TestCastParent(t *testing.T) {
 		},
 		ShouldPanic: true,
 	}, {
-		Name:   "marshal error",
-		Parent: resource.ErrorOn(true, false),
+		Name: "marshal error",
+		Parent: resource.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.ErrOnMarshal(true)
+			}),
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return &reconcilers.CastParent{
 					Type: &resources.TestResource{},
 					Reconciler: &reconcilers.SyncReconciler{
 						Sync: func(ctx context.Context, parent *resources.TestResource) error {
-							c.Recorder.Event(resource.Create(), corev1.EventTypeNormal, "Test", parent.Name)
+							c.Recorder.Event(resource, corev1.EventTypeNormal, "Test", parent.Name)
 							return nil
 						},
 						Config: c,
@@ -1284,15 +1393,18 @@ func TestCastParent(t *testing.T) {
 		},
 		ShouldErr: true,
 	}, {
-		Name:   "unmarshal error",
-		Parent: resource.ErrorOn(false, true),
+		Name: "unmarshal error",
+		Parent: resource.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.ErrOnUnmarshal(true)
+			}),
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return &reconcilers.CastParent{
 					Type: &resources.TestResource{},
 					Reconciler: &reconcilers.SyncReconciler{
 						Sync: func(ctx context.Context, parent *resources.TestResource) error {
-							c.Recorder.Event(resource.Create(), corev1.EventTypeNormal, "Test", parent.Name)
+							c.Recorder.Event(resource, corev1.EventTypeNormal, "Test", parent.Name)
 							return nil
 						},
 						Config: c,
