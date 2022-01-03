@@ -151,8 +151,8 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 
 	ctx := reconcilers.WithStash(context.Background())
 	for k, v := range tc.GivenStashedValues {
-		if f, ok := v.(Factory); ok {
-			v = f.CreateObject()
+		if f, ok := v.(runtime.Object); ok {
+			v = f.DeepCopyObject()
 		}
 		reconcilers.StashValue(ctx, k, v)
 	}
@@ -197,8 +197,8 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	}
 
 	for key, expected := range tc.ExpectStashedValues {
-		if f, ok := expected.(Factory); ok {
-			expected = f.CreateObject()
+		if f, ok := expected.(runtime.Object); ok {
+			expected = f.DeepCopyObject()
 		}
 		actual := reconcilers.RetrieveValue(ctx, key)
 		if diff := cmp.Diff(expected, actual, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, cmpopts.EquateEmpty()); diff != "" {

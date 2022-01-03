@@ -53,7 +53,7 @@ var (
 )
 
 func (r *eventRecorder) Event(object runtime.Object, eventtype, reason, message string) {
-	o := object.(client.Object)
+	o := object.DeepCopyObject().(client.Object)
 	gvks, _, _ := r.scheme.ObjectKinds(o)
 	apiVersion, kind := gvks[0].ToAPIVersionAndKind()
 	r.events = append(r.events, Event{
