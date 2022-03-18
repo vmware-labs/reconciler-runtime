@@ -76,7 +76,7 @@ The [`SyncReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runt
 
 **Example:**
 
-While sync reconcilers have the ability to do anything a reconciler can do, it's best to keep them focused on a single goal, letting the parent reconciler structure multiple sub reconcilers together. In this case, we use the parent resource and the client to resolve the target image and stash the value on the parent's status. The status is a good place to stash simple values that can be made public. More [advanced forms of stashing](#stash) are also available.
+While sync reconcilers have the ability to do anything a reconciler can do, it's best to keep them focused on a single goal, letting the parent reconciler structure multiple sub reconcilers together. In this case, we use the parent resource and the client to resolve the target image and stash the value on the parent's status. The status is a good place to stash simple values that can be made public. More [advanced forms of stashing](#stash) are also available. Learn more about [status and its contract](#status).
 
 ```go
 func FunctionTargetImageReconciler(c reconcilers.Config) reconcilers.SubReconciler {
@@ -116,6 +116,7 @@ The implementor is responsible for:
 - indicating if two resources are semantically equal
 - merging the actual resource with the desired state (often as simple as copying the spec and labels)
 - updating the parent's status from the child
+- defining the status subresource [according to the contract](#status) 
 
 **Example:**
 
@@ -467,6 +468,39 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 }
 ```
 [full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/inmemorygateway_reconciler.go#L58-L84)
+
+### Status
+
+The `apis` package provides means for conveniently managing a custom resource's `.status`.
+
+A resource's status subresource is expected to meet the following contract:
+
+```go
+type MyStatus struct {
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type"`
+}
+```
+
+**Example:**
+
+Embed `api.Status` into your resource's status and add more fields:
+
+```go
+type MyResourceStatus struct {
+  apis.Status `json:",inline"`
+  UsefulMessage string `json:"usefulMessage,omitempty"`
+}
+
+type MyResource struct {
+  metav1.TypeMeta   `json:",inline"`
+  metav1.ObjectMeta `json:"metadata,omitempty"`
+  
+  Spec MyResourceSpec `json:"spec"`
+  // +optional
+  Status MyResourceStatus `json:"status"`
+}
+```
 
 ## Contributing
 

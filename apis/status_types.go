@@ -22,8 +22,15 @@ package apis
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-// Status shows how we expect folks to embed Conditions in
-// their Status field.
+// Status is the minimally expected status subresource. Use this or provide your own. It also shows how Conditions are
+// expected to be embedded in the Status field.
+//
+// Example:
+//   type MyResourceStatus struct {
+//   	apis.Status `json:",inline"`
+//   	UsefulMessage string `json:"usefulMessage,omitempty"`
+//   }
+//
 // WARNING: Adding fields to this struct will add them to all resources.
 // +k8s:deepcopy-gen=true
 type Status struct {
