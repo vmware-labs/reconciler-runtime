@@ -23,6 +23,7 @@
 	- [Config](#config)
 	- [Stash](#stash)
 	- [Tracker](#tracker)
+	- [Status](#status)
 - [Contributing](#contributing)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
