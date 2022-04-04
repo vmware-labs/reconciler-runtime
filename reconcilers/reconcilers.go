@@ -25,6 +25,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -73,6 +74,12 @@ type ParentReconciler struct {
 	// multiple SubReconcilers.
 	Reconciler SubReconciler
 
+	// Expected function signature:
+	//     func(ctx context.Context, parent client.Object) error
+	//
+	// +optional
+	Finalize interface{}
+
 	Config
 }
 
@@ -83,7 +90,30 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return err
 	}
+
+	if err := r.validate(ctx); err != nil {
+		return err
+	}
+
 	return bldr.Complete(r)
+}
+
+func (r *ParentReconciler) validate(ctx context.Context) error {
+	castParentType := RetrieveCastParentType(ctx)
+	// validate Finalize function signature:
+	//     nil
+	//     func(ctx context.Context, parent client.Object) error
+	if r.Finalize != nil {
+		fn := reflect.TypeOf(r.Finalize)
+		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
+			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(castParentType).AssignableTo(fn.In(1)) ||
+			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(0)) {
+			return fmt.Errorf("ParentReconciler Finalize must have correct signature: func(context.Context, %s) error, found: %s", reflect.TypeOf(castParentType), fn)
+		}
+	}
+
+	return nil
 }
 
 func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -119,6 +149,18 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	result, err := r.reconcile(ctx, parent)
 
+	if !equality.Semantic.DeepEqual(originalParent.GetFinalizers, parent.GetFinalizers()) {
+		log.Info("updating finalizers", "diff", cmp.Diff(originalParent.GetFinalizers, parent.GetFinalizers()))
+		if updateErr := r.Update(ctx, parent); updateErr != nil {
+			log.Error(updateErr, "unable to update", typeName(r.Type), parent)
+			r.Recorder.Eventf(parent, corev1.EventTypeWarning, "UpdateFailed",
+				"Failed to update: %v", updateErr)
+			return ctrl.Result{}, updateErr
+		}
+		r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Updated",
+			"Updated")
+	}
+
 	if r.hasStatus(originalParent) {
 		// restore last transition time for unchanged conditions
 		r.syncLastTransitionTime(r.statusConditions(parent), r.statusConditions(originalParent))
@@ -143,7 +185,28 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 func (r *ParentReconciler) reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	if parent.GetDeletionTimestamp() != nil {
+		if r.Finalize != nil {
+			if controllerutil.ContainsFinalizer(parent, "foo") {
+				if err := r.finalize(ctx, parent); err != nil {
+					return ctrl.Result{}, err
+				}
+			}
+		}
+		if controllerutil.ContainsFinalizer(parent, "foo") {
+			controllerutil.RemoveFinalizer(parent, "foo")
+		}
+
 		return ctrl.Result{}, nil
+	}
+
+	if r.Finalize != nil {
+		if !controllerutil.ContainsFinalizer(parent, "foo") {
+			controllerutil.AddFinalizer(parent, "foo")
+		}
+	} else {
+		if controllerutil.ContainsFinalizer(parent, "foo") {
+			controllerutil.RemoveFinalizer(parent, "foo")
+		}
 	}
 
 	result, err := r.Reconciler.Reconcile(ctx, parent)
@@ -154,6 +217,20 @@ func (r *ParentReconciler) reconcile(ctx context.Context, parent client.Object) 
 	r.copyGeneration(parent)
 	return result, nil
 }
+
+func (r *ParentReconciler) finalize(ctx context.Context, parent client.Object) error {
+	fn := reflect.ValueOf(r.Finalize)
+	out := fn.Call([]reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(parent),
+	})
+	var err error
+	if !out[0].IsNil() {
+		err = out[1].Interface().(error)
+	}
+	return err
+}
+
 func (r *ParentReconciler) hasStatus(obj client.Object) bool {
 	return reflect.ValueOf(obj).Elem().FieldByName("Status").IsValid()
 }
