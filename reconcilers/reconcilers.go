@@ -147,19 +147,8 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			initializeConditions.Call([]reflect.Value{})
 		}
 	}
-	result, err := r.reconcile(ctx, parent)
 
-	if !equality.Semantic.DeepEqual(originalParent.GetFinalizers, parent.GetFinalizers()) {
-		log.Info("updating finalizers", "diff", cmp.Diff(originalParent.GetFinalizers, parent.GetFinalizers()))
-		if updateErr := r.Update(ctx, parent); updateErr != nil {
-			log.Error(updateErr, "unable to update", typeName(r.Type), parent)
-			r.Recorder.Eventf(parent, corev1.EventTypeWarning, "UpdateFailed",
-				"Failed to update: %v", updateErr)
-			return ctrl.Result{}, updateErr
-		}
-		r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Updated",
-			"Updated")
-	}
+	result, err := r.reconcile(ctx, parent)
 
 	if r.hasStatus(originalParent) {
 		// restore last transition time for unchanged conditions
@@ -179,6 +168,19 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				"Updated status")
 		}
 	}
+
+	if !equality.Semantic.DeepEqual(parent.GetFinalizers(), originalParent.GetFinalizers()) {
+		log.Info("updating finalizers", "diff", cmp.Diff(parent.GetFinalizers(), originalParent.GetFinalizers()))
+		if updateErr := r.Update(ctx, parent); updateErr != nil {
+			log.Error(updateErr, "unable to update", typeName(r.Type), parent)
+			r.Recorder.Eventf(parent, corev1.EventTypeWarning, "UpdateFailed",
+				"Failed to update: %v", updateErr)
+			return ctrl.Result{}, updateErr
+		}
+		r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Updated",
+			"Updated")
+	}
+
 	// return original reconcile result
 	return result, err
 }
