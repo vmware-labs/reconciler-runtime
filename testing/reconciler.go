@@ -15,6 +15,8 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -56,10 +58,16 @@ type ReconcilerTestCase struct {
 	ExpectCreates []client.Object
 	// ExpectUpdates builds the ordered list of objects expected to be updated during reconciliation
 	ExpectUpdates []client.Object
+	// ExpectPatches builds the ordered list of objects expected to be patched during reconciliation
+	ExpectPatches []PatchRef
 	// ExpectDeletes holds the ordered list of objects expected to be deleted during reconciliation
 	ExpectDeletes []DeleteRef
+	// ExpectDeleteCollections holds the ordered list of collections expected to be deleted during reconciliation
+	ExpectDeleteCollections []DeleteCollectionRef
 	// ExpectStatusUpdates builds the ordered list of objects whose status is updated during reconciliation
 	ExpectStatusUpdates []client.Object
+	// ExpectStatusPatches builds the ordered list of objects whose status is patched during reconciliation
+	ExpectStatusPatches []PatchRef
 
 	// outputs
 
@@ -206,6 +214,25 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	CompareActions(t, "create", tc.ExpectCreates, clientWrapper.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
 	CompareActions(t, "update", tc.ExpectUpdates, clientWrapper.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
 
+	// patches
+	for i, exp := range tc.ExpectPatches {
+		if i >= len(clientWrapper.PatchActions) {
+			t.Errorf("Missing patch: %#v", exp)
+			continue
+		}
+		actual := NewPatchRef(clientWrapper.PatchActions[i])
+
+		if diff := cmp.Diff(exp, actual); diff != "" {
+			t.Errorf("Unexpected patch (-expected, +actual): %s", diff)
+		}
+	}
+	if actual, expected := len(clientWrapper.PatchActions), len(tc.ExpectPatches); actual > expected {
+		for _, extra := range clientWrapper.PatchActions[expected:] {
+			t.Errorf("Extra patch: %#v", extra)
+		}
+	}
+
+	// deletes
 	for i, exp := range tc.ExpectDeletes {
 		if i >= len(clientWrapper.DeleteActions) {
 			t.Errorf("Missing delete: %#v", exp)
@@ -223,7 +250,43 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		}
 	}
 
+	// delete collections
+	for i, exp := range tc.ExpectDeleteCollections {
+		if i >= len(clientWrapper.DeleteCollectionActions) {
+			t.Errorf("Missing delete collection: %#v", exp)
+			continue
+		}
+		actual := NewDeleteCollectionRef(clientWrapper.DeleteCollectionActions[i])
+
+		if diff := cmp.Diff(exp, actual); diff != "" {
+			t.Errorf("Unexpected delete collection (-expected, +actual): %s", diff)
+		}
+	}
+	if actual, expected := len(clientWrapper.DeleteCollectionActions), len(tc.ExpectDeleteCollections); actual > expected {
+		for _, extra := range clientWrapper.DeleteCollectionActions[expected:] {
+			t.Errorf("Extra delete collection: %#v", extra)
+		}
+	}
+
 	CompareActions(t, "status update", tc.ExpectStatusUpdates, clientWrapper.StatusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, SafeDeployDiff, cmpopts.EquateEmpty())
+
+	// status patch
+	for i, exp := range tc.ExpectStatusPatches {
+		if i >= len(clientWrapper.StatusPatchActions) {
+			t.Errorf("Missing status patch: %#v", exp)
+			continue
+		}
+		actual := NewPatchRef(clientWrapper.StatusPatchActions[i])
+
+		if diff := cmp.Diff(exp, actual); diff != "" {
+			t.Errorf("Unexpected status patch (-expected, +actual): %s", diff)
+		}
+	}
+	if actual, expected := len(clientWrapper.StatusPatchActions), len(tc.ExpectStatusPatches); actual > expected {
+		for _, extra := range clientWrapper.StatusPatchActions[expected:] {
+			t.Errorf("Extra status patch: %#v", extra)
+		}
+	}
 
 	// Validate the given objects are not mutated by reconciliation
 	if diff := cmp.Diff(originalGivenObjects, givenObjects, SafeDeployDiff, IgnoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
@@ -240,6 +303,7 @@ func normalizeResult(result controllerruntime.Result) controllerruntime.Result {
 }
 
 func CompareActions(t *testing.T, actionName string, expectedActionFactories []client.Object, actualActions []objectAction, diffOptions ...cmp.Option) {
+	// TODO(scothis) this could be a really good place to play with generics
 	t.Helper()
 	for i, exp := range expectedActionFactories {
 		if i >= len(actualActions) {
@@ -317,6 +381,26 @@ func (ts ReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, factory 
 // and FakeStatsReporter to capture stats.
 type ReconcilerFactory func(t *testing.T, rtc *ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler
 
+type PatchRef struct {
+	Group     string
+	Kind      string
+	Namespace string
+	Name      string
+	PatchType types.PatchType
+	Patch     []byte
+}
+
+func NewPatchRef(action PatchAction) PatchRef {
+	return PatchRef{
+		Group:     action.GetResource().Group,
+		Kind:      action.GetResource().Resource,
+		Namespace: action.GetNamespace(),
+		Name:      action.GetName(),
+		PatchType: action.GetPatchType(),
+		Patch:     action.GetPatch(),
+	}
+}
+
 type DeleteRef struct {
 	Group     string
 	Kind      string
@@ -330,5 +414,23 @@ func NewDeleteRef(action DeleteAction) DeleteRef {
 		Kind:      action.GetResource().Resource,
 		Namespace: action.GetNamespace(),
 		Name:      action.GetName(),
+	}
+}
+
+type DeleteCollectionRef struct {
+	Group     string
+	Kind      string
+	Namespace string
+	Labels    labels.Selector
+	Fields    fields.Selector
+}
+
+func NewDeleteCollectionRef(action DeleteCollectionAction) DeleteCollectionRef {
+	return DeleteCollectionRef{
+		Group:     action.GetResource().Group,
+		Kind:      action.GetResource().Resource,
+		Namespace: action.GetNamespace(),
+		Labels:    action.GetListRestrictions().Labels,
+		Fields:    action.GetListRestrictions().Fields,
 	}
 }
