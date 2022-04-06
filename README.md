@@ -42,9 +42,11 @@ The parent is responsible for:
 - updates the resource status if it was modified
 - logging the reconcilers activities
 - records events for mutations and errors
+- adding and removing a finalizer if needed
 
 The implementor is responsible for:
 - defining the set of sub reconcilers
+- providing instructions on how to clean up on deletion if needed
 
 **Example:**
 

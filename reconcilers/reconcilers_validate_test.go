@@ -14,6 +14,80 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func TestParentReconciler_validate(t *testing.T) {
+	tests := []struct {
+		name       string
+		parent     client.Object
+		reconciler *ParentReconciler
+		shouldErr  string
+	}{
+		{
+			name:       "empty",
+			parent:     &corev1.ConfigMap{},
+			reconciler: &ParentReconciler{},
+		},
+		{
+			name:   "valid",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ParentReconciler{
+				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) error {
+					return nil
+				},
+			},
+		},
+		{
+			name:   "Finalize num in",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ParentReconciler{
+				Finalize: func() error {
+					return nil
+				},
+			},
+			shouldErr: "ParentReconciler Finalize must have correct signature: func(context.Context, *v1.ConfigMap) error, found: func() error",
+		},
+		{
+			name:   "Finalize in 1",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ParentReconciler{
+				Finalize: func(ctx context.Context, parent *corev1.Secret) error {
+					return nil
+				},
+			},
+			shouldErr: "ParentReconciler Finalize must have correct signature: func(context.Context, *v1.ConfigMap) error, found: func(context.Context, *v1.Secret) error",
+		},
+		{
+			name:   "Finalize num out",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ParentReconciler{
+				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) (ctrl.Result, error) {
+					return ctrl.Result{}, nil
+				},
+			},
+			shouldErr: "ParentReconciler Finalize must have correct signature: func(context.Context, *v1.ConfigMap) error, found: func(context.Context, *v1.ConfigMap) (reconcile.Result, error)",
+		},
+		{
+			name:   "Finalize out 1",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ParentReconciler{
+				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) *ctrl.Result {
+					return nil
+				},
+			},
+			shouldErr: "ParentReconciler Finalize must have correct signature: func(context.Context, *v1.ConfigMap) error, found: func(context.Context, *v1.ConfigMap) *reconcile.Result",
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := StashCastParentType(context.TODO(), c.parent)
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+		})
+	}
+}
+
 func TestSyncReconciler_validate(t *testing.T) {
 	tests := []struct {
 		name       string
