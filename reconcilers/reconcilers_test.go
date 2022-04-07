@@ -95,7 +95,7 @@ func TestParentReconciler(t *testing.T) {
 			)
 		})
 	deletedAt := metav1.NewTime(time.UnixMilli(2000))
-	const finalizer = "testing.reconciler.runtime/reconciler-runtime-finalize"
+	const finalizer = "testing.reconciler.runtime/reconciler-runtime-finalizer"
 
 	rts := rtesting.ReconcilerTestSuite{{
 		Name: "resource does not exist",
@@ -317,7 +317,7 @@ func TestParentReconciler(t *testing.T) {
 			}),
 		},
 		ExpectEvents: []rtesting.Event{
-			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated", `Updated`),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated", `Updated finalizers`),
 		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
@@ -343,7 +343,7 @@ func TestParentReconciler(t *testing.T) {
 			}),
 		},
 		ExpectEvents: []rtesting.Event{
-			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated", `Updated`),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated", `Updated finalizers`),
 		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
@@ -376,7 +376,7 @@ func TestParentReconciler(t *testing.T) {
 			}),
 		},
 		ExpectEvents: []rtesting.Event{
-			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated", `Updated`),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated", `Updated finalizers`),
 		},
 		ExpectUpdates: []client.Object{
 			resource.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -430,7 +430,7 @@ func TestParentReconciler(t *testing.T) {
 		ExpectEvents: []rtesting.Event{
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated",
 				`Updated status`),
-			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated", `Updated`),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated", `Updated finalizers`),
 		},
 		ExpectStatusUpdates: []client.Object{
 			resource.StatusDie(func(d *dies.TestResourceStatusDie) {

@@ -177,10 +177,10 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if updateErr := r.Update(ctx, parent); updateErr != nil {
 			log.Error(updateErr, "unable to update", typeName(r.Type), parent)
 			r.Recorder.Eventf(parent, corev1.EventTypeWarning, "UpdateFailed",
-				"Failed to update: %v", updateErr)
+				"Failed to update finalizers: %v", updateErr)
 			return ctrl.Result{}, updateErr
 		}
-		r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Updated", "Updated")
+		r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Updated", "Updated finalizers")
 	}
 
 	// return original reconcile result
@@ -188,7 +188,7 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 func (r *ParentReconciler) reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
-	finalizer := fmt.Sprintf("%s/reconciler-runtime-finalize", parent.GetObjectKind().GroupVersionKind().Group)
+	finalizer := fmt.Sprintf("%s/reconciler-runtime-finalizer", parent.GetObjectKind().GroupVersionKind().Group)
 	if r.Finalize == nil {
 		controllerutil.RemoveFinalizer(parent, finalizer)
 	} else {
