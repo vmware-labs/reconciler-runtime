@@ -454,6 +454,34 @@ func TestParentReconciler(t *testing.T) {
 				return nil
 			},
 		},
+	}, {
+		Name: "finalizers update failed",
+		Key:  testKey,
+		GivenObjects: []client.Object{
+			resource,
+		},
+		WithReactors: []rtesting.ReactionFunc{
+			rtesting.InduceFailure("update", "TestResource"),
+		},
+		ExpectUpdates: []client.Object{
+			resource.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers(finalizer)
+			}).SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("Defaulter", "ran")
+			}),
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "UpdateFailed", `Failed to update finalizers: inducing failure for update TestResource`),
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.Sequence{}
+			},
+			"Finalize": func(ctx context.Context, parent *resources.TestResource) error {
+				return nil
+			},
+		},
+		ShouldErr: true,
 	}}
 
 	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
