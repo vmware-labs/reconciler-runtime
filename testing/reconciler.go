@@ -177,6 +177,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		tc.Verify(t, result, err)
 	}
 
+	// compare tracks
 	actualTracks := tracker.getTrackRequests()
 	for i, exp := range tc.ExpectTracks {
 		if i >= len(actualTracks) {
@@ -194,6 +195,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		}
 	}
 
+	// compare events
 	actualEvents := recorder.events
 	for i, exp := range tc.ExpectEvents {
 		if i >= len(actualEvents) {
@@ -211,10 +213,13 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		}
 	}
 
+	// compare create
 	CompareActions(t, "create", tc.ExpectCreates, clientWrapper.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
+
+	// compare update
 	CompareActions(t, "update", tc.ExpectUpdates, clientWrapper.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
 
-	// patches
+	// compare patches
 	for i, exp := range tc.ExpectPatches {
 		if i >= len(clientWrapper.PatchActions) {
 			t.Errorf("Missing patch: %#v", exp)
@@ -232,7 +237,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		}
 	}
 
-	// deletes
+	// compare deletes
 	for i, exp := range tc.ExpectDeletes {
 		if i >= len(clientWrapper.DeleteActions) {
 			t.Errorf("Missing delete: %#v", exp)
@@ -250,7 +255,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		}
 	}
 
-	// delete collections
+	// compare delete collections
 	for i, exp := range tc.ExpectDeleteCollections {
 		if i >= len(clientWrapper.DeleteCollectionActions) {
 			t.Errorf("Missing delete collection: %#v", exp)
@@ -268,6 +273,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		}
 	}
 
+	// compare status update
 	CompareActions(t, "status update", tc.ExpectStatusUpdates, clientWrapper.StatusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, SafeDeployDiff, cmpopts.EquateEmpty())
 
 	// status patch

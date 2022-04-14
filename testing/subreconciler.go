@@ -59,8 +59,12 @@ type SubReconcilerTestCase struct {
 	ExpectCreates []client.Object
 	// ExpectUpdates builds the ordered list of objects expected to be updated during reconciliation
 	ExpectUpdates []client.Object
+	// ExpectPatches builds the ordered list of objects expected to be patched during reconciliation
+	ExpectPatches []PatchRef
 	// ExpectDeletes holds the ordered list of objects expected to be deleted during reconciliation
 	ExpectDeletes []DeleteRef
+	// ExpectDeleteCollections holds the ordered list of collections expected to be deleted during reconciliation
+	ExpectDeleteCollections []DeleteCollectionRef
 
 	// outputs
 
@@ -188,6 +192,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		tc.Verify(t, result, err)
 	}
 
+	// compare parent
 	expectedParent := tc.Parent.DeepCopyObject().(client.Object)
 	if tc.ExpectParent != nil {
 		expectedParent = tc.ExpectParent.DeepCopyObject().(client.Object)
@@ -196,6 +201,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		t.Errorf("Unexpected parent mutations(-expected, +actual): %s", diff)
 	}
 
+	// compare stashed
 	for key, expected := range tc.ExpectStashedValues {
 		if f, ok := expected.(runtime.Object); ok {
 			expected = f.DeepCopyObject()
@@ -206,6 +212,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		}
 	}
 
+	// compare tracks
 	actualTracks := tracker.getTrackRequests()
 	for i, exp := range tc.ExpectTracks {
 		if i >= len(actualTracks) {
@@ -223,6 +230,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		}
 	}
 
+	// compare events
 	actualEvents := recorder.events
 	for i, exp := range tc.ExpectEvents {
 		if i >= len(actualEvents) {
@@ -240,9 +248,31 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		}
 	}
 
+	// compare create
 	CompareActions(t, "create", tc.ExpectCreates, clientWrapper.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
+
+	// compare update
 	CompareActions(t, "update", tc.ExpectUpdates, clientWrapper.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
 
+	// compare patches
+	for i, exp := range tc.ExpectPatches {
+		if i >= len(clientWrapper.PatchActions) {
+			t.Errorf("Missing patch: %#v", exp)
+			continue
+		}
+		actual := NewPatchRef(clientWrapper.PatchActions[i])
+
+		if diff := cmp.Diff(exp, actual); diff != "" {
+			t.Errorf("Unexpected patch (-expected, +actual): %s", diff)
+		}
+	}
+	if actual, expected := len(clientWrapper.PatchActions), len(tc.ExpectPatches); actual > expected {
+		for _, extra := range clientWrapper.PatchActions[expected:] {
+			t.Errorf("Extra patch: %#v", extra)
+		}
+	}
+
+	// compare deletes
 	for i, exp := range tc.ExpectDeletes {
 		if i >= len(clientWrapper.DeleteActions) {
 			t.Errorf("Missing delete: %#v", exp)
@@ -257,6 +287,24 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	if actual, expected := len(clientWrapper.DeleteActions), len(tc.ExpectDeletes); actual > expected {
 		for _, extra := range clientWrapper.DeleteActions[expected:] {
 			t.Errorf("Extra delete: %#v", extra)
+		}
+	}
+
+	// compare delete collections
+	for i, exp := range tc.ExpectDeleteCollections {
+		if i >= len(clientWrapper.DeleteCollectionActions) {
+			t.Errorf("Missing delete collection: %#v", exp)
+			continue
+		}
+		actual := NewDeleteCollectionRef(clientWrapper.DeleteCollectionActions[i])
+
+		if diff := cmp.Diff(exp, actual); diff != "" {
+			t.Errorf("Unexpected delete collection (-expected, +actual): %s", diff)
+		}
+	}
+	if actual, expected := len(clientWrapper.DeleteCollectionActions), len(tc.ExpectDeleteCollections); actual > expected {
+		for _, extra := range clientWrapper.DeleteCollectionActions[expected:] {
+			t.Errorf("Extra delete collection: %#v", extra)
 		}
 	}
 
