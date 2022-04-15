@@ -74,15 +74,6 @@ type ParentReconciler struct {
 	// multiple SubReconcilers.  It is not called on a delete request.
 	Reconciler SubReconciler
 
-	// Finalize is called on a delete request.  Typically, Finalize cleans
-	// up any state, created by previous reconciles, of which the parent is
-	// not a Kubernetes owner.
-	//
-	// Expected function signature:
-	//     func(ctx context.Context, parent client.Object) error
-	// +optional
-	Finalize interface{}
-
 	Config
 }
 
@@ -94,29 +85,7 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 		return err
 	}
 
-	if err := r.validate(ctx); err != nil {
-		return err
-	}
-
 	return bldr.Complete(r)
-}
-
-func (r *ParentReconciler) validate(ctx context.Context) error {
-	castParentType := RetrieveCastParentType(ctx)
-	// validate Finalize function signature:
-	//     nil
-	//     func(ctx context.Context, parent client.Object) error
-	if r.Finalize != nil {
-		fn := reflect.TypeOf(r.Finalize)
-		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
-			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(castParentType).AssignableTo(fn.In(1)) ||
-			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(0)) {
-			return fmt.Errorf("ParentReconciler Finalize must have correct signature: func(context.Context, %s) error, found: %s", reflect.TypeOf(castParentType), fn)
-		}
-	}
-
-	return nil
 }
 
 func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -188,27 +157,6 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 func (r *ParentReconciler) reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
-	finalizer := fmt.Sprintf("%s/reconciler-runtime-finalizer", parent.GetObjectKind().GroupVersionKind().Group)
-	if r.Finalize == nil {
-		controllerutil.RemoveFinalizer(parent, finalizer)
-	} else {
-		controllerutil.AddFinalizer(parent, finalizer)
-	}
-
-	if r.Finalize == nil && parent.GetDeletionTimestamp() != nil {
-		return ctrl.Result{}, nil
-	}
-
-	if parent.GetDeletionTimestamp() != nil {
-		if err := r.finalize(ctx, parent); err != nil {
-			return ctrl.Result{}, err
-		}
-
-		controllerutil.RemoveFinalizer(parent, finalizer)
-
-		return ctrl.Result{}, nil
-	}
-
 	result, err := r.Reconciler.Reconcile(ctx, parent)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -216,18 +164,6 @@ func (r *ParentReconciler) reconcile(ctx context.Context, parent client.Object) 
 
 	r.copyGeneration(parent)
 	return result, nil
-}
-
-func (r *ParentReconciler) finalize(ctx context.Context, parent client.Object) error {
-	fn := reflect.ValueOf(r.Finalize)
-	out := fn.Call([]reflect.Value{
-		reflect.ValueOf(ctx),
-		reflect.ValueOf(parent),
-	})
-	if !out[0].IsNil() {
-		return out[0].Interface().(error)
-	}
-	return nil
 }
 
 func (r *ParentReconciler) hasStatus(obj client.Object) bool {
@@ -339,6 +275,15 @@ type SyncReconciler struct {
 	//     func(ctx context.Context, parent client.Object) (ctrl.Result, error)
 	Sync interface{}
 
+	// Finalize is called on a delete request.  Typically, Finalize cleans
+	// up any state, created by previous reconciles, of which the parent is
+	// not a Kubernetes owner.
+	//
+	// Expected function signature:
+	//     func(ctx context.Context, parent client.Object) error
+	// +optional
+	Finalize interface{}
+
 	Config
 }
 
@@ -382,10 +327,56 @@ func (r *SyncReconciler) validate(ctx context.Context) error {
 		}
 	}
 
+	// validate Finalize function signature:
+	//     nil
+	//     func(ctx context.Context, parent client.Object) error
+	if r.Finalize != nil {
+		castParentType := RetrieveCastParentType(ctx)
+		fn := reflect.TypeOf(r.Finalize)
+		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
+			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(castParentType).AssignableTo(fn.In(1)) ||
+			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(0)) {
+			return fmt.Errorf("SyncReconciler Finalize must have correct signature: func(context.Context, %s) error, found: %s", reflect.TypeOf(castParentType), fn)
+		}
+	}
+
 	return nil
 }
 
+func UniqueFinalizer(ctx context.Context, group string) string {
+	finalizerCount, ok := RetrieveValue(ctx, "finalizer-count").(int)
+	if !ok {
+		finalizerCount = 1
+	}
+	finalizer := fmt.Sprintf("%s/%d-finalizer", group, finalizerCount)
+	StashValue(ctx, "finalizer-count", finalizerCount+1)
+
+	return finalizer
+}
+
 func (r *SyncReconciler) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
+	finalizer := UniqueFinalizer(ctx, parent.GetObjectKind().GroupVersionKind().Group)
+	if r.Finalize != nil {
+		controllerutil.AddFinalizer(parent, finalizer)
+	} else {
+		controllerutil.RemoveFinalizer(parent, finalizer)
+	}
+
+	if r.Finalize == nil && parent.GetDeletionTimestamp() != nil {
+		return ctrl.Result{}, nil
+	}
+
+	if parent.GetDeletionTimestamp() != nil {
+		if err := r.finalize(ctx, parent); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		controllerutil.RemoveFinalizer(parent, finalizer)
+
+		return ctrl.Result{}, nil
+	}
+
 	result, err := r.sync(ctx, parent)
 	if err != nil {
 		r.Log.Error(err, "unable to sync", typeName(parent), parent)
@@ -415,6 +406,18 @@ func (r *SyncReconciler) sync(ctx context.Context, parent client.Object) (ctrl.R
 		}
 	}
 	return result, err
+}
+
+func (r *SyncReconciler) finalize(ctx context.Context, parent client.Object) error {
+	fn := reflect.ValueOf(r.Finalize)
+	out := fn.Call([]reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(parent),
+	})
+	if !out[0].IsNil() {
+		return out[0].Interface().(error)
+	}
+	return nil
 }
 
 var (
@@ -650,6 +653,10 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	if r.mutationCache == nil {
 		r.mutationCache = cache.NewExpiring()
+	}
+
+	if parent.GetDeletionTimestamp() != nil {
+		return ctrl.Result{}, nil
 	}
 
 	child, err := r.reconcile(ctx, parent)
