@@ -95,6 +95,94 @@ func TestSyncReconciler_validate(t *testing.T) {
 			},
 			shouldErr: "SyncReconciler must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap) (reconcile.Result, string)",
 		},
+		{
+			name:   "valid Finalize",
+			parent: &corev1.ConfigMap{},
+			reconciler: &SyncReconciler{
+				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+					return nil
+				},
+				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) error {
+					return nil
+				},
+			},
+		},
+		{
+			name:   "valid Finalize with result",
+			parent: &corev1.ConfigMap{},
+			reconciler: &SyncReconciler{
+				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+					return nil
+				},
+				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) (ctrl.Result, error) {
+					return ctrl.Result{}, nil
+				},
+			},
+		},
+		{
+			name:   "Finalize num in",
+			parent: &corev1.ConfigMap{},
+			reconciler: &SyncReconciler{
+				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+					return nil
+				},
+				Finalize: func() error {
+					return nil
+				},
+			},
+			shouldErr: "SyncReconciler must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func() error",
+		},
+		{
+			name:   "Finalize in 1",
+			parent: &corev1.ConfigMap{},
+			reconciler: &SyncReconciler{
+				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+					return nil
+				},
+				Finalize: func(ctx context.Context, parent *corev1.Secret) error {
+					return nil
+				},
+			},
+			shouldErr: "SyncReconciler must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.Secret) error",
+		},
+		{
+			name:   "Finalize num out",
+			parent: &corev1.ConfigMap{},
+			reconciler: &SyncReconciler{
+				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+					return nil
+				},
+				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) {
+				},
+			},
+			shouldErr: "SyncReconciler must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap)",
+		},
+		{
+			name:   "Finalize out 1",
+			parent: &corev1.ConfigMap{},
+			reconciler: &SyncReconciler{
+				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+					return nil
+				},
+				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) string {
+					return ""
+				},
+			},
+			shouldErr: "SyncReconciler must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap) string",
+		},
+		{
+			name:   "Finalize result out 1",
+			parent: &corev1.ConfigMap{},
+			reconciler: &SyncReconciler{
+				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+					return nil
+				},
+				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) (ctrl.Result, string) {
+					return ctrl.Result{}, ""
+				},
+			},
+			shouldErr: "SyncReconciler must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap) (reconcile.Result, string)",
+		},
 	}
 
 	for _, c := range tests {

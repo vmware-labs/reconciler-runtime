@@ -25,6 +25,7 @@
 	- [Stash](#stash)
 	- [Tracker](#tracker)
 	- [Status](#status)
+	- [Finalizers](#finalizers)
 - [Contributing](#contributing)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
@@ -75,6 +76,8 @@ The [`SubReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runti
 
 The [`SyncReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SyncReconciler) is the minimal type-aware sub reconciler. It is used to manage a portion of the parent's reconciliation that is custom, or whose behavior is not covered by another sub reconciler type. Common uses include looking up reference data for the reconciliation, or controlling resources that are not kubernetes resources.
 
+When a resource is deleted that has pending finalizers, the Finalize method is called instead of the Sync method. If the SyncDuringFinalization field is true, the Sync method will also by called. If creating state that must be manually cleaned up, it is the users responsibility to define and clear finalizers. Using the [parent finalizer helper methods](#finalizers) is strongly encouraged with working under a [ParentReconciler](#parentreconciler).
+
 **Example:**
 
 While sync reconcilers have the ability to do anything a reconciler can do, it's best to keep them focused on a single goal, letting the parent reconciler structure multiple sub reconcilers together. In this case, we use the parent resource and the client to resolve the target image and stash the value on the parent's status. The status is a good place to stash simple values that can be made public. More [advanced forms of stashing](#stash) are also available. Learn more about [status and its contract](#status).
@@ -110,6 +113,7 @@ The ChildReconciler is responsible for:
 - logging the reconcilers activities
 - recording child mutations and errors for the parent resource
 - adapting to child resource changes applied by mutating webhooks
+- adding and clearing of a finalizer, if specified
 
 The implementor is responsible for:
 - defining the desired resource
@@ -117,6 +121,10 @@ The implementor is responsible for:
 - merging the actual resource with the desired state (often as simple as copying the spec and labels)
 - updating the parent's status from the child
 - defining the status subresource [according to the contract](#status) 
+
+When a finalizer is defined, the parent resource is patched to add the finalizer before creating the child; it is removed after the child is deleted. If the parent resource is pending deletion, the desired child method is not called, and existing children are deleted.
+
+> Warning: It is crucial that each ChildReconciler using a finalizer have a unique and stable finalizer name. Two reconcilers that use the same finalizer, or a reconciler that changed the name of its finalizer, may leak the child resource when the parent is deleted, or the parent resource may never terminate.
 
 **Example:**
 
@@ -514,6 +522,46 @@ type MyResource struct {
   // +optional
   Status MyResourceStatus `json:"status"`
 }
+```
+
+### Finalizers
+
+[Finalizers](https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/) allow a reconciler to clean up state for a resource that has been deleted by a client, and not yet fully removed. Terminating resources have `.metadata.deletionTimestamp` set. Resources with finalizers will stay in this terminating state until all finalizers are cleared from the resource. While using the [Kubernetes garbage collector](https://kubernetes.io/docs/concepts/architecture/garbage-collection/) is recommended when possible, finalizer are useful for cases when state exists outside of the same cluster, scope, and namespace of the parent resource that needs to be cleaned up when no longer used.
+
+Deleting a resource that uses finalizers requires the controller to be running.
+
+The [AddParentFinalizer](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#AddParentFinalizer) and [ClearParentFinalizer](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ClearParentFinalizer) functions patch the parent resource to update its finalizers. These methods work with [CastParents](#castparent) resources and use the same client the [ParentReconciler](#parentreconciler) used to originally load the parent resource. They can be called inside [SubReconcilers](#subreconciler) that may use a different client.
+
+When an update is required, only the `.metadata.finalizers` field is patched. The parent's `.metadata.resourceVersion` is used as an optimistic concurrency lock, and is updated with the value returned from the server. Any error from the server will cause the resource reconciliation to err. When testing with the [SubReconcilerTestSuite](#subreconcilertestsuite), the resource version of the parent defaults to `"999"`, the patch bytes include the resource version and the response increments the parent's resource version. For a parent with the default resource version that patches a finalizer, the expected parent will have a resource version of `"1000"`.
+
+A minimal test case for a sub reconciler that adds a finalizer may look like:
+
+```go
+	...
+	{
+		Name: "add 'test.finalizer' finalizer",
+		Parent: resourceDie,
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resourceDie, scheme, corev1.EventTypeNormal, "FinalizerPatched",
+				`Patched finalizer %q`, "test.finalizer"),
+		},
+		ExpectParent: resourceDie.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers("test.finalizer")
+				d.ResourceVersion("1000")
+			}),
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: resourceDie.GetNamespace(),
+				Name:      resourceDie.GetName(),
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":["test.finalizer"],"resourceVersion":"999"}}`),
+			},
+		},
+	},
+	...
 ```
 
 ## Contributing

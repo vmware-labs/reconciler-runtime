@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -71,12 +72,9 @@ func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration
 	name := typeName(apiType)
 	log := newWarnOnceLogger(ctrl.Log.WithName("controllers").WithName(name))
 	return Config{
-		Client:    mgr.GetClient(),
-		APIReader: mgr.GetAPIReader(),
-		Recorder:  mgr.GetEventRecorderFor("controller"),
-		Log:       log,
-		Tracker:   tracker.New(syncPeriod),
-	}
+		Log:     log,
+		Tracker: tracker.New(syncPeriod),
+	}.WithCluster(mgr)
 }
 
 // ParentReconciler is a controller-runtime reconciler that reconciles a given
@@ -187,7 +185,8 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 func (r *ParentReconciler) reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
-	if parent.GetDeletionTimestamp() != nil {
+	if parent.GetDeletionTimestamp() != nil && len(parent.GetFinalizers()) == 0 {
+		// resource is being deleted and has no pending finalizers, nothing to do
 		return ctrl.Result{}, nil
 	}
 
@@ -348,12 +347,29 @@ type SyncReconciler struct {
 	// +optional
 	Setup func(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error
 
-	// Sync does whatever work is necessary for the reconciler
+	// SyncDuringFinalization indicates the the Sync method should be called regardless of whether
+	SyncDuringFinalization bool
+
+	// Sync does whatever work is necessary for the reconciler.
+	//
+	// If SyncDuringFinalization is true this method is called when the resource is pending
+	// deletion. This is useful if the reconciler is managing reference data.
 	//
 	// Expected function signature:
 	//     func(ctx context.Context, parent client.Object) error
 	//     func(ctx context.Context, parent client.Object) (ctrl.Result, error)
 	Sync interface{}
+
+	// Finalize does whatever work is necessary for the reconciler when the resource is pending
+	// deletion. If this reconciler sets a finalizer it should do the necessary work to clean up
+	// state the finalizer represents and then clear the finalizer.
+	//
+	// Expected function signature:
+	//     func(ctx context.Context, parent client.Object) error
+	//     func(ctx context.Context, parent client.Object) (ctrl.Result, error)
+	//
+	// +optional
+	Finalize interface{}
 }
 
 func (r *SyncReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
@@ -402,6 +418,34 @@ func (r *SyncReconciler) validate(ctx context.Context) error {
 		}
 	}
 
+	// validate Finalize function signature:
+	//     nil
+	//     func(ctx context.Context, parent client.Object) error
+	//     func(ctx context.Context, parent client.Object) (ctrl.Result, error)
+	if r.Finalize != nil {
+		castParentType := RetrieveCastParentType(ctx)
+		fn := reflect.TypeOf(r.Finalize)
+		err := fmt.Errorf("SyncReconciler must implement Finalize: nil | func(context.Context, %s) error | func(context.Context, %s) (ctrl.Result, error), found: %s", reflect.TypeOf(castParentType), reflect.TypeOf(castParentType), fn)
+		if fn.NumIn() != 2 ||
+			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(castParentType).AssignableTo(fn.In(1)) {
+			return err
+		}
+		switch fn.NumOut() {
+		case 1:
+			if !reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(0)) {
+				return err
+			}
+		case 2:
+			if !reflect.TypeOf(ctrl.Result{}).AssignableTo(fn.Out(0)) ||
+				!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(1)) {
+				return err
+			}
+		default:
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -412,10 +456,24 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, parent client.Object) (c
 	}
 	ctx = logr.NewContext(ctx, log)
 
-	result, err := r.sync(ctx, parent)
-	if err != nil {
-		log.Error(err, "unable to sync")
-		return ctrl.Result{}, err
+	result := ctrl.Result{}
+
+	if parent.GetDeletionTimestamp() == nil || r.SyncDuringFinalization {
+		syncResult, err := r.sync(ctx, parent)
+		if err != nil {
+			log.Error(err, "unable to sync")
+			return ctrl.Result{}, err
+		}
+		result = AggregateResults(result, syncResult)
+	}
+
+	if parent.GetDeletionTimestamp() != nil {
+		finalizeResult, err := r.finalize(ctx, parent)
+		if err != nil {
+			log.Error(err, "unable to finalize")
+			return ctrl.Result{}, err
+		}
+		result = AggregateResults(result, finalizeResult)
 	}
 
 	return result, nil
@@ -423,6 +481,32 @@ func (r *SyncReconciler) Reconcile(ctx context.Context, parent client.Object) (c
 
 func (r *SyncReconciler) sync(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	fn := reflect.ValueOf(r.Sync)
+	out := fn.Call([]reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(parent),
+	})
+	result := ctrl.Result{}
+	var err error
+	switch len(out) {
+	case 2:
+		result = out[0].Interface().(ctrl.Result)
+		if !out[1].IsNil() {
+			err = out[1].Interface().(error)
+		}
+	case 1:
+		if !out[0].IsNil() {
+			err = out[0].Interface().(error)
+		}
+	}
+	return result, err
+}
+
+func (r *SyncReconciler) finalize(ctx context.Context, parent client.Object) (ctrl.Result, error) {
+	if r.Finalize == nil {
+		return ctrl.Result{}, nil
+	}
+
+	fn := reflect.ValueOf(r.Finalize)
 	out := fn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
 		reflect.ValueOf(parent),
@@ -478,6 +562,18 @@ type ChildReconciler struct {
 	// ChildListType is the listing type for the child type. For example,
 	// PodList is the list type for Pod
 	ChildListType client.ObjectList
+
+	// Finalizer is set on the parent resource before a child resource is created, and cleared
+	// after a child resource is deleted. The value must be unique to this specific reconciler
+	// instance and not shared. Reusing a value may result in orphaned resources when the parent
+	// resource is deleted.
+	//
+	// Using a finalizer is encouraged when the Kubernetes garbage collector is unable to delete
+	// the child resource automatically, like when the parent and child are in different
+	// namespaces, scopes or clusters.
+	//
+	// +optional
+	Finalizer string
 
 	// Setup performs initialization on the manager and builder this reconciler
 	// will run with. It's common to setup field indexes and watch resources.
@@ -707,7 +803,7 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (
 			// the created child from a previous turn may be slow to appear in the informer cache, but shouldn't appear
 			// on the parent as being not ready.
 			apierr := err.(apierrs.APIStatus)
-			conflicted := r.ChildType.DeepCopyObject().(client.Object)
+			conflicted := newEmpty(r.ChildType).(client.Object)
 			_ = c.APIReader.Get(ctx, types.NamespacedName{Namespace: parent.GetNamespace(), Name: apierr.Status().Details.Name}, conflicted)
 			if r.ourChild(parent, conflicted) {
 				// skip updating the parent's status, fail and try again
@@ -730,8 +826,8 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	pc := RetrieveParentConfigOrDie(ctx)
 	c := RetrieveConfigOrDie(ctx)
 
-	actual := r.ChildType.DeepCopyObject().(client.Object)
-	children := r.ChildListType.DeepCopyObject().(client.ObjectList)
+	actual := newEmpty(r.ChildType).(client.Object)
+	children := newEmpty(r.ChildListType).(client.ObjectList)
 	if err := c.List(ctx, children, client.InNamespace(parent.GetNamespace())); err != nil {
 		return nil, err
 	}
@@ -780,8 +876,16 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 			}
 			pc.Recorder.Eventf(parent, corev1.EventTypeNormal, "Deleted",
 				"Deleted %s %q", typeName(r.ChildType), actual.GetName())
+
+			if err := ClearParentFinalizer(ctx, parent, r.Finalizer); err != nil {
+				return nil, err
+			}
 		}
 		return nil, nil
+	}
+
+	if err := AddParentFinalizer(ctx, parent, r.Finalizer); err != nil {
+		return nil, err
 	}
 
 	// create child if it doesn't exist
@@ -856,6 +960,11 @@ func (r *ChildReconciler) semanticEquals(a1, a2 client.Object) bool {
 }
 
 func (r *ChildReconciler) desiredChild(ctx context.Context, parent client.Object) (client.Object, error) {
+	if parent.GetDeletionTimestamp() != nil {
+		// the parent is pending deletion, cleanup the child resource
+		return nil, nil
+	}
+
 	fn := reflect.ValueOf(r.DesiredChild)
 	out := fn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
@@ -981,21 +1090,10 @@ func (r Sequence) Reconcile(ctx context.Context, parent client.Object) (ctrl.Res
 		if err != nil {
 			return ctrl.Result{}, err
 		}
-		aggregateResult = r.aggregateResult(result, aggregateResult)
+		aggregateResult = AggregateResults(result, aggregateResult)
 	}
 
 	return aggregateResult, nil
-}
-
-func (r Sequence) aggregateResult(result, aggregate ctrl.Result) ctrl.Result {
-	if result.RequeueAfter != 0 && (aggregate.RequeueAfter == 0 || result.RequeueAfter < aggregate.RequeueAfter) {
-		aggregate.RequeueAfter = result.RequeueAfter
-	}
-	if result.Requeue {
-		aggregate.Requeue = true
-	}
-
-	return aggregate
 }
 
 // CastParent casts the ParentReconciler's type by projecting the resource data
@@ -1161,6 +1259,89 @@ func namespaceName(obj client.Object) types.NamespacedName {
 		Namespace: obj.GetNamespace(),
 		Name:      obj.GetName(),
 	}
+}
+
+// AddParentFinalizer ensures the desired finalizer exists on the parent resource. The client that
+// loaded the parent resource is used to patch it with the finalizer if not already set.
+func AddParentFinalizer(ctx context.Context, parent client.Object, finalizer string) error {
+	return ensureParentFinalizer(ctx, parent, finalizer, true)
+}
+
+// ClearParentFinalizer ensures the desired finalizer does not exist on the parent resource. The
+// client that loaded the parent resource is used to patch it with the finalizer if set.
+func ClearParentFinalizer(ctx context.Context, parent client.Object, finalizer string) error {
+	return ensureParentFinalizer(ctx, parent, finalizer, false)
+}
+
+func ensureParentFinalizer(ctx context.Context, parent client.Object, finalizer string, add bool) error {
+	config := RetrieveParentConfig(ctx)
+	if config.IsEmpty() {
+		panic(fmt.Errorf("parent config must exist on the context. Check that the context from a ParentReconciler"))
+	}
+	parentType := RetrieveParentType(ctx)
+	if parentType == nil {
+		panic(fmt.Errorf("parent type must exist on the context. Check that the context from a ParentReconciler"))
+	}
+
+	if finalizer == "" || controllerutil.ContainsFinalizer(parent, finalizer) == add {
+		// nothing to do
+		return nil
+	}
+
+	// cast the current object back to the parent so scheme-aware, typed client can operate on it
+	cast := &CastParent{
+		Type: parentType,
+		Reconciler: &SyncReconciler{
+			SyncDuringFinalization: true,
+			Sync: func(ctx context.Context, current client.Object) error {
+				log := logr.FromContextOrDiscard(ctx)
+
+				desired := current.DeepCopyObject().(client.Object)
+				if add {
+					log.Info("adding parent finalizer", "finalizer", finalizer)
+					controllerutil.AddFinalizer(desired, finalizer)
+				} else {
+					log.Info("removing parent finalizer", "finalizer", finalizer)
+					controllerutil.RemoveFinalizer(desired, finalizer)
+				}
+
+				patch := client.MergeFromWithOptions(current, client.MergeFromWithOptimisticLock{})
+				if err := config.Patch(ctx, desired, patch); err != nil {
+					log.Error(err, "unable to patch parent finalizers", "finalizer", finalizer)
+					config.Recorder.Eventf(current, corev1.EventTypeWarning, "FinalizerPatchFailed",
+						"Failed to patch finalizer %q: %s", finalizer, err)
+					return err
+				}
+				config.Recorder.Eventf(current, corev1.EventTypeNormal, "FinalizerPatched",
+					"Patched finalizer %q", finalizer)
+
+				// update current object with values from the api server after patching
+				current.SetFinalizers(desired.GetFinalizers())
+				current.SetResourceVersion(desired.GetResourceVersion())
+				current.SetGeneration(desired.GetGeneration())
+
+				return nil
+			},
+		},
+	}
+
+	_, err := cast.Reconcile(ctx, parent)
+	return err
+}
+
+// AggregateResults combines multiple results into a single result. If any result requests
+// requeue, the aggregate is requeued. The shortest non-zero requeue after is the aggregate value.
+func AggregateResults(results ...ctrl.Result) ctrl.Result {
+	aggregate := ctrl.Result{}
+	for _, result := range results {
+		if result.RequeueAfter != 0 && (aggregate.RequeueAfter == 0 || result.RequeueAfter < aggregate.RequeueAfter) {
+			aggregate.RequeueAfter = result.RequeueAfter
+		}
+		if result.Requeue {
+			aggregate.Requeue = true
+		}
+	}
+	return aggregate
 }
 
 // MergeMaps flattens a sequence of maps into a single map. Keys in latter maps
