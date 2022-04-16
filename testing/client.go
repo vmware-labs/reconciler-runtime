@@ -22,9 +22,11 @@ type clientWrapper struct {
 	client                  client.Client
 	CreateActions           []objectAction
 	UpdateActions           []objectAction
+	PatchActions            []PatchAction
 	DeleteActions           []DeleteAction
 	DeleteCollectionActions []DeleteCollectionAction
 	StatusUpdateActions     []objectAction
+	StatusPatchActions      []PatchAction
 	genCount                int
 	reactionChain           []Reactor
 }
@@ -37,13 +39,16 @@ func NewFakeClient(scheme *runtime.Scheme, objs ...client.Object) *clientWrapper
 		o[i] = objs[i]
 	}
 	client := &clientWrapper{
-		client:              fakeclient.NewFakeClientWithScheme(scheme, o...),
-		CreateActions:       []objectAction{},
-		UpdateActions:       []objectAction{},
-		DeleteActions:       []DeleteAction{},
-		StatusUpdateActions: []objectAction{},
-		genCount:            0,
-		reactionChain:       []Reactor{},
+		client:                  fakeclient.NewFakeClientWithScheme(scheme, o...),
+		CreateActions:           []objectAction{},
+		UpdateActions:           []objectAction{},
+		PatchActions:            []PatchAction{},
+		DeleteActions:           []DeleteAction{},
+		DeleteCollectionActions: []DeleteCollectionAction{},
+		StatusUpdateActions:     []objectAction{},
+		StatusPatchActions:      []PatchAction{},
+		genCount:                0,
+		reactionChain:           []Reactor{},
 	}
 	// generate names on create
 	client.AddReactor("create", "*", func(action Action) (bool, runtime.Object, error) {
@@ -211,7 +216,25 @@ func (w *clientWrapper) Update(ctx context.Context, obj client.Object, opts ...c
 }
 
 func (w *clientWrapper) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-	panic(fmt.Errorf("Patch() is not implemented"))
+	gvr, _, _, err := w.objmeta(obj)
+	if err != nil {
+		return err
+	}
+	b, err := patch.Data(obj)
+	if err != nil {
+		return err
+	}
+
+	// capture action
+	w.PatchActions = append(w.PatchActions, clientgotesting.NewPatchAction(gvr, obj.GetNamespace(), obj.GetName(), patch.Type(), b))
+
+	// call reactor chain
+	err = w.react(clientgotesting.NewPatchAction(gvr, obj.GetNamespace(), obj.GetName(), patch.Type(), b))
+	if err != nil {
+		return err
+	}
+
+	return w.client.Patch(ctx, obj, patch, opts...)
 }
 
 func (w *clientWrapper) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
@@ -269,7 +292,25 @@ func (w *statusWriterWrapper) Update(ctx context.Context, obj client.Object, opt
 }
 
 func (w *statusWriterWrapper) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
-	panic(fmt.Errorf("Patch() is not implemented"))
+	gvr, _, _, err := w.clientWrapper.objmeta(obj)
+	if err != nil {
+		return err
+	}
+	b, err := patch.Data(obj)
+	if err != nil {
+		return err
+	}
+
+	// capture action
+	w.clientWrapper.StatusPatchActions = append(w.clientWrapper.StatusPatchActions, clientgotesting.NewPatchSubresourceAction(gvr, obj.GetNamespace(), obj.GetName(), patch.Type(), b, "status"))
+
+	// call reactor chain
+	err = w.clientWrapper.react(clientgotesting.NewPatchSubresourceAction(gvr, obj.GetNamespace(), obj.GetName(), patch.Type(), b, "status"))
+	if err != nil {
+		return err
+	}
+
+	return w.statusWriter.Patch(ctx, obj, patch, opts...)
 }
 
 // InduceFailure is used in conjunction with reconciler test's WithReactors field.
