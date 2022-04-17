@@ -476,9 +476,8 @@ func TestChildReconciler(t *testing.T) {
 	}
 
 	rts := rtesting.SubReconcilerTestSuite{{
-		Name:         "preserve no child",
-		Parent:       resourceReady,
-		GivenObjects: []client.Object{},
+		Name:   "preserve no child",
+		Parent: resourceReady,
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return defaultChildReconciler(c)
@@ -507,7 +506,6 @@ func TestChildReconciler(t *testing.T) {
 			SpecDie(func(d *dies.TestResourceSpecDie) {
 				d.AddField("foo", "bar")
 			}),
-		GivenObjects: []client.Object{},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return defaultChildReconciler(c)
@@ -644,7 +642,6 @@ func TestChildReconciler(t *testing.T) {
 			SpecDie(func(d *dies.TestResourceSpecDie) {
 				d.AddField("foo", "bar")
 			}),
-		GivenObjects: []client.Object{},
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("create", "ConfigMap", rtesting.InduceFailureOpts{
 				Error: apierrs.NewAlreadyExists(schema.GroupResource{}, testName),
@@ -678,7 +675,6 @@ func TestChildReconciler(t *testing.T) {
 			SpecDie(func(d *dies.TestResourceSpecDie) {
 				d.AddField("foo", "bar")
 			}),
-		GivenObjects: []client.Object{},
 		APIGivenObjects: []client.Object{
 			configMapGiven,
 		},
@@ -748,7 +744,6 @@ func TestChildReconciler(t *testing.T) {
 			SpecDie(func(d *dies.TestResourceSpecDie) {
 				d.AddField("foo", "bar")
 			}),
-		GivenObjects: []client.Object{},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
@@ -773,9 +768,8 @@ func TestChildReconciler(t *testing.T) {
 			configMapCreate,
 		},
 	}, {
-		Name:         "error listing children",
-		Parent:       resourceReady,
-		GivenObjects: []client.Object{},
+		Name:   "error listing children",
+		Parent: resourceReady,
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("list", "ConfigMapList"),
 		},
@@ -791,7 +785,6 @@ func TestChildReconciler(t *testing.T) {
 			SpecDie(func(d *dies.TestResourceSpecDie) {
 				d.AddField("foo", "bar")
 			}),
-		GivenObjects: []client.Object{},
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("create", "ConfigMap"),
 		},
@@ -893,9 +886,8 @@ func TestChildReconciler(t *testing.T) {
 		},
 		ShouldErr: true,
 	}, {
-		Name:         "error creating desired child",
-		Parent:       resource,
-		GivenObjects: []client.Object{},
+		Name:   "error creating desired child",
+		Parent: resource,
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
@@ -935,9 +927,6 @@ func TestSequence(t *testing.T) {
 	rts := rtesting.SubReconcilerTestSuite{{
 		Name:   "sub reconciler erred",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
@@ -954,9 +943,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "preserves result, Requeue",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return &reconcilers.SyncReconciler{
@@ -971,9 +957,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "preserves result, RequeueAfter",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
@@ -990,9 +973,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "ignores result on err",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
@@ -1010,9 +990,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "Requeue + empty => Requeue",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
@@ -1035,9 +1012,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "empty + Requeue => Requeue",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
@@ -1060,9 +1034,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "RequeueAfter + empty => RequeueAfter",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
@@ -1085,9 +1056,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "empty + RequeueAfter => RequeueAfter",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
@@ -1110,9 +1078,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "RequeueAfter + Requeue => RequeueAfter",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
@@ -1135,9 +1100,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "Requeue + RequeueAfter => RequeueAfter",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
@@ -1160,9 +1122,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "RequeueAfter(1m) + RequeueAfter(2m) => RequeueAfter(1m)",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
@@ -1185,9 +1144,6 @@ func TestSequence(t *testing.T) {
 	}, {
 		Name:   "RequeueAfter(2m) + RequeueAfter(1m) => RequeueAfter(1m)",
 		Parent: resource,
-		GivenObjects: []client.Object{
-			resource,
-		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return reconcilers.Sequence{
