@@ -119,13 +119,13 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		apiGivenObjects = append(apiGivenObjects, f.DeepCopyObject().(client.Object))
 	}
 
-	clientWrapper := NewFakeClient(scheme, givenObjects...)
+	clientWrapper := NewFakeClient(scheme, append(givenObjects, tc.Parent.DeepCopyObject().(client.Object))...)
 	for i := range tc.WithReactors {
 		// in reverse order since we prepend
 		reactor := tc.WithReactors[len(tc.WithReactors)-1-i]
 		clientWrapper.PrependReactor("*", "*", reactor)
 	}
-	apiReader := NewFakeClient(scheme, apiGivenObjects...)
+	apiReader := NewFakeClient(scheme, append(apiGivenObjects, tc.Parent.DeepCopyObject().(client.Object))...)
 	tracker := createTracker()
 	recorder := &eventRecorder{
 		events: []Event{},
