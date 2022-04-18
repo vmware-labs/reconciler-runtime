@@ -52,9 +52,8 @@ Parent reconcilers tend to be quite simple, as they delegate their work to sub r
 
 ```go
 func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
-	c.Log = c.Log.WithName("Function")
-
 	return &reconcilers.ParentReconciler{
+		Name: "Function",
 		Type: &buildv1alpha1.Function{},
 		Reconciler: reconcilers.Sequence{
 			FunctionTargetImageReconciler(c),
@@ -81,10 +80,11 @@ While sync reconcilers have the ability to do anything a reconciler can do, it's
 
 ```go
 func FunctionTargetImageReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	c.Log = c.Log.WithName("TargetImage")
-
 	return &reconcilers.SyncReconciler{
+		Name: "TargetImage",
 		Sync: func(ctx context.Context, parent *buildv1alpha1.Function) error {
+			log := logr.FromContextOrDiscard(ctx)
+
 			targetImage, err := resolveTargetImage(ctx, c.Client, parent)
 			if err != nil {
 				return err
@@ -125,9 +125,8 @@ Now it's time to create the child Image resource that will do the work of buildi
 
 ```go
 func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	c.Log = c.Log.WithName("ChildImage")
-
 	return &reconcilers.ChildReconciler{
+		Name:          "ChildImage",
 		ChildType:     &kpackbuildv1alpha1.Image{},
 		ChildListType: &kpackbuildv1alpha1.ImageList{},
 
@@ -214,9 +213,8 @@ JSON encoding is used as the intermediate representation. Operations on a cast p
 
 ```go
 func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
-	c.Log = c.Log.WithName("Function")
-
 	return &reconcilers.ParentReconciler{
+		Name: "Function",
 		Type: &buildv1alpha1.Function{},
 		Reconciler: reconcilers.Sequence{
 			&reconcilers.CastParent{
@@ -247,9 +245,8 @@ A Sequence is commonly used in a ParentReconciler, but may be used anywhere a Su
 
 ```go
 func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
-	c.Log = c.Log.WithName("Function")
-
 	return &reconcilers.ParentReconciler{
+		Name: "Function",
 		Type: &buildv1alpha1.Function{},
 		Reconciler: reconcilers.Sequence{
 			FunctionTargetImageReconciler(c),
@@ -391,9 +388,8 @@ The stash allows passing arbitrary state between sub reconcilers within the scop
 const exampleStashKey reconcilers.StashKey = "example"
 
 func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	c.Log = c.Log.WithName("StashExample")
-
 	return &reconcilers.SyncReconciler{
+		Name: "StashExample",
 		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
 			value := Example{} // something we want to expose to a sub reconciler later in this chain
 			reconcilers.StashValue(ctx, exampleStashKey, *value)
@@ -406,9 +402,8 @@ func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
 
 
 func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	c.Log = c.Log.WithName("StashExample")
-
 	return &reconcilers.SyncReconciler{
+		Name: "StashExample",
 		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
 			value, ok := reconcilers.RetrieveValue(ctx, exampleStashKey).(Example)
 			if !ok {
@@ -432,10 +427,11 @@ The stream gateways in projectriff fetch the image references they use to run fr
 
 ```go
 func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string) reconcilers.SubReconciler {
-	c.Log = c.Log.WithName("SyncConfig")
-
 	return &reconcilers.SyncReconciler{
+		Name: "SyncConfig",
 		Sync: func(ctx context.Context, parent *streamingv1alpha1.InMemoryGateway) error {
+			log := logr.FromContextOrDiscard(ctx)
+
 			var config corev1.ConfigMap
 			key := types.NamespacedName{Namespace: namespace, Name: inmemoryGatewayImages}
 			// track config for new images
@@ -456,13 +452,13 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 		},
 
 		Config: c,
-		Setup: func(mgr reconcilers.Manager, bldr *reconcilers.Builder) error {
+		Setup: func(ctx context.Context, mgr reconcilers.Manager, bldr *reconcilers.Builder) error {
 			// enqueue the tracking resource for reconciliation from changes to
 			// tracked ConfigMaps. Internally `EnqueueTracked` sets up an 
 			// Informer to watch to changes of the target resource. When the
 			// informer emits an event, the tracking resources are looked up
 			// from the tracker and enqueded for reconciliation.
-			bldr.Watches(&source.Kind{Type: &corev1.ConfigMap{}}, reconcilers.EnqueueTracked(&corev1.ConfigMap{}, c.Tracker, c.Scheme))
+			bldr.Watches(&source.Kind{Type: &corev1.ConfigMap{}}, reconcilers.EnqueueTracked(ctx, &corev1.ConfigMap{}, c.Tracker, c.Scheme))
 			return nil
 		},
 	}

@@ -19,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/cache"
 	"k8s.io/client-go/tools/record"
@@ -41,21 +43,23 @@ type Config struct {
 	client.Client
 	APIReader client.Reader
 	Recorder  record.EventRecorder
-	Log       logr.Logger
 	Tracker   tracker.Tracker
+
+	// Deprecated: use a logger from the context instead `log := logr.FromContext(ctx)`
+	Log logr.Logger
 }
 
 // NewConfig creates a Config for a specific API type. Typically passed into a
 // reconciler.
 func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration) Config {
 	name := typeName(apiType)
-	log := ctrl.Log.WithName("controllers").WithName(name)
+	log := newWarnOnceLogger(ctrl.Log.WithName("controllers").WithName(name))
 	return Config{
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
 		Recorder:  mgr.GetEventRecorderFor(name),
 		Log:       log,
-		Tracker:   tracker.New(syncPeriod, log.WithName("tracker")),
+		Tracker:   tracker.New(syncPeriod),
 	}
 }
 
@@ -65,6 +69,11 @@ func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration
 // resource's status is compared with the original status, updating the API
 // server if needed.
 type ParentReconciler struct {
+	// Name used to identify this reconciler. Defaults to `{Type}ParentReconciler`.  Ideally unique, but not required to be so.
+	//
+	// +optional
+	Name string
+
 	// Type of resource to reconcile
 	Type client.Object
 
@@ -77,6 +86,15 @@ type ParentReconciler struct {
 }
 
 func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sParentReconciler", typeName(r.Type))
+	}
+
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name).
+		WithValues("parentType", gvk(r.Type, r.Config.Scheme()))
+	ctx = logr.NewContext(ctx, log)
+
 	ctx = StashParentType(ctx, r.Type)
 	ctx = StashCastParentType(ctx, r.Type)
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
@@ -88,7 +106,10 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 
 func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = WithStash(ctx)
-	log := r.Log.WithValues("request", req.NamespacedName)
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name).
+		WithValues("parentType", gvk(r.Type, r.Config.Scheme()))
+	ctx = logr.NewContext(ctx, log)
 
 	ctx = StashParentType(ctx, r.Type)
 	ctx = StashCastParentType(ctx, r.Type)
@@ -128,7 +149,7 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			// update status
 			log.Info("updating status", "diff", cmp.Diff(r.status(originalParent), r.status(parent)))
 			if updateErr := r.Status().Update(ctx, parent); updateErr != nil {
-				log.Error(updateErr, "unable to update status", typeName(r.Type), parent)
+				log.Error(updateErr, "unable to update status")
 				r.Recorder.Eventf(parent, corev1.EventTypeWarning, "StatusUpdateFailed",
 					"Failed to update status: %v", updateErr)
 				return ctrl.Result{}, updateErr
@@ -250,6 +271,11 @@ var (
 // SyncReconciler is a sub reconciler for custom reconciliation logic. No
 // behavior is defined directly.
 type SyncReconciler struct {
+	// Name used to identify this reconciler.  Ideally unique, but not required to be so.
+	//
+	// +optional
+	Name string
+
 	// Setup performs initialization on the manager and builder this reconciler
 	// will run with. It's common to setup field indexes and watch resources.
 	//
@@ -267,6 +293,12 @@ type SyncReconciler struct {
 }
 
 func (r *SyncReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	log := logr.FromContextOrDiscard(ctx)
+	if r.Name != "" {
+		log = log.WithName(r.Name)
+	}
+	ctx = logr.NewContext(ctx, log)
+
 	if r.Setup == nil {
 		return nil
 	}
@@ -310,9 +342,15 @@ func (r *SyncReconciler) validate(ctx context.Context) error {
 }
 
 func (r *SyncReconciler) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
+	log := logr.FromContextOrDiscard(ctx)
+	if r.Name != "" {
+		log = log.WithName(r.Name)
+	}
+	ctx = logr.NewContext(ctx, log)
+
 	result, err := r.sync(ctx, parent)
 	if err != nil {
-		r.Log.Error(err, "unable to sync", typeName(parent), parent)
+		log.Error(err, "unable to sync")
 		return ctrl.Result{}, err
 	}
 
@@ -363,6 +401,12 @@ var (
 //
 // During setup, the child resource type is registered to watch for changes.
 type ChildReconciler struct {
+	// Name used to identify this reconciler.  Defaults to `{ChildType}ChildReconciler`.  Ideally
+	// unique, but not required to be so.
+	//
+	// +optional
+	Name string
+
 	// ChildType is the resource being created/updated/deleted by the
 	// reconciler. For example, a parent Deployment would have a ReplicaSet as a
 	// child.
@@ -452,6 +496,15 @@ type ChildReconciler struct {
 }
 
 func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sChildReconciler", typeName(r.ChildType))
+	}
+
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name).
+		WithValues("childType", gvk(r.ChildType, r.Config.Scheme()))
+	ctx = logr.NewContext(ctx, log)
+
 	if err := r.validate(ctx); err != nil {
 		return err
 	}
@@ -572,13 +625,17 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 }
 
 func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name).
+		WithValues("childType", gvk(r.ChildType, r.Config.Scheme()))
+	ctx = logr.NewContext(ctx, log)
+
 	if r.mutationCache == nil {
 		r.mutationCache = cache.NewExpiring()
 	}
 
 	child, err := r.reconcile(ctx, parent)
 	if err != nil {
-		parentType := RetrieveParentType(ctx)
 		if apierrs.IsAlreadyExists(err) {
 			// check if the resource blocking create is owned by the parent.
 			// the created child from a previous turn may be slow to appear in the informer cache, but shouldn't appear
@@ -590,11 +647,11 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (
 				// skip updating the parent's status, fail and try again
 				return ctrl.Result{}, err
 			}
-			r.Log.Info("unable to reconcile child, not owned", typeName(parentType), parent, typeName(r.ChildType), r.sanitize(child))
+			log.Info("unable to reconcile child, not owned", "child", namespaceName(conflicted), "ownerRefs", conflicted.GetOwnerReferences())
 			r.reflectChildStatusOnParent(parent, child, err)
 			return ctrl.Result{}, nil
 		}
-		r.Log.Error(err, "unable to reconcile child", typeName(parentType), parent)
+		log.Error(err, "unable to reconcile child")
 		return ctrl.Result{}, err
 	}
 	r.reflectChildStatusOnParent(parent, child, err)
@@ -603,6 +660,8 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (
 }
 
 func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (client.Object, error) {
+	log := logr.FromContextOrDiscard(ctx)
+
 	actual := r.ChildType.DeepCopyObject().(client.Object)
 	children := r.ChildListType.DeepCopyObject().(client.ObjectList)
 	if err := r.List(ctx, children, client.InNamespace(parent.GetNamespace())); err != nil {
@@ -614,7 +673,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	} else if len(items) > 1 {
 		// this shouldn't happen, delete everything to a clean slate
 		for _, extra := range items {
-			r.Log.Info("deleting extra child", typeName(r.ChildType), r.sanitize(extra))
+			log.Info("deleting extra child", "child", namespaceName(extra))
 			if err := r.Delete(ctx, extra); err != nil {
 				r.Recorder.Eventf(parent, corev1.EventTypeWarning, "DeleteFailed",
 					"Failed to delete %s %q: %v", typeName(r.ChildType), extra.GetName(), err)
@@ -637,16 +696,16 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 			return nil, err
 		}
 		if !r.ourChild(parent, desired) {
-			r.Log.Info("object returned from DesiredChild does not match OurChild, this can result in orphaned children", "child", r.sanitize(desired))
+			log.Info("object returned from DesiredChild does not match OurChild, this can result in orphaned children", "child", namespaceName(desired))
 		}
 	}
 
 	// delete child if no longer needed
 	if desired == nil {
 		if !actual.GetCreationTimestamp().Time.IsZero() {
-			r.Log.Info("deleting unwanted child", typeName(r.ChildType), r.sanitize(actual))
+			log.Info("deleting unwanted child", "child", namespaceName(actual))
 			if err := r.Delete(ctx, actual); err != nil {
-				r.Log.Error(err, "unable to delete unwanted child", typeName(r.ChildType), r.sanitize(actual))
+				log.Error(err, "unable to delete unwanted child", "child", namespaceName(actual))
 				r.Recorder.Eventf(parent, corev1.EventTypeWarning, "DeleteFailed",
 					"Failed to delete %s %q: %v", typeName(r.ChildType), actual.GetName(), err)
 				return nil, err
@@ -659,9 +718,9 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 
 	// create child if it doesn't exist
 	if actual.GetName() == "" {
-		r.Log.Info("creating child", typeName(r.ChildType), r.sanitize(desired))
+		log.Info("creating child", "child", r.sanitize(desired))
 		if err := r.Create(ctx, desired); err != nil {
-			r.Log.Error(err, "unable to create child", typeName(r.ChildType), r.sanitize(desired))
+			log.Error(err, "unable to create child", "child", namespaceName(desired))
 			r.Recorder.Eventf(parent, corev1.EventTypeWarning, "CreationFailed",
 				"Failed to create %s %q: %v", typeName(r.ChildType), desired.GetName(), err)
 			return nil, err
@@ -681,7 +740,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 		err := patch.(*Patch).Apply(desiredPatched)
 		if err != nil {
 			// there's not much we can do, but let the normal update proceed
-			r.Log.Info("unable to patch desired child from mutation cache")
+			log.Info("unable to patch desired child from mutation cache")
 		}
 	}
 
@@ -693,9 +752,9 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	// update child with desired changes
 	current := actual.DeepCopyObject().(client.Object)
 	r.mergeBeforeUpdate(current, desiredPatched)
-	r.Log.Info("reconciling child", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
+	log.Info("updating child", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
 	if err := r.Update(ctx, current); err != nil {
-		r.Log.Error(err, "unable to update child", typeName(r.ChildType), r.sanitize(current))
+		log.Error(err, "unable to update child", "child", namespaceName(current))
 		r.Recorder.Eventf(parent, corev1.EventTypeWarning, "UpdateFailed",
 			"Failed to update %s %q: %v", typeName(r.ChildType), current.GetName(), err)
 		return nil, err
@@ -707,11 +766,12 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 		r.mergeBeforeUpdate(base, desired)
 		patch, err := NewPatch(base, current)
 		if err != nil {
-			r.Log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base))
+			log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base))
 		} else {
 			r.mutationCache.Set(current.GetUID(), patch, 1*time.Hour)
 		}
 	}
+	log.Info("updated child")
 	r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Updated",
 		"Updated %s %q", typeName(r.ChildType), current.GetName())
 
@@ -879,6 +939,12 @@ func (r Sequence) aggregateResult(result, aggregate ctrl.Result) ctrl.Result {
 // cast parent are read-only. Attempts to mutate the parent will result in the
 // reconciler erring.
 type CastParent struct {
+	// Name used to identify this reconciler.  Defaults to `{Type}CastParent`.  Ideally unique,
+	// but not required to be so.
+	//
+	// +optional
+	Name string
+
 	// Type of resource to reconcile
 	Type client.Object
 
@@ -889,6 +955,15 @@ type CastParent struct {
 }
 
 func (r *CastParent) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sCastParent", typeName(r.Type))
+	}
+
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name).
+		WithValues("castParentType", typeName(r.Type))
+	ctx = logr.NewContext(ctx, log)
+
 	if err := r.validate(ctx); err != nil {
 		return err
 	}
@@ -910,6 +985,11 @@ func (r *CastParent) validate(ctx context.Context) error {
 }
 
 func (r *CastParent) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name).
+		WithValues("castParentType", typeName(r.Type))
+	ctx = logr.NewContext(ctx, log)
+
 	ctx, castParent, err := r.cast(ctx, parent)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -955,6 +1035,21 @@ func typeName(i interface{}) string {
 		t = t.Elem()
 	}
 	return t.Name()
+}
+
+func gvk(obj client.Object, scheme *runtime.Scheme) schema.GroupVersionKind {
+	gvks, _, err := scheme.ObjectKinds(obj)
+	if err != nil {
+		return schema.GroupVersionKind{}
+	}
+	return gvks[0]
+}
+
+func namespaceName(obj client.Object) types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: obj.GetNamespace(),
+		Name:      obj.GetName(),
+	}
 }
 
 // MergeMaps flattens a sequence of maps into a single map. Keys in latter maps
