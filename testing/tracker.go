@@ -6,9 +6,9 @@ SPDX-License-Identifier: Apache-2.0
 package testing
 
 import (
+	"context"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -54,7 +54,7 @@ func NewTrackRequest(t, b client.Object, scheme *runtime.Scheme) TrackRequest {
 const maxDuration = time.Duration(1<<63 - 1)
 
 func createTracker() *mockTracker {
-	return &mockTracker{Tracker: tracker.New(maxDuration, logr.Discard()), reqs: []TrackRequest{}}
+	return &mockTracker{Tracker: tracker.New(maxDuration), reqs: []TrackRequest{}}
 }
 
 type mockTracker struct {
@@ -64,15 +64,11 @@ type mockTracker struct {
 
 var _ tracker.Tracker = &mockTracker{}
 
-func (t *mockTracker) Track(ref tracker.Key, obj types.NamespacedName) {
-	t.Tracker.Track(ref, obj)
+func (t *mockTracker) Track(ctx context.Context, ref tracker.Key, obj types.NamespacedName) {
+	t.Tracker.Track(ctx, ref, obj)
 	t.reqs = append(t.reqs, TrackRequest{Tracked: ref, Tracker: obj})
 }
 
 func (t *mockTracker) getTrackRequests() []TrackRequest {
-	result := []TrackRequest{}
-	for _, req := range t.reqs {
-		result = append(result, req)
-	}
-	return result
+	return append([]TrackRequest{}, t.reqs...)
 }
