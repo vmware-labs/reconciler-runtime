@@ -16,6 +16,7 @@
 	- [Higher-order Reconcilers](#higher-order-reconcilers)
 		- [CastParent](#castparent)
 		- [Sequence](#sequence)
+		- [WithConfig](#withconfig)
 - [Testing](#testing)
 	- [ReconcilerTestSuite](#reconcilertestsuite)
 	- [SubReconcilerTestSuite](#subreconcilertestsuite)
@@ -93,8 +94,6 @@ func FunctionTargetImageReconciler(c reconcilers.Config) reconcilers.SubReconcil
 			parent.Status.TargetImage = targetImage
 			return nil
 		},
-
-		Config: c,
 	}
 }
 ```
@@ -192,8 +191,6 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 			// up in our logs
 			return child.Spec
 		},
-		
-		Config:     c,
 	}
 }
 ```
@@ -224,7 +221,6 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 						// do something with the duckv1alpha1.ImageRef instead of a buildv1alpha1.Function
 						return nil
 					},
-					Config: c,
 				},
 			},
 			FunctionChildImageReconciler(c),
@@ -259,6 +255,31 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 ```
 [full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/build/function_reconciler.go#L39-L51)
 
+#### WithConfig
+
+[`WithConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#WithConfig) overrides the config that nested reconcilers consume. The config can be retrieved from the context via [`RetrieveConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveConfig). The config used to load the parent resource should be used for interactions with the parent resource, which can be retrieved from the context via [`RetrieveParentConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveParentConfig).
+
+**Example:**
+
+`WithConfig` can be used to change the REST Config backing the clients. This could be to make requests to the same cluster with a user defined service account, or target an entirely different Kubernetes cluster.
+
+```go
+func SwapRESTConfig(c reconciler.Config, rc *rest.Config) (*reconcilers.SubReconciler, error) {
+	cl, err := clusters.New(rc)
+	if err != nil {
+		return nil, err
+	}
+
+	return &reconcilers.WithConfig{
+		Reconciler: reconcilers.Sequence{
+			LookupReferenceDataReconciler(),
+			DoSomethingChildReconciler(),
+		},
+
+		Config: c.WithCluster(cl),
+	}, nil
+}
+```
 
 ## Testing
 
@@ -395,8 +416,6 @@ func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
 			reconcilers.StashValue(ctx, exampleStashKey, *value)
 			return nil
 		},
-
-		Config: c,
 	}
 }
 
@@ -411,8 +430,6 @@ func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
 			}
 			... // do something with the value
 		},
-
-		Config: c,
 	}
 }
 ```
@@ -431,6 +448,7 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 		Name: "SyncConfig",
 		Sync: func(ctx context.Context, parent *streamingv1alpha1.InMemoryGateway) error {
 			log := logr.FromContextOrDiscard(ctx)
+			c := reconciler.RetrieveConfig(ctx)
 
 			var config corev1.ConfigMap
 			key := types.NamespacedName{Namespace: namespace, Name: inmemoryGatewayImages}
@@ -451,14 +469,13 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 			return nil
 		},
 
-		Config: c,
 		Setup: func(ctx context.Context, mgr reconcilers.Manager, bldr *reconcilers.Builder) error {
 			// enqueue the tracking resource for reconciliation from changes to
 			// tracked ConfigMaps. Internally `EnqueueTracked` sets up an 
 			// Informer to watch to changes of the target resource. When the
 			// informer emits an event, the tracking resources are looked up
 			// from the tracker and enqueded for reconciliation.
-			bldr.Watches(&source.Kind{Type: &corev1.ConfigMap{}}, reconcilers.EnqueueTracked(ctx, &corev1.ConfigMap{}, c.Tracker, c.Scheme))
+			bldr.Watches(&source.Kind{Type: &corev1.ConfigMap{}}, reconcilers.EnqueueTracked(ctx, &corev1.ConfigMap{}))
 			return nil
 		},
 	}

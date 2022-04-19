@@ -164,7 +164,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	})
 
 	if (err != nil) != tc.ShouldErr {
-		t.Errorf("Reconcile() error = %v, ExpectErr %v", err, tc.ShouldErr)
+		t.Errorf("Reconcile() error = %v, ShouldErr %v", err, tc.ShouldErr)
 	}
 	if err == nil {
 		// result is only significant if there wasn't an error

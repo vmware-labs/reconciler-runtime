@@ -132,13 +132,14 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		scheme: scheme,
 	}
 	log := logrtesting.NewTestLogger(t)
-	c := factory(t, tc, reconcilers.Config{
+	c := reconcilers.Config{
 		Client:    clientWrapper,
 		APIReader: apiReader,
 		Tracker:   tracker,
 		Recorder:  recorder,
 		Log:       log,
-	})
+	}
+	r := factory(t, tc, c)
 
 	if tc.CleanUp != nil {
 		defer func() {
@@ -161,6 +162,9 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		reconcilers.StashValue(ctx, k, v)
 	}
 
+	ctx = reconcilers.StashConfig(ctx, c)
+	ctx = reconcilers.StashParentConfig(ctx, c)
+
 	parent := tc.Parent.DeepCopyObject().(client.Object)
 	ctx = reconcilers.StashParentType(ctx, parent.DeepCopyObject().(client.Object))
 	ctx = reconcilers.StashCastParentType(ctx, parent.DeepCopyObject().(client.Object))
@@ -175,11 +179,11 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 			}()
 		}
 
-		return c.Reconcile(ctx, parent)
+		return r.Reconcile(ctx, parent)
 	}(ctx, parent)
 
 	if (err != nil) != tc.ShouldErr {
-		t.Errorf("Reconcile() error = %v, ExpectErr %v", err, tc.ShouldErr)
+		t.Errorf("Reconcile() error = %v, ShouldErr %v", err, tc.ShouldErr)
 	}
 	if err == nil {
 		// result is only significant if there wasn't an error

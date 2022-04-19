@@ -9,6 +9,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/vmware-labs/reconciler-runtime/tracker"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -728,6 +729,69 @@ func TestCastParent_validate(t *testing.T) {
 	for _, c := range tests {
 		t.Run(c.name, func(t *testing.T) {
 			ctx := StashCastParentType(context.TODO(), c.parent)
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+		})
+	}
+}
+
+func TestWithConfig_validate(t *testing.T) {
+	config := Config{
+		Tracker: tracker.New(0),
+	}
+
+	tests := []struct {
+		name       string
+		parent     client.Object
+		reconciler *WithConfig
+		shouldErr  string
+	}{
+		{
+			name:       "empty",
+			parent:     &corev1.ConfigMap{},
+			reconciler: &WithConfig{},
+			shouldErr:  "Config must be defined",
+		},
+		{
+			name:   "valid",
+			parent: &corev1.ConfigMap{},
+			reconciler: &WithConfig{
+				Config: config,
+				Reconciler: &SyncReconciler{
+					Sync: func(ctx context.Context, parent *corev1.Secret) error {
+						return nil
+					},
+				},
+			},
+		},
+		{
+			name:   "missing type",
+			parent: &corev1.ConfigMap{},
+			reconciler: &WithConfig{
+				Reconciler: &SyncReconciler{
+					Sync: func(ctx context.Context, parent *corev1.Secret) error {
+						return nil
+					},
+				},
+			},
+			shouldErr: "Config must be defined",
+		},
+		{
+			name:   "missing reconciler",
+			parent: &corev1.ConfigMap{},
+			reconciler: &WithConfig{
+				Config:     config,
+				Reconciler: nil,
+			},
+			shouldErr: "Reconciler must be defined",
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := context.TODO()
 			err := c.reconciler.validate(ctx)
 			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
 				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
