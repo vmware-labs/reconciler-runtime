@@ -62,5 +62,7 @@ func (p *Patch) Apply(rebase client.Object) error {
 	if err != nil {
 		return err
 	}
+	// reset rebase to its empty value before unmarshaling into it
+	replaceWithEmpty(rebase)
 	return json.Unmarshal(patchedBytes, rebase)
 }

@@ -27,6 +27,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -49,6 +50,21 @@ type Config struct {
 	Log logr.Logger
 }
 
+func (c Config) IsEmpty() bool {
+	return c == Config{}
+}
+
+// WithConfig extends the config to access a new cluster.
+func (c Config) WithCluster(cluster cluster.Cluster) Config {
+	return Config{
+		Client:    cluster.GetClient(),
+		APIReader: cluster.GetAPIReader(),
+		Recorder:  cluster.GetEventRecorderFor("controller"),
+		Log:       c.Log,
+		Tracker:   c.Tracker,
+	}
+}
+
 // NewConfig creates a Config for a specific API type. Typically passed into a
 // reconciler.
 func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration) Config {
@@ -57,7 +73,7 @@ func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration
 	return Config{
 		Client:    mgr.GetClient(),
 		APIReader: mgr.GetAPIReader(),
-		Recorder:  mgr.GetEventRecorderFor(name),
+		Recorder:  mgr.GetEventRecorderFor("controller"),
 		Log:       log,
 		Tracker:   tracker.New(syncPeriod),
 	}
@@ -82,21 +98,24 @@ type ParentReconciler struct {
 	// multiple SubReconcilers.
 	Reconciler SubReconciler
 
-	Config
+	Config Config
 }
 
 func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
-	if r.Name == "" {
-		r.Name = fmt.Sprintf("%sParentReconciler", typeName(r.Type))
-	}
-
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
 		WithValues("parentType", gvk(r.Type, r.Config.Scheme()))
 	ctx = logr.NewContext(ctx, log)
 
+	ctx = StashConfig(ctx, r.Config)
+	ctx = StashParentConfig(ctx, r.Config)
 	ctx = StashParentType(ctx, r.Type)
 	ctx = StashCastParentType(ctx, r.Type)
+
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sParentReconciler", typeName(r.Type))
+	}
+
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return err
@@ -106,16 +125,21 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 
 func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	ctx = WithStash(ctx)
+
+	c := r.Config
+
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
-		WithValues("parentType", gvk(r.Type, r.Config.Scheme()))
+		WithValues("parentType", gvk(r.Type, c.Scheme()))
 	ctx = logr.NewContext(ctx, log)
 
+	ctx = StashConfig(ctx, c)
+	ctx = StashParentConfig(ctx, c)
 	ctx = StashParentType(ctx, r.Type)
 	ctx = StashCastParentType(ctx, r.Type)
 	originalParent := r.Type.DeepCopyObject().(client.Object)
 
-	if err := r.Get(ctx, req.NamespacedName, originalParent); err != nil {
+	if err := c.Get(ctx, req.NamespacedName, originalParent); err != nil {
 		if apierrs.IsNotFound(err) {
 			// we'll ignore not-found errors, since they can't be fixed by an immediate
 			// requeue (we'll need to wait for a new notification), and we can get them
@@ -148,13 +172,13 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if !equality.Semantic.DeepEqual(r.status(parent), r.status(originalParent)) && parent.GetDeletionTimestamp() == nil {
 			// update status
 			log.Info("updating status", "diff", cmp.Diff(r.status(originalParent), r.status(parent)))
-			if updateErr := r.Status().Update(ctx, parent); updateErr != nil {
+			if updateErr := c.Status().Update(ctx, parent); updateErr != nil {
 				log.Error(updateErr, "unable to update status")
-				r.Recorder.Eventf(parent, corev1.EventTypeWarning, "StatusUpdateFailed",
+				c.Recorder.Eventf(parent, corev1.EventTypeWarning, "StatusUpdateFailed",
 					"Failed to update status: %v", updateErr)
 				return ctrl.Result{}, updateErr
 			}
-			r.Recorder.Eventf(parent, corev1.EventTypeNormal, "StatusUpdated",
+			c.Recorder.Eventf(parent, corev1.EventTypeNormal, "StatusUpdated",
 				"Updated status")
 		}
 	}
@@ -226,8 +250,18 @@ func (r *ParentReconciler) syncLastTransitionTime(proposed, original []metav1.Co
 	}
 }
 
+const configStashKey StashKey = "reconciler-runtime:config"
+const parentConfigStashKey StashKey = "reconciler-runtime:parentConfig"
 const parentTypeStashKey StashKey = "reconciler-runtime:parentType"
 const castParentTypeStashKey StashKey = "reconciler-runtime:castParentType"
+
+func StashConfig(ctx context.Context, config Config) context.Context {
+	return context.WithValue(ctx, configStashKey, config)
+}
+
+func StashParentConfig(ctx context.Context, parentConfig Config) context.Context {
+	return context.WithValue(ctx, parentConfigStashKey, parentConfig)
+}
 
 func StashParentType(ctx context.Context, parentType client.Object) context.Context {
 	return context.WithValue(ctx, parentTypeStashKey, parentType)
@@ -235,6 +269,38 @@ func StashParentType(ctx context.Context, parentType client.Object) context.Cont
 
 func StashCastParentType(ctx context.Context, currentType client.Object) context.Context {
 	return context.WithValue(ctx, castParentTypeStashKey, currentType)
+}
+
+func RetrieveConfig(ctx context.Context) Config {
+	value := ctx.Value(configStashKey)
+	if config, ok := value.(Config); ok {
+		return config
+	}
+	return Config{}
+}
+
+func RetrieveConfigOrDie(ctx context.Context) Config {
+	config := RetrieveConfig(ctx)
+	if config.IsEmpty() {
+		panic(fmt.Errorf("config must exist on the context. Check that the context is from a ParentReconciler or WithConfig"))
+	}
+	return config
+}
+
+func RetrieveParentConfig(ctx context.Context) Config {
+	value := ctx.Value(parentConfigStashKey)
+	if parentConfig, ok := value.(Config); ok {
+		return parentConfig
+	}
+	return Config{}
+}
+
+func RetrieveParentConfigOrDie(ctx context.Context) Config {
+	config := RetrieveParentConfig(ctx)
+	if config.IsEmpty() {
+		panic(fmt.Errorf("parent config must exist on the context. Check that the context is from a ParentReconciler"))
+	}
+	return config
 }
 
 func RetrieveParentType(ctx context.Context) client.Object {
@@ -288,8 +354,6 @@ type SyncReconciler struct {
 	//     func(ctx context.Context, parent client.Object) error
 	//     func(ctx context.Context, parent client.Object) (ctrl.Result, error)
 	Sync interface{}
-
-	Config
 }
 
 func (r *SyncReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
@@ -487,8 +551,6 @@ type ChildReconciler struct {
 	// +optional
 	Sanitize interface{}
 
-	Config
-
 	// mutationCache holds patches received from updates to a resource made by
 	// mutation webhooks. This cache is used to avoid unnecessary update calls
 	// that would actually have no effect.
@@ -496,14 +558,16 @@ type ChildReconciler struct {
 }
 
 func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
-	if r.Name == "" {
-		r.Name = fmt.Sprintf("%sChildReconciler", typeName(r.ChildType))
-	}
+	c := RetrieveConfigOrDie(ctx)
 
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
-		WithValues("childType", gvk(r.ChildType, r.Config.Scheme()))
+		WithValues("childType", gvk(r.ChildType, c.Scheme()))
 	ctx = logr.NewContext(ctx, log)
+
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sChildReconciler", typeName(r.ChildType))
+	}
 
 	if err := r.validate(ctx); err != nil {
 		return err
@@ -625,9 +689,11 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 }
 
 func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
+	c := RetrieveConfigOrDie(ctx)
+
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
-		WithValues("childType", gvk(r.ChildType, r.Config.Scheme()))
+		WithValues("childType", gvk(r.ChildType, c.Scheme()))
 	ctx = logr.NewContext(ctx, log)
 
 	if r.mutationCache == nil {
@@ -642,8 +708,8 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (
 			// on the parent as being not ready.
 			apierr := err.(apierrs.APIStatus)
 			conflicted := r.ChildType.DeepCopyObject().(client.Object)
-			_ = r.APIReader.Get(ctx, types.NamespacedName{Namespace: parent.GetNamespace(), Name: apierr.Status().Details.Name}, conflicted)
-			if metav1.IsControlledBy(conflicted, parent) {
+			_ = c.APIReader.Get(ctx, types.NamespacedName{Namespace: parent.GetNamespace(), Name: apierr.Status().Details.Name}, conflicted)
+			if r.ourChild(parent, conflicted) {
 				// skip updating the parent's status, fail and try again
 				return ctrl.Result{}, err
 			}
@@ -661,10 +727,12 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (
 
 func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (client.Object, error) {
 	log := logr.FromContextOrDiscard(ctx)
+	pc := RetrieveParentConfigOrDie(ctx)
+	c := RetrieveConfigOrDie(ctx)
 
 	actual := r.ChildType.DeepCopyObject().(client.Object)
 	children := r.ChildListType.DeepCopyObject().(client.ObjectList)
-	if err := r.List(ctx, children, client.InNamespace(parent.GetNamespace())); err != nil {
+	if err := c.List(ctx, children, client.InNamespace(parent.GetNamespace())); err != nil {
 		return nil, err
 	}
 	items := r.filterChildren(parent, children)
@@ -674,12 +742,12 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 		// this shouldn't happen, delete everything to a clean slate
 		for _, extra := range items {
 			log.Info("deleting extra child", "child", namespaceName(extra))
-			if err := r.Delete(ctx, extra); err != nil {
-				r.Recorder.Eventf(parent, corev1.EventTypeWarning, "DeleteFailed",
+			if err := c.Delete(ctx, extra); err != nil {
+				pc.Recorder.Eventf(parent, corev1.EventTypeWarning, "DeleteFailed",
 					"Failed to delete %s %q: %v", typeName(r.ChildType), extra.GetName(), err)
 				return nil, err
 			}
-			r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Deleted",
+			pc.Recorder.Eventf(parent, corev1.EventTypeNormal, "Deleted",
 				"Deleted %s %q", typeName(r.ChildType), extra.GetName())
 		}
 	}
@@ -692,7 +760,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 		return nil, err
 	}
 	if desired != nil {
-		if err := ctrl.SetControllerReference(parent, desired, r.Scheme()); err != nil {
+		if err := ctrl.SetControllerReference(parent, desired, c.Scheme()); err != nil {
 			return nil, err
 		}
 		if !r.ourChild(parent, desired) {
@@ -704,13 +772,13 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	if desired == nil {
 		if !actual.GetCreationTimestamp().Time.IsZero() {
 			log.Info("deleting unwanted child", "child", namespaceName(actual))
-			if err := r.Delete(ctx, actual); err != nil {
+			if err := c.Delete(ctx, actual); err != nil {
 				log.Error(err, "unable to delete unwanted child", "child", namespaceName(actual))
-				r.Recorder.Eventf(parent, corev1.EventTypeWarning, "DeleteFailed",
+				pc.Recorder.Eventf(parent, corev1.EventTypeWarning, "DeleteFailed",
 					"Failed to delete %s %q: %v", typeName(r.ChildType), actual.GetName(), err)
 				return nil, err
 			}
-			r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Deleted",
+			pc.Recorder.Eventf(parent, corev1.EventTypeNormal, "Deleted",
 				"Deleted %s %q", typeName(r.ChildType), actual.GetName())
 		}
 		return nil, nil
@@ -719,13 +787,13 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	// create child if it doesn't exist
 	if actual.GetName() == "" {
 		log.Info("creating child", "child", r.sanitize(desired))
-		if err := r.Create(ctx, desired); err != nil {
+		if err := c.Create(ctx, desired); err != nil {
 			log.Error(err, "unable to create child", "child", namespaceName(desired))
-			r.Recorder.Eventf(parent, corev1.EventTypeWarning, "CreationFailed",
+			pc.Recorder.Eventf(parent, corev1.EventTypeWarning, "CreationFailed",
 				"Failed to create %s %q: %v", typeName(r.ChildType), desired.GetName(), err)
 			return nil, err
 		}
-		r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Created",
+		pc.Recorder.Eventf(parent, corev1.EventTypeNormal, "Created",
 			"Created %s %q", typeName(r.ChildType), desired.GetName())
 		return desired, nil
 	}
@@ -753,9 +821,9 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	current := actual.DeepCopyObject().(client.Object)
 	r.mergeBeforeUpdate(current, desiredPatched)
 	log.Info("updating child", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
-	if err := r.Update(ctx, current); err != nil {
+	if err := c.Update(ctx, current); err != nil {
 		log.Error(err, "unable to update child", "child", namespaceName(current))
-		r.Recorder.Eventf(parent, corev1.EventTypeWarning, "UpdateFailed",
+		pc.Recorder.Eventf(parent, corev1.EventTypeWarning, "UpdateFailed",
 			"Failed to update %s %q: %v", typeName(r.ChildType), current.GetName(), err)
 		return nil, err
 	}
@@ -772,7 +840,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 		}
 	}
 	log.Info("updated child")
-	r.Recorder.Eventf(parent, corev1.EventTypeNormal, "Updated",
+	pc.Recorder.Eventf(parent, corev1.EventTypeNormal, "Updated",
 		"Updated %s %q", typeName(r.ChildType), current.GetName())
 
 	return current, nil
@@ -955,14 +1023,14 @@ type CastParent struct {
 }
 
 func (r *CastParent) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
-	if r.Name == "" {
-		r.Name = fmt.Sprintf("%sCastParent", typeName(r.Type))
-	}
-
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
 		WithValues("castParentType", typeName(r.Type))
 	ctx = logr.NewContext(ctx, log)
+
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sCastParent", typeName(r.Type))
+	}
 
 	if err := r.validate(ctx); err != nil {
 		return err
@@ -1019,13 +1087,56 @@ func (r *CastParent) cast(ctx context.Context, parent client.Object) (context.Co
 	if err != nil {
 		return nil, nil, err
 	}
-	castParent := r.Type.DeepCopyObject().(client.Object)
+	castParent := newEmpty(r.Type).(client.Object)
 	err = json.Unmarshal(data, castParent)
 	if err != nil {
 		return nil, nil, err
 	}
 	ctx = StashCastParentType(ctx, castParent)
 	return ctx, castParent, nil
+}
+
+// WithConfig injects the provided config into the reconcilers nested under it. For example, the
+// client can be swapped to use a service account with different permissions, or to target an
+// entirely different cluster.
+//
+// The specified config can be accessed with `RetrieveConfig(ctx)`, the original config used to
+// load the parent resource can be accessed with `RetrieveParentConfig(ctx)`.
+type WithConfig struct {
+	// Config to use for this portion of the reconciler hierarchy
+	Config Config
+
+	// Reconciler is called for each reconciler request with the parent
+	// resource being reconciled. Typically a Sequence is used to compose
+	// multiple SubReconcilers.
+	Reconciler SubReconciler
+}
+
+func (r *WithConfig) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	if err := r.validate(ctx); err != nil {
+		return err
+	}
+	ctx = StashConfig(ctx, r.Config)
+	return r.Reconciler.SetupWithManager(ctx, mgr, bldr)
+}
+
+func (r *WithConfig) validate(ctx context.Context) error {
+	// validate Config value
+	if r.Config.IsEmpty() {
+		return fmt.Errorf("Config must be defined")
+	}
+
+	// validate Reconciler value
+	if r.Reconciler == nil {
+		return fmt.Errorf("Reconciler must be defined")
+	}
+
+	return nil
+}
+
+func (r *WithConfig) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
+	ctx = StashConfig(ctx, r.Config)
+	return r.Reconciler.Reconcile(ctx, parent)
 }
 
 func typeName(i interface{}) string {
@@ -1062,4 +1173,16 @@ func MergeMaps(maps ...map[string]string) map[string]string {
 		}
 	}
 	return out
+}
+
+// replaceWithEmpty overwrite the underlying value with it's empty value
+func replaceWithEmpty(x interface{}) {
+	v := reflect.ValueOf(x).Elem()
+	v.Set(reflect.Zero(v.Type()))
+}
+
+// newEmpty returns a new empty value of the same underlying type, preserving the existing value
+func newEmpty(x interface{}) interface{} {
+	t := reflect.TypeOf(x).Elem()
+	return reflect.New(t).Interface()
 }
