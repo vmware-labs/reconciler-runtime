@@ -795,6 +795,36 @@ func TestChildReconciler(t *testing.T) {
 			configMapCreate,
 		},
 	}, {
+		Name: "sanitize is mutation safe",
+		Parent: resource.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.Sanitize = func(child *corev1.ConfigMap) interface{} {
+					child.Data["ignore"] = "me"
+					return child
+				}
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Created",
+				`Created ConfigMap %q`, testName),
+		},
+		ExpectParent: resourceReady.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
+		ExpectCreates: []client.Object{
+			configMapCreate,
+		},
+	}, {
 		Name:   "error listing children",
 		Parent: resourceReady,
 		WithReactors: []rtesting.ReactionFunc{

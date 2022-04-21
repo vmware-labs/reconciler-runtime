@@ -917,6 +917,10 @@ func (r *ChildReconciler) sanitize(child client.Object) interface{} {
 	if child == nil {
 		return nil
 	}
+
+	// avoid accidental mutations in Sanitize method
+	child = child.DeepCopyObject().(client.Object)
+
 	fn := reflect.ValueOf(r.Sanitize)
 	out := fn.Call([]reflect.Value{
 		reflect.ValueOf(child),
