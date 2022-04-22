@@ -46,7 +46,9 @@ type Config struct {
 	Recorder  record.EventRecorder
 	Tracker   tracker.Tracker
 
-	// Deprecated: use a logger from the context instead `log := logr.FromContext(ctx)`
+	// Deprecated: use a logger from the context instead. For example:
+	//  * `log, err := logr.FromContext(ctx)`
+	//  * `log := logr.FromContextOrDiscard(ctx)`
 	Log logr.Logger
 }
 
