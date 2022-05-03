@@ -77,6 +77,25 @@ Replace `<group>` and `<resource>` with values for the parent type.
 // +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
 ```
 
+or
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: # any name that is bound to the ServiceAccount used by the client
+rules:
+- apiGroups: ["<group>"]
+  resources: ["<resource>"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["<group>"]
+  resources: ["<resource>/status"]
+  verbs: ["get", "update", "patch"]
+- apiGroups: ["core"]
+  resources: ["events"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+```
+
 ### SubReconciler
 
 The [`SubReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SubReconciler) interface defines the contract between the parent and sub reconcilers.
@@ -213,6 +232,20 @@ Replace `<group>` and `<resource>` with values for the child type.
 ```go
 // +kubebuilder:rbac:groups=<group>,resources=<resource>,verbs=get;list;watch;create;update;patch;delete
 ```
+
+or
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: # any name that is bound to the ServiceAccount used by the client
+rules:
+- apiGroups: ["<group>"]
+  resources: ["<resource>"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+```
+
 
 ### Higher-order Reconcilers
 
