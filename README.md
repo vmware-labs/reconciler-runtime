@@ -67,6 +67,16 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 ```
 [full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/build/function_reconciler.go#L39-L51)
 
+**Recommended RBAC:**
+
+Replace `<group>` and `<resource>` with values for the parent type.
+
+```go
+// +kubebuilder:rbac:groups=<group>,resources=<resource>,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=<group>,resources=<resource>/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
+```
+
 ### SubReconciler
 
 The [`SubReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SubReconciler) interface defines the contract between the parent and sub reconcilers.
@@ -195,6 +205,14 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 }
 ```
 [full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/build/function_reconciler.go#L76-L151)
+
+**Recommended RBAC:**
+
+Replace `<group>` and `<resource>` with values for the child type.
+
+```go
+// +kubebuilder:rbac:groups=<group>,resources=<resource>,verbs=get;list;watch;create;update;patch;delete
+```
 
 ### Higher-order Reconcilers
 
