@@ -538,7 +538,7 @@ type ChildReconciler struct {
 	// children match.
 	//
 	// Expected function signature:
-	//     func(child client.Object) bool
+	//     func(parent, child client.Object) bool
 	//
 	// +optional
 	OurChild interface{}
@@ -666,13 +666,14 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 
 	// validate OurChild function signature:
 	//     nil
-	//     func(child client.Object) interface{}
+	//     func(parent, child client.Object) bool
 	if r.OurChild != nil {
 		fn := reflect.TypeOf(r.OurChild)
-		if fn.NumIn() != 1 || fn.NumOut() != 1 ||
-			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
+		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
+			!reflect.TypeOf(castParentType).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) ||
 			fn.Out(0).Kind() != reflect.Bool {
-			return fmt.Errorf("ChildReconciler must implement OurChild: nil | func(%s) bool, found: %s", reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler must implement OurChild: nil | func(%s, %s) bool, found: %s", reflect.TypeOf(castParentType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
