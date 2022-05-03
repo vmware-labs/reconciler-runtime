@@ -1429,7 +1429,9 @@ func TestWithConfig(t *testing.T) {
 				}
 
 				return &reconcilers.WithConfig{
-					Config: c,
+					Config: func(ctx context.Context, _ reconcilers.Config) (reconcilers.Config, error) {
+						return c, nil
+					},
 					Reconciler: &reconcilers.SyncReconciler{
 						Sync: func(ctx context.Context, parent *resources.TestResource) error {
 							ac := reconcilers.RetrieveConfig(ctx)

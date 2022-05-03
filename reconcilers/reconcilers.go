@@ -56,7 +56,7 @@ func (c Config) IsEmpty() bool {
 	return c == Config{}
 }
 
-// WithConfig extends the config to access a new cluster.
+// WithCluster extends the config to access a new cluster.
 func (c Config) WithCluster(cluster cluster.Cluster) Config {
 	return Config{
 		Client:    cluster.GetClient(),
@@ -1109,8 +1109,10 @@ func (r *CastParent) cast(ctx context.Context, parent client.Object) (context.Co
 // The specified config can be accessed with `RetrieveConfig(ctx)`, the original config used to
 // load the parent resource can be accessed with `RetrieveParentConfig(ctx)`.
 type WithConfig struct {
-	// Config to use for this portion of the reconciler hierarchy
-	Config Config
+	// Config to use for this portion of the reconciler hierarchy. This method is called during
+	// setup and during reconciliation, if context is needed, it should be available durring both
+	// phases.
+	Config func(context.Context, Config) (Config, error)
 
 	// Reconciler is called for each reconciler request with the parent
 	// resource being reconciled. Typically a Sequence is used to compose
@@ -1122,13 +1124,17 @@ func (r *WithConfig) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bld
 	if err := r.validate(ctx); err != nil {
 		return err
 	}
-	ctx = StashConfig(ctx, r.Config)
+	c, err := r.Config(ctx, RetrieveConfig(ctx))
+	if err != nil {
+		return err
+	}
+	ctx = StashConfig(ctx, c)
 	return r.Reconciler.SetupWithManager(ctx, mgr, bldr)
 }
 
 func (r *WithConfig) validate(ctx context.Context) error {
 	// validate Config value
-	if r.Config.IsEmpty() {
+	if r.Config == nil {
 		return fmt.Errorf("Config must be defined")
 	}
 
@@ -1141,7 +1147,11 @@ func (r *WithConfig) validate(ctx context.Context) error {
 }
 
 func (r *WithConfig) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
-	ctx = StashConfig(ctx, r.Config)
+	c, err := r.Config(ctx, RetrieveConfig(ctx))
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	ctx = StashConfig(ctx, c)
 	return r.Reconciler.Reconcile(ctx, parent)
 }
 

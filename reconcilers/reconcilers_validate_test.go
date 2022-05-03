@@ -758,23 +758,17 @@ func TestWithConfig_validate(t *testing.T) {
 			name:   "valid",
 			parent: &corev1.ConfigMap{},
 			reconciler: &WithConfig{
-				Config: config,
-				Reconciler: &SyncReconciler{
-					Sync: func(ctx context.Context, parent *corev1.Secret) error {
-						return nil
-					},
+				Reconciler: &Sequence{},
+				Config: func(ctx context.Context, c Config) (Config, error) {
+					return config, nil
 				},
 			},
 		},
 		{
-			name:   "missing type",
+			name:   "missing config",
 			parent: &corev1.ConfigMap{},
 			reconciler: &WithConfig{
-				Reconciler: &SyncReconciler{
-					Sync: func(ctx context.Context, parent *corev1.Secret) error {
-						return nil
-					},
-				},
+				Reconciler: &Sequence{},
 			},
 			shouldErr: "Config must be defined",
 		},
@@ -782,8 +776,9 @@ func TestWithConfig_validate(t *testing.T) {
 			name:   "missing reconciler",
 			parent: &corev1.ConfigMap{},
 			reconciler: &WithConfig{
-				Config:     config,
-				Reconciler: nil,
+				Config: func(ctx context.Context, c Config) (Config, error) {
+					return config, nil
+				},
 			},
 			shouldErr: "Reconciler must be defined",
 		},

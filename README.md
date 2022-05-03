@@ -264,20 +264,22 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 `WithConfig` can be used to change the REST Config backing the clients. This could be to make requests to the same cluster with a user defined service account, or target an entirely different Kubernetes cluster.
 
 ```go
-func SwapRESTConfig(c reconciler.Config, rc *rest.Config) (*reconcilers.SubReconciler, error) {
-	cl, err := clusters.New(rc)
-	if err != nil {
-		return nil, err
-	}
-
+func SwapRESTConfig(rc *rest.Config) *reconcilers.SubReconciler {
 	return &reconcilers.WithConfig{
 		Reconciler: reconcilers.Sequence{
 			LookupReferenceDataReconciler(),
 			DoSomethingChildReconciler(),
 		},
 
-		Config: c.WithCluster(cl),
-	}, nil
+		Config: func(ctx context.Context, c reconciler.Config) (reconciler.Config, error ) {
+			// the rest config could also be stashed from a lookup in a SyncReconciler based on a dynamic value
+			cl, err := clusters.New(rc)
+			if err != nil {
+				return reconciler.Config{}, err
+			}
+			return c.WithCluster(cl), nil
+		}
+	}
 }
 ```
 
