@@ -797,6 +797,9 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (
 	}
 
 	child, err := r.reconcile(ctx, parent)
+	if parent.GetDeletionTimestamp() != nil {
+		return ctrl.Result{}, err
+	}
 	if err != nil {
 		if apierrs.IsAlreadyExists(err) {
 			// check if the resource blocking create is owned by the parent.

@@ -423,6 +423,20 @@ func NewDeleteRef(action DeleteAction) DeleteRef {
 	}
 }
 
+func NewDeleteRefFromObject(obj client.Object, scheme *runtime.Scheme) DeleteRef {
+	gvks, _, err := scheme.ObjectKinds(obj.DeepCopyObject())
+	if err != nil {
+		panic(err)
+	}
+
+	return DeleteRef{
+		Group:     gvks[0].Group,
+		Kind:      gvks[0].Kind,
+		Namespace: obj.GetNamespace(),
+		Name:      obj.GetName(),
+	}
+}
+
 type DeleteCollectionRef struct {
 	Group     string
 	Kind      string

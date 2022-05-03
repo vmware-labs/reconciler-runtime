@@ -131,9 +131,7 @@ func TestParentReconciler(t *testing.T) {
 		Name: "error fetching resource",
 		Key:  testKey,
 		GivenObjects: []client.Object{
-			resource.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
-				d.DeletionTimestamp(&deletedAt)
-			}),
+			resource,
 		},
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("get", "TestResource"),
@@ -434,7 +432,7 @@ func TestSyncReconciler(t *testing.T) {
 		},
 		ExpectedResult: reconcile.Result{RequeueAfter: 2 * time.Hour},
 	}, {
-		Name: "should not finalize deleted resources",
+		Name: "should finalize deleted resources",
 		Parent: resource.
 			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 				d.DeletionTimestamp(&now)
@@ -538,6 +536,8 @@ func TestChildReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
 	testFinalizer := "test.finalizer"
+
+	now := metav1.NewTime(time.Now().Truncate(time.Second))
 
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
@@ -856,7 +856,7 @@ func TestChildReconciler(t *testing.T) {
 				`Deleted ConfigMap %q`, testName),
 		},
 		ExpectDeletes: []rtesting.DeleteRef{
-			{Group: "", Kind: "ConfigMap", Namespace: testNamespace, Name: testName},
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
 		},
 	}, {
 		Name: "delete child, clearing finalizer",
@@ -886,7 +886,7 @@ func TestChildReconciler(t *testing.T) {
 				d.ResourceVersion("1000")
 			}),
 		ExpectDeletes: []rtesting.DeleteRef{
-			{Group: "", Kind: "ConfigMap", Namespace: testNamespace, Name: testName},
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
 		},
 		ExpectPatches: []rtesting.PatchRef{
 			{
@@ -919,7 +919,7 @@ func TestChildReconciler(t *testing.T) {
 				`Deleted ConfigMap %q`, testName),
 		},
 		ExpectDeletes: []rtesting.DeleteRef{
-			{Group: "", Kind: "ConfigMap", Namespace: testNamespace, Name: testName},
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
 		},
 	}, {
 		Name:   "ignore extraneous children",
@@ -978,6 +978,48 @@ func TestChildReconciler(t *testing.T) {
 		},
 		ExpectCreates: []client.Object{
 			configMapCreate,
+		},
+	}, {
+		Name: "delete child durring finalization",
+		Parent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&now)
+				d.Finalizers(testFinalizer)
+			}),
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.Finalizer = testFinalizer
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Deleted",
+				`Deleted ConfigMap %q`, testName),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
+				`Patched finalizer %q`, testFinalizer),
+		},
+		ExpectParent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&now)
+				d.Finalizers()
+				d.ResourceVersion("1000")
+			}),
+		ExpectDeletes: []rtesting.DeleteRef{
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":null,"resourceVersion":"999"}}`),
+			},
 		},
 	}, {
 		Name: "child name collision",
@@ -1201,7 +1243,7 @@ func TestChildReconciler(t *testing.T) {
 				`Failed to patch finalizer %q: inducing failure for patch TestResource`, testFinalizer),
 		},
 		ExpectDeletes: []rtesting.DeleteRef{
-			{Group: "", Kind: "ConfigMap", Namespace: testNamespace, Name: testName},
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
 		},
 		ExpectPatches: []rtesting.PatchRef{
 			{
@@ -1263,7 +1305,7 @@ func TestChildReconciler(t *testing.T) {
 				`Failed to delete ConfigMap %q: inducing failure for delete ConfigMap`, testName),
 		},
 		ExpectDeletes: []rtesting.DeleteRef{
-			{Group: "", Kind: "ConfigMap", Namespace: testNamespace, Name: testName},
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
 		},
 		ShouldErr: true,
 	}, {
