@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -557,6 +558,7 @@ type ChildReconciler struct {
 	// mutation webhooks. This cache is used to avoid unnecessary update calls
 	// that would actually have no effect.
 	mutationCache *cache.Expiring
+	lazyInit      sync.Once
 }
 
 func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
@@ -699,9 +701,9 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, parent client.Object) (
 		WithValues("childType", gvk(r.ChildType, c.Scheme()))
 	ctx = logr.NewContext(ctx, log)
 
-	if r.mutationCache == nil {
+	r.lazyInit.Do(func() {
 		r.mutationCache = cache.NewExpiring()
-	}
+	})
 
 	child, err := r.reconcile(ctx, parent)
 	if err != nil {
