@@ -347,7 +347,7 @@ type SyncReconciler struct {
 	// +optional
 	Setup func(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error
 
-	// SyncDuringFinalization indicates the the Sync method should be called regardless of whether
+	// SyncDuringFinalization indicates the Sync method should be called when the resource is pending deletion.
 	SyncDuringFinalization bool
 
 	// Sync does whatever work is necessary for the reconciler.
