@@ -166,6 +166,10 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	ctx = reconcilers.StashParentConfig(ctx, c)
 
 	parent := tc.Parent.DeepCopyObject().(client.Object)
+	if parent.GetResourceVersion() == "" {
+		// this value is also set by the test client when resource are added as givens
+		parent.SetResourceVersion("999")
+	}
 	ctx = reconcilers.StashParentType(ctx, parent.DeepCopyObject().(client.Object))
 	ctx = reconcilers.StashCastParentType(ctx, parent.DeepCopyObject().(client.Object))
 
@@ -200,6 +204,10 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	expectedParent := tc.Parent.DeepCopyObject().(client.Object)
 	if tc.ExpectParent != nil {
 		expectedParent = tc.ExpectParent.DeepCopyObject().(client.Object)
+	}
+	if expectedParent.GetResourceVersion() == "" {
+		// mirror defaulting of the parent
+		expectedParent.SetResourceVersion("999")
 	}
 	if diff := cmp.Diff(expectedParent, parent, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("Unexpected parent mutations(-expected, +actual): %s", diff)

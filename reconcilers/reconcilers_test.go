@@ -131,9 +131,7 @@ func TestParentReconciler(t *testing.T) {
 		Name: "error fetching resource",
 		Key:  testKey,
 		GivenObjects: []client.Object{
-			resource.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
-				d.DeletionTimestamp(&deletedAt)
-			}),
+			resource,
 		},
 		WithReactors: []rtesting.ReactionFunc{
 			rtesting.InduceFailure("get", "TestResource"),
@@ -350,6 +348,8 @@ func TestSyncReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
 
+	now := metav1.Now()
+
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
 
@@ -414,6 +414,117 @@ func TestSyncReconciler(t *testing.T) {
 			},
 		},
 		ShouldPanic: true,
+	}, {
+		Name:   "should not finalize non-deleted resources",
+		Parent: resource,
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, parent *resources.TestResource) (ctrl.Result, error) {
+						return ctrl.Result{RequeueAfter: 2 * time.Hour}, nil
+					},
+					Finalize: func(ctx context.Context, parent *resources.TestResource) (ctrl.Result, error) {
+						t.Errorf("reconciler should not call finalize for non-deleted resources")
+						return ctrl.Result{RequeueAfter: 3 * time.Hour}, nil
+					},
+				}
+			},
+		},
+		ExpectedResult: reconcile.Result{RequeueAfter: 2 * time.Hour},
+	}, {
+		Name: "should finalize deleted resources",
+		Parent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&now)
+			}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, parent *resources.TestResource) (ctrl.Result, error) {
+						t.Errorf("reconciler should not call sync for deleted resources")
+						return ctrl.Result{RequeueAfter: 2 * time.Hour}, nil
+					},
+					Finalize: func(ctx context.Context, parent *resources.TestResource) (ctrl.Result, error) {
+						return ctrl.Result{RequeueAfter: 3 * time.Hour}, nil
+					},
+				}
+			},
+		},
+		ExpectedResult: reconcile.Result{RequeueAfter: 3 * time.Hour},
+	}, {
+		Name: "should finalize and sync deleted resources when asked to",
+		Parent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&now)
+			}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					SyncDuringFinalization: true,
+					Sync: func(ctx context.Context, parent *resources.TestResource) (ctrl.Result, error) {
+						return ctrl.Result{RequeueAfter: 2 * time.Hour}, nil
+					},
+					Finalize: func(ctx context.Context, parent *resources.TestResource) (ctrl.Result, error) {
+						return ctrl.Result{RequeueAfter: 3 * time.Hour}, nil
+					},
+				}
+			},
+		},
+		ExpectedResult: reconcile.Result{RequeueAfter: 2 * time.Hour},
+	}, {
+		Name: "should finalize and sync deleted resources when asked to, shorter resync wins",
+		Parent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&now)
+			}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					SyncDuringFinalization: true,
+					Sync: func(ctx context.Context, parent *resources.TestResource) (ctrl.Result, error) {
+						return ctrl.Result{RequeueAfter: 3 * time.Hour}, nil
+					},
+					Finalize: func(ctx context.Context, parent *resources.TestResource) (ctrl.Result, error) {
+						return ctrl.Result{RequeueAfter: 2 * time.Hour}, nil
+					},
+				}
+			},
+		},
+		ExpectedResult: reconcile.Result{RequeueAfter: 2 * time.Hour},
+	}, {
+		Name: "finalize is optional",
+		Parent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&now)
+			}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, parent *resources.TestResource) error {
+						return nil
+					},
+				}
+			},
+		},
+	}, {
+		Name: "finalize error",
+		Parent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&now)
+			}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, parent *resources.TestResource) error {
+						return nil
+					},
+					Finalize: func(ctx context.Context, parent *resources.TestResource) error {
+						return fmt.Errorf("syncreconciler finalize error")
+					},
+				}
+			},
+		},
+		ShouldErr: true,
 	}}
 
 	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
@@ -424,6 +535,9 @@ func TestSyncReconciler(t *testing.T) {
 func TestChildReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
+	testFinalizer := "test.finalizer"
+
+	now := metav1.NewTime(time.Now().Truncate(time.Second))
 
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
@@ -553,6 +667,49 @@ func TestChildReconciler(t *testing.T) {
 			configMapCreate,
 		},
 	}, {
+		Name: "create child with finalizer",
+		Parent: resource.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.Finalizer = testFinalizer
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
+				`Patched finalizer %q`, testFinalizer),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Created",
+				`Created ConfigMap %q`, testName),
+		},
+		ExpectParent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers(testFinalizer)
+				d.ResourceVersion("1000")
+			}).
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
+		ExpectCreates: []client.Object{
+			configMapCreate,
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":["test.finalizer"],"resourceVersion":"999"}}`),
+			},
+		},
+	}, {
 		Name: "update child",
 		Parent: resourceReady.
 			SpecDie(func(d *dies.TestResourceSpecDie) {
@@ -588,6 +745,102 @@ func TestChildReconciler(t *testing.T) {
 				AddData("new", "field"),
 		},
 	}, {
+		Name: "update child, preserve finalizers",
+		Parent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers(testFinalizer, "some.other.finalizer")
+			}).
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+				d.AddField("new", "field")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.Finalizer = testFinalizer
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated",
+				`Updated ConfigMap %q`, testName),
+		},
+		ExpectParent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers(testFinalizer, "some.other.finalizer")
+			}).
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+				d.AddField("new", "field")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+				d.AddField("new", "field")
+			}),
+		ExpectUpdates: []client.Object{
+			configMapGiven.
+				AddData("new", "field"),
+		},
+	}, {
+		Name: "update child, restoring missing finalizer",
+		Parent: resourceReady.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+				d.AddField("new", "field")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.Finalizer = testFinalizer
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
+				`Patched finalizer %q`, testFinalizer),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated",
+				`Updated ConfigMap %q`, testName),
+		},
+		ExpectParent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers(testFinalizer)
+				d.ResourceVersion("1000")
+			}).
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+				d.AddField("new", "field")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+				d.AddField("new", "field")
+			}),
+		ExpectUpdates: []client.Object{
+			configMapGiven.
+				AddData("new", "field"),
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":["test.finalizer"],"resourceVersion":"999"}}`),
+			},
+		},
+	}, {
 		Name:   "delete child",
 		Parent: resourceReady,
 		GivenObjects: []client.Object{
@@ -603,7 +856,70 @@ func TestChildReconciler(t *testing.T) {
 				`Deleted ConfigMap %q`, testName),
 		},
 		ExpectDeletes: []rtesting.DeleteRef{
-			{Group: "", Kind: "ConfigMap", Namespace: testNamespace, Name: testName},
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
+		},
+	}, {
+		Name: "delete child, clearing finalizer",
+		Parent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers(testFinalizer)
+			}),
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.Finalizer = testFinalizer
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Deleted",
+				`Deleted ConfigMap %q`, testName),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
+				`Patched finalizer %q`, testFinalizer),
+		},
+		ExpectParent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers()
+				d.ResourceVersion("1000")
+			}),
+		ExpectDeletes: []rtesting.DeleteRef{
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":null,"resourceVersion":"999"}}`),
+			},
+		},
+	}, {
+		Name: "delete child, preserve other finalizer",
+		Parent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers("some.other.finalizer")
+			}),
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.Finalizer = testFinalizer
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Deleted",
+				`Deleted ConfigMap %q`, testName),
+		},
+		ExpectDeletes: []rtesting.DeleteRef{
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
 		},
 	}, {
 		Name:   "ignore extraneous children",
@@ -662,6 +978,48 @@ func TestChildReconciler(t *testing.T) {
 		},
 		ExpectCreates: []client.Object{
 			configMapCreate,
+		},
+	}, {
+		Name: "delete child durring finalization",
+		Parent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&now)
+				d.Finalizers(testFinalizer)
+			}),
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.Finalizer = testFinalizer
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Deleted",
+				`Deleted ConfigMap %q`, testName),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
+				`Patched finalizer %q`, testFinalizer),
+		},
+		ExpectParent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(&now)
+				d.Finalizers()
+				d.ResourceVersion("1000")
+			}),
+		ExpectDeletes: []rtesting.DeleteRef{
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":null,"resourceVersion":"999"}}`),
+			},
 		},
 	}, {
 		Name: "child name collision",
@@ -859,6 +1217,76 @@ func TestChildReconciler(t *testing.T) {
 		},
 		ShouldErr: true,
 	}, {
+		Name: "error adding finalizer",
+		Parent: resource.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}),
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.Finalizer = testFinalizer
+				return r
+			},
+		},
+		WithReactors: []rtesting.ReactionFunc{
+			rtesting.InduceFailure("patch", "TestResource"),
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "FinalizerPatchFailed",
+				`Failed to patch finalizer %q: inducing failure for patch TestResource`, testFinalizer),
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":["test.finalizer"],"resourceVersion":"999"}}`),
+			},
+		},
+		ShouldErr: true,
+	}, {
+		Name: "error clearing finalizer",
+		Parent: resourceReady.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers(testFinalizer)
+			}),
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.Finalizer = testFinalizer
+				return r
+			},
+		},
+		WithReactors: []rtesting.ReactionFunc{
+			rtesting.InduceFailure("patch", "TestResource"),
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Deleted",
+				`Deleted ConfigMap %q`, testName),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "FinalizerPatchFailed",
+				`Failed to patch finalizer %q: inducing failure for patch TestResource`, testFinalizer),
+		},
+		ExpectDeletes: []rtesting.DeleteRef{
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":null,"resourceVersion":"999"}}`),
+			},
+		},
+		ShouldErr: true,
+	}, {
 		Name: "error updating child",
 		Parent: resourceReady.
 			SpecDie(func(d *dies.TestResourceSpecDie) {
@@ -907,7 +1335,7 @@ func TestChildReconciler(t *testing.T) {
 				`Failed to delete ConfigMap %q: inducing failure for delete ConfigMap`, testName),
 		},
 		ExpectDeletes: []rtesting.DeleteRef{
-			{Group: "", Kind: "ConfigMap", Namespace: testNamespace, Name: testName},
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
 		},
 		ShouldErr: true,
 	}, {
