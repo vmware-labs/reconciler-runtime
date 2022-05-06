@@ -1259,6 +1259,64 @@ func (r *WithConfig) Reconcile(ctx context.Context, parent client.Object) (ctrl.
 	return r.Reconciler.Reconcile(ctx, parent)
 }
 
+// WithFinalizer ensures the resource being reconciled has the desired finalizer set so that state
+// can be cleaned up upon the resource being deleted. The finalizer is added to the resource, if not
+// already set, before calling the nested reconciler. When the resource is terminating, the
+// finalizer is cleared after returning from the nested reconciler without error.
+type WithFinalizer struct {
+	// Finalizer to set on the parent resource. The value must be unique to this specific
+	// reconciler instance and not shared. Reusing a value may result in orphaned state when
+	// the parent resource is deleted.
+	//
+	// Using a finalizer is encouraged when state needs to be manually cleaned up before a resource
+	// is fully deleted. This commonly include state allocated outside of the current cluster.
+	Finalizer string
+
+	// Reconciler is called for each reconciler request with the parent
+	// resource being reconciled. Typically a Sequence is used to compose
+	// multiple SubReconcilers.
+	Reconciler SubReconciler
+}
+
+func (r *WithFinalizer) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	if err := r.validate(ctx); err != nil {
+		return err
+	}
+	return r.Reconciler.SetupWithManager(ctx, mgr, bldr)
+}
+
+func (r *WithFinalizer) validate(ctx context.Context) error {
+	// validate Finalizer value
+	if r.Finalizer == "" {
+		return fmt.Errorf("Finalizer must be defined")
+	}
+
+	// validate Reconciler value
+	if r.Reconciler == nil {
+		return fmt.Errorf("Reconciler must be defined")
+	}
+
+	return nil
+}
+
+func (r *WithFinalizer) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
+	if parent.GetDeletionTimestamp() == nil {
+		if err := AddParentFinalizer(ctx, parent, r.Finalizer); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	result, err := r.Reconciler.Reconcile(ctx, parent)
+	if err != nil {
+		return result, err
+	}
+	if parent.GetDeletionTimestamp() != nil {
+		if err := ClearParentFinalizer(ctx, parent, r.Finalizer); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+	return result, err
+}
+
 func typeName(i interface{}) string {
 	t := reflect.TypeOf(i)
 	// TODO do we need this?

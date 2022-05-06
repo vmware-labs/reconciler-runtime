@@ -1889,3 +1889,167 @@ func TestWithConfig(t *testing.T) {
 		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c)
 	})
 }
+
+func TestWithFinalizer(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+	testFinalizer := "test-finalizer"
+
+	now := &metav1.Time{Time: time.Now().Truncate(time.Second)}
+
+	scheme := runtime.NewScheme()
+	_ = resources.AddToScheme(scheme)
+
+	resource := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
+		})
+
+	rts := rtesting.SubReconcilerTestSuite{{
+		Name: "in sync",
+		Parent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers(testFinalizer)
+			}),
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Sync", ""),
+		},
+	}, {
+		Name:   "add finalizer",
+		Parent: resource,
+		ExpectParent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.Finalizers(testFinalizer)
+				d.ResourceVersion("1000")
+			}),
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
+				`Patched finalizer %q`, testFinalizer),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Sync", ""),
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":["test-finalizer"],"resourceVersion":"999"}}`),
+			},
+		},
+	}, {
+		Name:   "error adding finalizer",
+		Parent: resource,
+		WithReactors: []rtesting.ReactionFunc{
+			rtesting.InduceFailure("patch", "TestResource"),
+		},
+		ShouldErr: true,
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "FinalizerPatchFailed",
+				`Failed to patch finalizer %q: inducing failure for patch TestResource`, testFinalizer),
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":["test-finalizer"],"resourceVersion":"999"}}`),
+			},
+		},
+	}, {
+		Name: "clear finalizer",
+		Parent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(now)
+				d.Finalizers(testFinalizer)
+			}),
+		ExpectParent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(now)
+				d.ResourceVersion("1000")
+			}),
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Finalize", ""),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
+				`Patched finalizer %q`, testFinalizer),
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":null,"resourceVersion":"999"}}`),
+			},
+		},
+	}, {
+		Name: "error clearing finalizer",
+		Parent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(now)
+				d.Finalizers(testFinalizer)
+			}),
+		WithReactors: []rtesting.ReactionFunc{
+			rtesting.InduceFailure("patch", "TestResource"),
+		},
+		ShouldErr: true,
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Finalize", ""),
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "FinalizerPatchFailed",
+				`Failed to patch finalizer %q: inducing failure for patch TestResource`, testFinalizer),
+		},
+		ExpectPatches: []rtesting.PatchRef{
+			{
+				Group:     "testing.reconciler.runtime",
+				Kind:      "TestResource",
+				Namespace: testNamespace,
+				Name:      testName,
+				PatchType: types.MergePatchType,
+				Patch:     []byte(`{"metadata":{"finalizers":null,"resourceVersion":"999"}}`),
+			},
+		},
+	}, {
+		Name: "keep finalizer on error",
+		Parent: resource.
+			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+				d.DeletionTimestamp(now)
+				d.Finalizers(testFinalizer)
+			}),
+		ShouldErr: true,
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Finalize", ""),
+		},
+		Metadata: map[string]interface{}{
+			"FinalizerError": fmt.Errorf("finalize error"),
+		},
+	}}
+
+	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+		var syncErr, finalizeErr error
+		if err, ok := rtc.Metadata["SyncError"]; ok {
+			syncErr = err.(error)
+		}
+		if err, ok := rtc.Metadata["FinalizerError"]; ok {
+			finalizeErr = err.(error)
+		}
+
+		return &reconcilers.WithFinalizer{
+			Finalizer: testFinalizer,
+			Reconciler: &reconcilers.SyncReconciler{
+				Sync: func(ctx context.Context, parent *resources.TestResource) error {
+					c.Recorder.Event(resource, corev1.EventTypeNormal, "Sync", "")
+					return syncErr
+				},
+				Finalize: func(ctx context.Context, parent *resources.TestResource) error {
+					c.Recorder.Event(resource, corev1.EventTypeNormal, "Finalize", "")
+					return finalizeErr
+				},
+			},
+		}
+	})
+}

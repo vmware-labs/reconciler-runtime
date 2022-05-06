@@ -896,3 +896,53 @@ func TestWithConfig_validate(t *testing.T) {
 		})
 	}
 }
+
+func TestWithFinalizer_validate(t *testing.T) {
+	tests := []struct {
+		name       string
+		parent     client.Object
+		reconciler *WithFinalizer
+		shouldErr  string
+	}{
+		{
+			name:       "empty",
+			parent:     &corev1.ConfigMap{},
+			reconciler: &WithFinalizer{},
+			shouldErr:  "Finalizer must be defined",
+		},
+		{
+			name:   "valid",
+			parent: &corev1.ConfigMap{},
+			reconciler: &WithFinalizer{
+				Reconciler: &Sequence{},
+				Finalizer:  "my-finalizer",
+			},
+		},
+		{
+			name:   "missing finalizer",
+			parent: &corev1.ConfigMap{},
+			reconciler: &WithFinalizer{
+				Reconciler: &Sequence{},
+			},
+			shouldErr: "Finalizer must be defined",
+		},
+		{
+			name:   "missing reconciler",
+			parent: &corev1.ConfigMap{},
+			reconciler: &WithFinalizer{
+				Finalizer: "my-finalizer",
+			},
+			shouldErr: "Reconciler must be defined",
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := context.TODO()
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+		})
+	}
+}
