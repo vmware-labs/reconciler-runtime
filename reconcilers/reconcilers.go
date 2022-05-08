@@ -1072,6 +1072,7 @@ func (r *ChildReconciler) ourChild(parent, obj client.Object) bool {
 	}
 	fn := reflect.ValueOf(r.OurChild)
 	out := fn.Call([]reflect.Value{
+		reflect.ValueOf(parent),
 		reflect.ValueOf(obj),
 	})
 	keep := true

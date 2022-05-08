@@ -930,7 +930,7 @@ func TestChildReconciler(t *testing.T) {
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
-				r.OurChild = func(child *corev1.ConfigMap) bool {
+				r.OurChild = func(parent *resources.TestResource, child *corev1.ConfigMap) bool {
 					return false
 				}
 				return r
