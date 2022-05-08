@@ -402,11 +402,11 @@ func (r *SyncReconciler) validate(ctx context.Context) error {
 	//     func(ctx context.Context, parent client.Object) error
 	//     func(ctx context.Context, parent client.Object) (ctrl.Result, error)
 	if r.Sync == nil {
-		return fmt.Errorf("SyncReconciler must implement Sync")
+		return fmt.Errorf("SyncReconciler %q must implement Sync", r.Name)
 	} else {
 		castParentType := RetrieveCastParentType(ctx)
 		fn := reflect.TypeOf(r.Sync)
-		err := fmt.Errorf("SyncReconciler must implement Sync: func(context.Context, %s) error | func(context.Context, %s) (ctrl.Result, error), found: %s", reflect.TypeOf(castParentType), reflect.TypeOf(castParentType), fn)
+		err := fmt.Errorf("SyncReconciler %q must implement Sync: func(context.Context, %s) error | func(context.Context, %s) (ctrl.Result, error), found: %s", r.Name, reflect.TypeOf(castParentType), reflect.TypeOf(castParentType), fn)
 		if fn.NumIn() != 2 ||
 			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(castParentType).AssignableTo(fn.In(1)) {
@@ -434,7 +434,7 @@ func (r *SyncReconciler) validate(ctx context.Context) error {
 	if r.Finalize != nil {
 		castParentType := RetrieveCastParentType(ctx)
 		fn := reflect.TypeOf(r.Finalize)
-		err := fmt.Errorf("SyncReconciler must implement Finalize: nil | func(context.Context, %s) error | func(context.Context, %s) (ctrl.Result, error), found: %s", reflect.TypeOf(castParentType), reflect.TypeOf(castParentType), fn)
+		err := fmt.Errorf("SyncReconciler %q must implement Finalize: nil | func(context.Context, %s) error | func(context.Context, %s) (ctrl.Result, error), found: %s", r.Name, reflect.TypeOf(castParentType), reflect.TypeOf(castParentType), fn)
 		if fn.NumIn() != 2 ||
 			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(castParentType).AssignableTo(fn.In(1)) {
@@ -701,7 +701,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 	// validate DesiredChild function signature:
 	//     func(ctx context.Context, parent client.Object) (client.Object, error)
 	if r.DesiredChild == nil {
-		return fmt.Errorf("ChildReconciler must implement DesiredChild")
+		return fmt.Errorf("ChildReconciler %q must implement DesiredChild", r.Name)
 	} else {
 		fn := reflect.TypeOf(r.DesiredChild)
 		if fn.NumIn() != 2 || fn.NumOut() != 2 ||
@@ -709,21 +709,21 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 			!reflect.TypeOf(castParentType).AssignableTo(fn.In(1)) ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.Out(0)) ||
 			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(1)) {
-			return fmt.Errorf("ChildReconciler must implement DesiredChild: func(context.Context, %s) (%s, error), found: %s", reflect.TypeOf(castParentType), reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler %q must implement DesiredChild: func(context.Context, %s) (%s, error), found: %s", r.Name, reflect.TypeOf(castParentType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
 	// validate ReflectChildStatusOnParent function signature:
 	//     func(parent, child client.Object, err error)
 	if r.ReflectChildStatusOnParent == nil {
-		return fmt.Errorf("ChildReconciler must implement ReflectChildStatusOnParent")
+		return fmt.Errorf("ChildReconciler %q must implement ReflectChildStatusOnParent", r.Name)
 	} else {
 		fn := reflect.TypeOf(r.ReflectChildStatusOnParent)
 		if fn.NumIn() != 3 || fn.NumOut() != 0 ||
 			!reflect.TypeOf(castParentType).AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) ||
 			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.In(2)) {
-			return fmt.Errorf("ChildReconciler must implement ReflectChildStatusOnParent: func(%s, %s, error), found: %s", reflect.TypeOf(castParentType), reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler %q must implement ReflectChildStatusOnParent: func(%s, %s, error), found: %s", r.Name, reflect.TypeOf(castParentType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
@@ -735,34 +735,34 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) {
-			return fmt.Errorf("ChildReconciler must implement HarmonizeImmutableFields: nil | func(%s, %s), found: %s", reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler %q must implement HarmonizeImmutableFields: nil | func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
 	// validate MergeBeforeUpdate function signature:
 	//     func(current, desired client.Object)
 	if r.MergeBeforeUpdate == nil {
-		return fmt.Errorf("ChildReconciler must implement MergeBeforeUpdate")
+		return fmt.Errorf("ChildReconciler %q must implement MergeBeforeUpdate", r.Name)
 	} else {
 		fn := reflect.TypeOf(r.MergeBeforeUpdate)
 		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) {
-			return fmt.Errorf("ChildReconciler must implement MergeBeforeUpdate: nil | func(%s, %s), found: %s", reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler %q must implement MergeBeforeUpdate: nil | func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
 	// validate SemanticEquals function signature:
 	//     func(a1, a2 client.Object) bool
 	if r.SemanticEquals == nil {
-		return fmt.Errorf("ChildReconciler must implement SemanticEquals")
+		return fmt.Errorf("ChildReconciler %q must implement SemanticEquals", r.Name)
 	} else {
 		fn := reflect.TypeOf(r.SemanticEquals)
 		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) ||
 			fn.Out(0).Kind() != reflect.Bool {
-			return fmt.Errorf("ChildReconciler must implement SemanticEquals: nil | func(%s, %s) bool, found: %s", reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler %q must implement SemanticEquals: nil | func(%s, %s) bool, found: %s", r.Name, reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
@@ -775,7 +775,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 			!reflect.TypeOf(castParentType).AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) ||
 			fn.Out(0).Kind() != reflect.Bool {
-			return fmt.Errorf("ChildReconciler must implement OurChild: nil | func(%s, %s) bool, found: %s", reflect.TypeOf(castParentType), reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler %q must implement OurChild: nil | func(%s, %s) bool, found: %s", r.Name, reflect.TypeOf(castParentType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
@@ -786,7 +786,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 		fn := reflect.TypeOf(r.Sanitize)
 		if fn.NumIn() != 1 || fn.NumOut() != 1 ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) {
-			return fmt.Errorf("ChildReconciler must implement Sanitize: nil | func(%s) interface{}, found: %s", reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler %q must implement Sanitize: nil | func(%s) interface{}, found: %s", r.Name, reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
