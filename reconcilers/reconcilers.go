@@ -86,7 +86,8 @@ func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration
 // resource's status is compared with the original status, updating the API
 // server if needed.
 type ParentReconciler struct {
-	// Name used to identify this reconciler. Defaults to `{Type}ParentReconciler`.  Ideally unique, but not required to be so.
+	// Name used to identify this reconciler.  Defaults to `{Type}ParentReconciler`.  Ideally
+	// unique, but not required to be so.
 	//
 	// +optional
 	Name string
@@ -103,6 +104,10 @@ type ParentReconciler struct {
 }
 
 func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sParentReconciler", typeName(r.Type))
+	}
+
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
 		WithValues("parentType", gvk(r.Type, r.Config.Scheme()))
@@ -112,10 +117,6 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 	ctx = StashParentConfig(ctx, r.Config)
 	ctx = StashParentType(ctx, r.Type)
 	ctx = StashCastParentType(ctx, r.Type)
-
-	if r.Name == "" {
-		r.Name = fmt.Sprintf("%sParentReconciler", typeName(r.Type))
-	}
 
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
@@ -334,12 +335,15 @@ var (
 	_ SubReconciler = (*ChildReconciler)(nil)
 	_ SubReconciler = (Sequence)(nil)
 	_ SubReconciler = (*CastParent)(nil)
+	_ SubReconciler = (*WithConfig)(nil)
+	_ SubReconciler = (*WithFinalizer)(nil)
 )
 
 // SyncReconciler is a sub reconciler for custom reconciliation logic. No
 // behavior is defined directly.
 type SyncReconciler struct {
-	// Name used to identify this reconciler.  Ideally unique, but not required to be so.
+	// Name used to identify this reconciler.  Defaults to `SyncReconciler`.  Ideally unique, but
+	// not required to be so.
 	//
 	// +optional
 	Name string
@@ -376,10 +380,12 @@ type SyncReconciler struct {
 }
 
 func (r *SyncReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
-	log := logr.FromContextOrDiscard(ctx)
-	if r.Name != "" {
-		log = log.WithName(r.Name)
+	if r.Name == "" {
+		r.Name = "SyncReconciler"
 	}
+
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name)
 	ctx = logr.NewContext(ctx, log)
 
 	if r.Setup == nil {
@@ -453,10 +459,8 @@ func (r *SyncReconciler) validate(ctx context.Context) error {
 }
 
 func (r *SyncReconciler) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
-	log := logr.FromContextOrDiscard(ctx)
-	if r.Name != "" {
-		log = log.WithName(r.Name)
-	}
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name)
 	ctx = logr.NewContext(ctx, log)
 
 	result := ctrl.Result{}
@@ -660,14 +664,14 @@ type ChildReconciler struct {
 func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
 	c := RetrieveConfigOrDie(ctx)
 
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sChildReconciler", typeName(r.ChildType))
+	}
+
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
 		WithValues("childType", gvk(r.ChildType, c.Scheme()))
 	ctx = logr.NewContext(ctx, log)
-
-	if r.Name == "" {
-		r.Name = fmt.Sprintf("%sChildReconciler", typeName(r.ChildType))
-	}
 
 	if err := r.validate(ctx); err != nil {
 		return err
@@ -1087,7 +1091,11 @@ func (r *ChildReconciler) ourChild(parent, obj client.Object) bool {
 type Sequence []SubReconciler
 
 func (r Sequence) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
-	for _, reconciler := range r {
+	for i, reconciler := range r {
+		log := logr.FromContextOrDiscard(ctx).
+			WithName(fmt.Sprintf("%d", i))
+		ctx = logr.NewContext(ctx, log)
+
 		err := reconciler.SetupWithManager(ctx, mgr, bldr)
 		if err != nil {
 			return err
@@ -1098,7 +1106,11 @@ func (r Sequence) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *
 
 func (r Sequence) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	aggregateResult := ctrl.Result{}
-	for _, reconciler := range r {
+	for i, reconciler := range r {
+		log := logr.FromContextOrDiscard(ctx).
+			WithName(fmt.Sprintf("%d", i))
+		ctx = logr.NewContext(ctx, log)
+
 		result, err := reconciler.Reconcile(ctx, parent)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -1118,8 +1130,8 @@ func (r Sequence) Reconcile(ctx context.Context, parent client.Object) (ctrl.Res
 // cast parent are read-only. Attempts to mutate the parent will result in the
 // reconciler erring.
 type CastParent struct {
-	// Name used to identify this reconciler.  Defaults to `{Type}CastParent`.  Ideally unique,
-	// but not required to be so.
+	// Name used to identify this reconciler.  Defaults to `{Type}CastParent`.  Ideally unique, but
+	// not required to be so.
 	//
 	// +optional
 	Name string
@@ -1134,14 +1146,14 @@ type CastParent struct {
 }
 
 func (r *CastParent) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sCastParent", typeName(r.Type))
+	}
+
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
 		WithValues("castParentType", typeName(r.Type))
 	ctx = logr.NewContext(ctx, log)
-
-	if r.Name == "" {
-		r.Name = fmt.Sprintf("%sCastParent", typeName(r.Type))
-	}
 
 	if err := r.validate(ctx); err != nil {
 		return err
@@ -1214,6 +1226,12 @@ func (r *CastParent) cast(ctx context.Context, parent client.Object) (context.Co
 // The specified config can be accessed with `RetrieveConfig(ctx)`, the original config used to
 // load the parent resource can be accessed with `RetrieveParentConfig(ctx)`.
 type WithConfig struct {
+	// Name used to identify this reconciler.  Defaults to `WithConfig`.  Ideally unique, but
+	// not required to be so.
+	//
+	// +optional
+	Name string
+
 	// Config to use for this portion of the reconciler hierarchy. This method is called during
 	// setup and during reconciliation, if context is needed, it should be available durring both
 	// phases.
@@ -1226,6 +1244,14 @@ type WithConfig struct {
 }
 
 func (r *WithConfig) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	if r.Name == "" {
+		r.Name = "WithConfig"
+	}
+
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name)
+	ctx = logr.NewContext(ctx, log)
+
 	if err := r.validate(ctx); err != nil {
 		return err
 	}
@@ -1252,6 +1278,10 @@ func (r *WithConfig) validate(ctx context.Context) error {
 }
 
 func (r *WithConfig) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name)
+	ctx = logr.NewContext(ctx, log)
+
 	c, err := r.Config(ctx, RetrieveConfig(ctx))
 	if err != nil {
 		return ctrl.Result{}, err
@@ -1265,6 +1295,12 @@ func (r *WithConfig) Reconcile(ctx context.Context, parent client.Object) (ctrl.
 // already set, before calling the nested reconciler. When the resource is terminating, the
 // finalizer is cleared after returning from the nested reconciler without error.
 type WithFinalizer struct {
+	// Name used to identify this reconciler.  Defaults to `WithFinalizer`.  Ideally unique, but
+	// not required to be so.
+	//
+	// +optional
+	Name string
+
 	// Finalizer to set on the parent resource. The value must be unique to this specific
 	// reconciler instance and not shared. Reusing a value may result in orphaned state when
 	// the parent resource is deleted.
@@ -1280,6 +1316,14 @@ type WithFinalizer struct {
 }
 
 func (r *WithFinalizer) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	if r.Name == "" {
+		r.Name = "WithFinalizer"
+	}
+
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name)
+	ctx = logr.NewContext(ctx, log)
+
 	if err := r.validate(ctx); err != nil {
 		return err
 	}
@@ -1301,6 +1345,10 @@ func (r *WithFinalizer) validate(ctx context.Context) error {
 }
 
 func (r *WithFinalizer) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name)
+	ctx = logr.NewContext(ctx, log)
+
 	if parent.GetDeletionTimestamp() == nil {
 		if err := AddParentFinalizer(ctx, parent, r.Finalizer); err != nil {
 			return ctrl.Result{}, err
