@@ -1091,7 +1091,11 @@ func (r *ChildReconciler) ourChild(parent, obj client.Object) bool {
 type Sequence []SubReconciler
 
 func (r Sequence) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
-	for _, reconciler := range r {
+	for i, reconciler := range r {
+		log := logr.FromContextOrDiscard(ctx).
+			WithName(fmt.Sprintf("%d", i))
+		ctx = logr.NewContext(ctx, log)
+
 		err := reconciler.SetupWithManager(ctx, mgr, bldr)
 		if err != nil {
 			return err
@@ -1102,7 +1106,11 @@ func (r Sequence) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *
 
 func (r Sequence) Reconcile(ctx context.Context, parent client.Object) (ctrl.Result, error) {
 	aggregateResult := ctrl.Result{}
-	for _, reconciler := range r {
+	for i, reconciler := range r {
+		log := logr.FromContextOrDiscard(ctx).
+			WithName(fmt.Sprintf("%d", i))
+		ctx = logr.NewContext(ctx, log)
+
 		result, err := reconciler.Reconcile(ctx, parent)
 		if err != nil {
 			return ctrl.Result{}, err
