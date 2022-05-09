@@ -34,6 +34,67 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+func TestConfig_TrackAndGet(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+
+	scheme := runtime.NewScheme()
+	_ = resources.AddToScheme(scheme)
+	_ = clientgoscheme.AddToScheme(scheme)
+
+	resource := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
+		})
+
+	configMap := diecorev1.ConfigMapBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace("track-namespace")
+			d.Name("track-name")
+		}).
+		AddData("greeting", "hello")
+
+	rts := rtesting.SubReconcilerTestSuite{{
+		Name:   "track and get",
+		Parent: resource,
+		GivenObjects: []client.Object{
+			configMap,
+		},
+		ExpectTracks: []rtesting.TrackRequest{
+			rtesting.NewTrackRequest(configMap, resource, scheme),
+		},
+	}, {
+		Name:      "track with not found get",
+		Parent:    resource,
+		ShouldErr: true,
+		ExpectTracks: []rtesting.TrackRequest{
+			rtesting.NewTrackRequest(configMap, resource, scheme),
+		},
+	}}
+
+	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+		return &reconcilers.SyncReconciler{
+			Sync: func(ctx context.Context, parent *resources.TestResource) error {
+				c := reconcilers.RetrieveConfig(ctx)
+
+				cm := &corev1.ConfigMap{}
+				err := c.TrackAndGet(ctx, types.NamespacedName{Namespace: "track-namespace", Name: "track-name"}, cm)
+				if err != nil {
+					return err
+				}
+
+				if expected, actual := "hello", cm.Data["greeting"]; expected != actual {
+					// should never get here
+					panic(fmt.Errorf("expected configmap to have greeting %q, found %q", expected, actual))
+				}
+				return nil
+			},
+		}
+	})
+}
+
 func TestParentReconcilerWithNoStatus(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource-no-status"

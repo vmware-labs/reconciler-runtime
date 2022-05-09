@@ -14,6 +14,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -170,6 +171,9 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		// this value is also set by the test client when resource are added as givens
 		parent.SetResourceVersion("999")
 	}
+	ctx = reconcilers.StashRequest(ctx, reconcile.Request{
+		NamespacedName: types.NamespacedName{Namespace: parent.GetNamespace(), Name: parent.GetName()},
+	})
 	ctx = reconcilers.StashParentType(ctx, parent.DeepCopyObject().(client.Object))
 	ctx = reconcilers.StashCastParentType(ctx, parent.DeepCopyObject().(client.Object))
 

@@ -530,6 +530,12 @@ func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
 
 The [`Tracker`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/tracker#Tracker) provides a means for one resource to watch another resource for mutations, triggering the reconciliation of the resource defining the reference.
 
+It's common to work with a resource that is also tracked. The [Config.TrackAndGet](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config.TrackAndGet) method uses the same signature as client.Get, but additionally tracks the resource.
+
+In the [Setup](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime@v0.4.0/reconcilers#SyncReconciler) method, a watch is created that will notify the handler every time a resource of that kind is mutated. The [EnqueueTracked](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#EnqueueTracked) helper returns a list of resources that are tracking the given resource, those resources are enqueued for the reconciler.
+
+The tracker will automatically expire a track request if not periodically renewed. By default, the TTL is 2x the resync internal. This ensures all tracked resources will naturally have the tracking relationship refreshed as part of the normal reconciliation resource. There is no need to manually untrack a resource.
+
 **Example:**
 
 The stream gateways in projectriff fetch the image references they use to run from a ConfigMap, when the values change, we want to detect and rollout the updated images.
@@ -544,15 +550,8 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 
 			var config corev1.ConfigMap
 			key := types.NamespacedName{Namespace: namespace, Name: inmemoryGatewayImages}
-			// track config for new images
-			c.Tracker.Track(
-				// the resource to track, GVK and NamespacedName
-				tracker.NewKey(schema.GroupVersionKind{Version: "v1", Kind: "ConfigMap"}, key),
-				// the resource to enqueue, NamespacedName only
-				types.NamespacedName{Namespace: parent.Namespace, Name: parent.Name},
-			)
-			// get the configmap
-			if err := c.Get(ctx, key, &config); err != nil {
+			// track config for new images, get the configmap
+			if err := c.TrackAndGet(ctx, key, &config); err != nil {
 				return err
 			}
 			// consume the configmap

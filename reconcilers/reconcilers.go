@@ -69,6 +69,19 @@ func (c Config) WithCluster(cluster cluster.Cluster) Config {
 	}
 }
 
+// TrackAndGet tracks the resources for changes and returns the current value. The track is
+// registered even when the resource does not exists so that its creation can be tracked.
+//
+// Equivlent to calling both `c.Tracker.Track(...)` and `c.Client.Get(...)`
+func (c Config) TrackAndGet(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+	c.Tracker.Track(
+		ctx,
+		tracker.NewKey(gvk(obj, c.Scheme()), key),
+		RetrieveRequest(ctx).NamespacedName,
+	)
+	return c.Get(ctx, key, obj)
+}
+
 // NewConfig creates a Config for a specific API type. Typically passed into a
 // reconciler.
 func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration) Config {
@@ -76,7 +89,7 @@ func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration
 	log := newWarnOnceLogger(ctrl.Log.WithName("controllers").WithName(name))
 	return Config{
 		Log:     log,
-		Tracker: tracker.New(syncPeriod),
+		Tracker: tracker.New(2 * syncPeriod),
 	}.WithCluster(mgr)
 }
 
@@ -135,6 +148,7 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		WithValues("parentType", gvk(r.Type, c.Scheme()))
 	ctx = logr.NewContext(ctx, log)
 
+	ctx = StashRequest(ctx, req)
 	ctx = StashConfig(ctx, c)
 	ctx = StashParentConfig(ctx, c)
 	ctx = StashParentType(ctx, r.Type)
@@ -253,10 +267,15 @@ func (r *ParentReconciler) syncLastTransitionTime(proposed, original []metav1.Co
 	}
 }
 
+const requestStashKey StashKey = "reconciler-runtime:request"
 const configStashKey StashKey = "reconciler-runtime:config"
 const parentConfigStashKey StashKey = "reconciler-runtime:parentConfig"
 const parentTypeStashKey StashKey = "reconciler-runtime:parentType"
 const castParentTypeStashKey StashKey = "reconciler-runtime:castParentType"
+
+func StashRequest(ctx context.Context, req ctrl.Request) context.Context {
+	return context.WithValue(ctx, requestStashKey, req)
+}
 
 func StashConfig(ctx context.Context, config Config) context.Context {
 	return context.WithValue(ctx, configStashKey, config)
@@ -272,6 +291,14 @@ func StashParentType(ctx context.Context, parentType client.Object) context.Cont
 
 func StashCastParentType(ctx context.Context, currentType client.Object) context.Context {
 	return context.WithValue(ctx, castParentTypeStashKey, currentType)
+}
+
+func RetrieveRequest(ctx context.Context) ctrl.Request {
+	value := ctx.Value(requestStashKey)
+	if req, ok := value.(ctrl.Request); ok {
+		return req
+	}
+	return ctrl.Request{}
 }
 
 func RetrieveConfig(ctx context.Context) Config {
