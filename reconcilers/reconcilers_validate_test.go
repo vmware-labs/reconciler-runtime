@@ -25,8 +25,8 @@ func TestSyncReconciler_validate(t *testing.T) {
 		{
 			name:       "empty",
 			parent:     &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{Name: "empty"},
-			shouldErr:  `SyncReconciler "empty" must implement Sync`,
+			reconciler: &SyncReconciler{},
+			shouldErr:  `SyncReconciler "" must implement Sync`,
 		},
 		{
 			name:   "valid",
@@ -217,7 +217,7 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:       "empty",
 			parent:     &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{},
-			shouldErr:  "ChildType must be defined",
+			shouldErr:  `ChildReconciler "" must define ChildType`,
 		},
 		{
 			name:   "valid",
@@ -235,6 +235,7 @@ func TestChildReconciler_validate(t *testing.T) {
 			name:   "ChildType missing",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
+				Name: "ChildType missing",
 				// ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -242,12 +243,13 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
 			},
-			shouldErr: "ChildType must be defined",
+			shouldErr: `ChildReconciler "ChildType missing" must define ChildType`,
 		},
 		{
 			name:   "ChildListType missing",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{
+				Name:      "ChildListType missing",
 				ChildType: &corev1.Pod{},
 				// ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -255,7 +257,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
 			},
-			shouldErr: "ChildListType must be defined",
+			shouldErr: `ChildReconciler "ChildListType missing" must define ChildListType`,
 		},
 		{
 			name:   "DesiredChild missing",
@@ -465,7 +467,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func() {},
 				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
 			},
-			shouldErr: `ChildReconciler "MergeBeforeUpdate num in" must implement MergeBeforeUpdate: nil | func(*v1.Pod, *v1.Pod), found: func()`,
+			shouldErr: `ChildReconciler "MergeBeforeUpdate num in" must implement MergeBeforeUpdate: func(*v1.Pod, *v1.Pod), found: func()`,
 		},
 		{
 			name:   "MergeBeforeUpdate in 0",
@@ -479,7 +481,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current *corev1.Secret, desired *corev1.Pod) {},
 				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
 			},
-			shouldErr: `ChildReconciler "MergeBeforeUpdate in 0" must implement MergeBeforeUpdate: nil | func(*v1.Pod, *v1.Pod), found: func(*v1.Secret, *v1.Pod)`,
+			shouldErr: `ChildReconciler "MergeBeforeUpdate in 0" must implement MergeBeforeUpdate: func(*v1.Pod, *v1.Pod), found: func(*v1.Secret, *v1.Pod)`,
 		},
 		{
 			name:   "MergeBeforeUpdate in 1",
@@ -493,7 +495,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current *corev1.Pod, desired *corev1.Secret) {},
 				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
 			},
-			shouldErr: `ChildReconciler "MergeBeforeUpdate in 1" must implement MergeBeforeUpdate: nil | func(*v1.Pod, *v1.Pod), found: func(*v1.Pod, *v1.Secret)`,
+			shouldErr: `ChildReconciler "MergeBeforeUpdate in 1" must implement MergeBeforeUpdate: func(*v1.Pod, *v1.Pod), found: func(*v1.Pod, *v1.Secret)`,
 		},
 		{
 			name:   "MergeBeforeUpdate num out",
@@ -507,7 +509,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) error { return nil },
 				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
 			},
-			shouldErr: `ChildReconciler "MergeBeforeUpdate num out" must implement MergeBeforeUpdate: nil | func(*v1.Pod, *v1.Pod), found: func(*v1.Pod, *v1.Pod) error`,
+			shouldErr: `ChildReconciler "MergeBeforeUpdate num out" must implement MergeBeforeUpdate: func(*v1.Pod, *v1.Pod), found: func(*v1.Pod, *v1.Pod) error`,
 		},
 		{
 			name:   "SemanticEquals missing",
@@ -535,7 +537,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 				SemanticEquals:             func() bool { return false },
 			},
-			shouldErr: `ChildReconciler "SemanticEquals num in" must implement SemanticEquals: nil | func(*v1.Pod, *v1.Pod) bool, found: func() bool`,
+			shouldErr: `ChildReconciler "SemanticEquals num in" must implement SemanticEquals: func(*v1.Pod, *v1.Pod) bool, found: func() bool`,
 		},
 		{
 			name:   "SemanticEquals in 0",
@@ -549,7 +551,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 				SemanticEquals:             func(a1 *corev1.Secret, a2 *corev1.Pod) bool { return false },
 			},
-			shouldErr: `ChildReconciler "SemanticEquals in 0" must implement SemanticEquals: nil | func(*v1.Pod, *v1.Pod) bool, found: func(*v1.Secret, *v1.Pod) bool`,
+			shouldErr: `ChildReconciler "SemanticEquals in 0" must implement SemanticEquals: func(*v1.Pod, *v1.Pod) bool, found: func(*v1.Secret, *v1.Pod) bool`,
 		},
 		{
 			name:   "SemanticEquals in 1",
@@ -563,7 +565,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 				SemanticEquals:             func(a1 *corev1.Pod, a2 *corev1.Secret) bool { return false },
 			},
-			shouldErr: `ChildReconciler "SemanticEquals in 1" must implement SemanticEquals: nil | func(*v1.Pod, *v1.Pod) bool, found: func(*v1.Pod, *v1.Secret) bool`,
+			shouldErr: `ChildReconciler "SemanticEquals in 1" must implement SemanticEquals: func(*v1.Pod, *v1.Pod) bool, found: func(*v1.Pod, *v1.Secret) bool`,
 		},
 		{
 			name:   "SemanticEquals num out",
@@ -577,7 +579,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 				SemanticEquals:             func(a1, a2 *corev1.Pod) {},
 			},
-			shouldErr: `ChildReconciler "SemanticEquals num out" must implement SemanticEquals: nil | func(*v1.Pod, *v1.Pod) bool, found: func(*v1.Pod, *v1.Pod)`,
+			shouldErr: `ChildReconciler "SemanticEquals num out" must implement SemanticEquals: func(*v1.Pod, *v1.Pod) bool, found: func(*v1.Pod, *v1.Pod)`,
 		},
 		{
 			name:   "SemanticEquals out 0",
@@ -591,7 +593,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 				SemanticEquals:             func(a1, a2 *corev1.Pod) error { return nil },
 			},
-			shouldErr: `ChildReconciler "SemanticEquals out 0" must implement SemanticEquals: nil | func(*v1.Pod, *v1.Pod) bool, found: func(*v1.Pod, *v1.Pod) error`,
+			shouldErr: `ChildReconciler "SemanticEquals out 0" must implement SemanticEquals: func(*v1.Pod, *v1.Pod) bool, found: func(*v1.Pod, *v1.Pod) error`,
 		},
 		{
 			name:   "HarmonizeImmutableFields",
@@ -836,7 +838,7 @@ func TestCastParent_validate(t *testing.T) {
 			name:       "empty",
 			parent:     &corev1.ConfigMap{},
 			reconciler: &CastParent{},
-			shouldErr:  "Type must be defined",
+			shouldErr:  `CastParent "" must define Type`,
 		},
 		{
 			name:   "valid",
@@ -854,6 +856,7 @@ func TestCastParent_validate(t *testing.T) {
 			name:   "missing type",
 			parent: &corev1.ConfigMap{},
 			reconciler: &CastParent{
+				Name: "missing type",
 				Type: nil,
 				Reconciler: &SyncReconciler{
 					Sync: func(ctx context.Context, parent *corev1.Secret) error {
@@ -861,16 +864,17 @@ func TestCastParent_validate(t *testing.T) {
 					},
 				},
 			},
-			shouldErr: "Type must be defined",
+			shouldErr: `CastParent "missing type" must define Type`,
 		},
 		{
 			name:   "missing reconciler",
 			parent: &corev1.ConfigMap{},
 			reconciler: &CastParent{
+				Name:       "missing reconciler",
 				Type:       &corev1.Secret{},
 				Reconciler: nil,
 			},
-			shouldErr: "Reconciler must be defined",
+			shouldErr: `CastParent "missing reconciler" must define Reconciler`,
 		},
 	}
 
@@ -900,7 +904,7 @@ func TestWithConfig_validate(t *testing.T) {
 			name:       "empty",
 			parent:     &corev1.ConfigMap{},
 			reconciler: &WithConfig{},
-			shouldErr:  "Config must be defined",
+			shouldErr:  `WithConfig "" must define Config`,
 		},
 		{
 			name:   "valid",
@@ -916,19 +920,21 @@ func TestWithConfig_validate(t *testing.T) {
 			name:   "missing config",
 			parent: &corev1.ConfigMap{},
 			reconciler: &WithConfig{
+				Name:       "missing config",
 				Reconciler: &Sequence{},
 			},
-			shouldErr: "Config must be defined",
+			shouldErr: `WithConfig "missing config" must define Config`,
 		},
 		{
 			name:   "missing reconciler",
 			parent: &corev1.ConfigMap{},
 			reconciler: &WithConfig{
+				Name: "missing reconciler",
 				Config: func(ctx context.Context, c Config) (Config, error) {
 					return config, nil
 				},
 			},
-			shouldErr: "Reconciler must be defined",
+			shouldErr: `WithConfig "missing reconciler" must define Reconciler`,
 		},
 	}
 
@@ -954,7 +960,7 @@ func TestWithFinalizer_validate(t *testing.T) {
 			name:       "empty",
 			parent:     &corev1.ConfigMap{},
 			reconciler: &WithFinalizer{},
-			shouldErr:  "Finalizer must be defined",
+			shouldErr:  `WithFinalizer "" must define Finalizer`,
 		},
 		{
 			name:   "valid",
@@ -968,17 +974,19 @@ func TestWithFinalizer_validate(t *testing.T) {
 			name:   "missing finalizer",
 			parent: &corev1.ConfigMap{},
 			reconciler: &WithFinalizer{
+				Name:       "missing finalizer",
 				Reconciler: &Sequence{},
 			},
-			shouldErr: "Finalizer must be defined",
+			shouldErr: `WithFinalizer "missing finalizer" must define Finalizer`,
 		},
 		{
 			name:   "missing reconciler",
 			parent: &corev1.ConfigMap{},
 			reconciler: &WithFinalizer{
+				Name:      "missing reconciler",
 				Finalizer: "my-finalizer",
 			},
-			shouldErr: "Reconciler must be defined",
+			shouldErr: `WithFinalizer "missing reconciler" must define Reconciler`,
 		},
 	}
 

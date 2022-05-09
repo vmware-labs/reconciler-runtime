@@ -690,12 +690,12 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 
 	// validate ChildType value
 	if r.ChildType == nil {
-		return fmt.Errorf("ChildType must be defined")
+		return fmt.Errorf("ChildReconciler %q must define ChildType", r.Name)
 	}
 
 	// validate ChildListType value
 	if r.ChildListType == nil {
-		return fmt.Errorf("ChildListType must be defined")
+		return fmt.Errorf("ChildReconciler %q must define ChildListType", r.Name)
 	}
 
 	// validate DesiredChild function signature:
@@ -748,7 +748,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) {
-			return fmt.Errorf("ChildReconciler %q must implement MergeBeforeUpdate: nil | func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler %q must implement MergeBeforeUpdate: func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
@@ -762,7 +762,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) ||
 			fn.Out(0).Kind() != reflect.Bool {
-			return fmt.Errorf("ChildReconciler %q must implement SemanticEquals: nil | func(%s, %s) bool, found: %s", r.Name, reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
+			return fmt.Errorf("ChildReconciler %q must implement SemanticEquals: func(%s, %s) bool, found: %s", r.Name, reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
 
@@ -1164,12 +1164,12 @@ func (r *CastParent) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bld
 func (r *CastParent) validate(ctx context.Context) error {
 	// validate Type value
 	if r.Type == nil {
-		return fmt.Errorf("Type must be defined")
+		return fmt.Errorf("CastParent %q must define Type", r.Name)
 	}
 
 	// validate Reconciler value
 	if r.Reconciler == nil {
-		return fmt.Errorf("Reconciler must be defined")
+		return fmt.Errorf("CastParent %q must define Reconciler", r.Name)
 	}
 
 	return nil
@@ -1266,12 +1266,12 @@ func (r *WithConfig) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bld
 func (r *WithConfig) validate(ctx context.Context) error {
 	// validate Config value
 	if r.Config == nil {
-		return fmt.Errorf("Config must be defined")
+		return fmt.Errorf("WithConfig %q must define Config", r.Name)
 	}
 
 	// validate Reconciler value
 	if r.Reconciler == nil {
-		return fmt.Errorf("Reconciler must be defined")
+		return fmt.Errorf("WithConfig %q must define Reconciler", r.Name)
 	}
 
 	return nil
@@ -1333,12 +1333,12 @@ func (r *WithFinalizer) SetupWithManager(ctx context.Context, mgr ctrl.Manager, 
 func (r *WithFinalizer) validate(ctx context.Context) error {
 	// validate Finalizer value
 	if r.Finalizer == "" {
-		return fmt.Errorf("Finalizer must be defined")
+		return fmt.Errorf("WithFinalizer %q must define Finalizer", r.Name)
 	}
 
 	// validate Reconciler value
 	if r.Reconciler == nil {
-		return fmt.Errorf("Reconciler must be defined")
+		return fmt.Errorf("WithFinalizer %q must define Reconciler", r.Name)
 	}
 
 	return nil
