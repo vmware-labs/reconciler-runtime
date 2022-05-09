@@ -17,6 +17,7 @@
 		- [CastParent](#castparent)
 		- [Sequence](#sequence)
 		- [WithConfig](#withconfig)
+		- [WithFinalizer](#withfinalizer)
 - [Testing](#testing)
 	- [ReconcilerTestSuite](#reconcilertestsuite)
 	- [SubReconcilerTestSuite](#subreconcilertestsuite)
@@ -342,6 +343,36 @@ func SwapRESTConfig(rc *rest.Config) *reconcilers.SubReconciler {
 }
 ```
 
+#### WithFinalizer
+
+[`WithFinalizer`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#WithFinalizer) allows external state to be allocated and then cleaned up once the parent resource is deleted. When the parent resource is not terminating, the finalizer is set on the parent resource before the nested reconciler is called. When the parent resource is terminating, the finalizer is cleared only after the nested reconciler returns without an error.
+
+The [Finalizers](#finalizers) utilities are used to manage the finalizer on the parent resource.
+
+> Warning: It is crucial that each WithFinalizer have a unique and stable finalizer name. Two reconcilers that use the same finalizer, or a reconciler that changed the name of its finalizer, may leak the external state when the parent is deleted, or the parent resource may never terminate.
+
+**Example:**
+
+`WithFinalizer` can be used to wrap any other [SubReconciler](#subreconciler), which can then safely allocate external state while the parent resource is not terminating, and then cleanup that state once the parent resource is terminating.
+
+```go
+func SyncExternalState() *reconcilers.SubReconciler {
+	return &reconcilers.WithFinalizer{
+		Finalizer: "unique.finalizer.name"
+		Reconciler: &reconcilers.SyncReconciler{
+			Sync: func(ctx context.Context, parent *resources.TestResource) error {
+				// allocate external state
+				return nil
+			},
+			Finalize: func(ctx context.Context, parent *resources.TestResource) error {
+				// cleanup the external state
+				return nil
+			},
+		},
+	}
+}
+```
+
 ## Testing
 
 While `controller-runtime` focuses its testing efforts on integration testing by spinning up a new API Server and etcd, `reconciler-runtime` focuses on unit testing reconcilers. The state for each test case is pure, preventing side effects from one test case impacting the next.
@@ -582,6 +613,10 @@ type MyResource struct {
 [Finalizers](https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/) allow a reconciler to clean up state for a resource that has been deleted by a client, and not yet fully removed. Terminating resources have `.metadata.deletionTimestamp` set. Resources with finalizers will stay in this terminating state until all finalizers are cleared from the resource. While using the [Kubernetes garbage collector](https://kubernetes.io/docs/concepts/architecture/garbage-collection/) is recommended when possible, finalizer are useful for cases when state exists outside of the same cluster, scope, and namespace of the parent resource that needs to be cleaned up when no longer used.
 
 Deleting a resource that uses finalizers requires the controller to be running.
+
+> Note: [WithFinalizer](#withfinalizer) can be used in lieu of, or in conjunction with, [ChildReconciler](#childreconciler)#Finalizer. The distinction is the scope within the reconciler tree where a finalizer is applied. While a reconciler can define as many finalizer on the resource as it desires, in practice, it's best to minimize the number of finalizers as setting and clearing each finalizer makes a request to the API Server. 
+>
+> A single WithFinalizer will always add a finalizer to the parent resource. It can then compose multiple ChildReconcilers, as well as other reconcilers that do not natively support managing finalizers (e.g. SyncReconciler). On the other hand, the ChildReconciler will only set the finalizer when it is required potentially reducing the number of finalizers, but only covers that exact sub-reconciler. It's important the external state that needs to be cleaned up be covered by a finalizer, it does not matter which finalizer is used.
 
 The [AddParentFinalizer](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#AddParentFinalizer) and [ClearParentFinalizer](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ClearParentFinalizer) functions patch the parent resource to update its finalizers. These methods work with [CastParents](#castparent) resources and use the same client the [ParentReconciler](#parentreconciler) used to originally load the parent resource. They can be called inside [SubReconcilers](#subreconciler) that may use a different client.
 
