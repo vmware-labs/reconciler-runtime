@@ -257,7 +257,7 @@ func (r *ParentReconciler) copyGeneration(obj client.Object) {
 		return
 	}
 	observedGenerationValue := statusValue.FieldByName("ObservedGeneration")
-	if !observedGenerationValue.CanInt() || !observedGenerationValue.CanSet() {
+	if observedGenerationValue.Kind() != reflect.Int64 || !observedGenerationValue.CanSet() {
 		return
 	}
 	generation := obj.GetGeneration()
@@ -274,7 +274,7 @@ func (r *ParentReconciler) status(obj client.Object) interface{} {
 		return nil
 	}
 	statusValue := reflect.ValueOf(obj).Elem().FieldByName("Status")
-	if statusValue.Kind() == reflect.Pointer {
+	if statusValue.Kind() == reflect.Ptr {
 		statusValue = statusValue.Elem()
 	}
 	if !statusValue.IsValid() || !statusValue.CanAddr() {
