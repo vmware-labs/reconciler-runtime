@@ -172,22 +172,18 @@ func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		defaulter.Default()
 	}
 
-	if r.hasStatus(originalParent) {
-		if initializeConditions := reflect.ValueOf(parent).Elem().FieldByName("Status").Addr().MethodByName("InitializeConditions"); initializeConditions.Kind() == reflect.Func {
-			// parent.Status.InitializeConditions()
-			initializeConditions.Call([]reflect.Value{})
-		}
-	}
+	r.initializeConditions(parent)
 	result, err := r.reconcile(ctx, parent)
 
 	if r.hasStatus(originalParent) {
 		// restore last transition time for unchanged conditions
-		r.syncLastTransitionTime(r.statusConditions(parent), r.statusConditions(originalParent))
+		r.syncLastTransitionTime(r.conditions(parent), r.conditions(originalParent))
 
 		// check if status has changed before updating
-		if !equality.Semantic.DeepEqual(r.status(parent), r.status(originalParent)) && parent.GetDeletionTimestamp() == nil {
+		parentStatus, originalParentStatus := r.status(parent), r.status(originalParent)
+		if !equality.Semantic.DeepEqual(parentStatus, originalParentStatus) && parent.GetDeletionTimestamp() == nil {
 			// update status
-			log.Info("updating status", "diff", cmp.Diff(r.status(originalParent), r.status(parent)))
+			log.Info("updating status", "diff", cmp.Diff(originalParentStatus, parentStatus))
 			if updateErr := c.Status().Update(ctx, parent); updateErr != nil {
 				log.Error(updateErr, "unable to update status")
 				c.Recorder.Eventf(parent, corev1.EventTypeWarning, "StatusUpdateFailed",
@@ -216,27 +212,31 @@ func (r *ParentReconciler) reconcile(ctx context.Context, parent client.Object) 
 	r.copyGeneration(parent)
 	return result, nil
 }
-func (r *ParentReconciler) hasStatus(obj client.Object) bool {
-	return reflect.ValueOf(obj).Elem().FieldByName("Status").IsValid()
-}
 
-func (r *ParentReconciler) copyGeneration(obj client.Object) {
-	if r.hasStatus(obj) {
-		// obj.Status.ObservedGeneration = obj.Generation
-		objVal := reflect.ValueOf(obj).Elem()
-		generation := objVal.FieldByName("Generation").Int()
-		objVal.FieldByName("Status").FieldByName("ObservedGeneration").SetInt(generation)
+func (r *ParentReconciler) initializeConditions(obj client.Object) {
+	status := r.status(obj)
+	if status == nil {
+		return
 	}
+	initializeConditions := reflect.ValueOf(status).MethodByName("InitializeConditions")
+	if !initializeConditions.IsValid() {
+		return
+	}
+	if t := initializeConditions.Type(); t.Kind() != reflect.Func || t.NumIn() != 0 || t.NumOut() != 0 {
+		return
+	}
+	initializeConditions.Call([]reflect.Value{})
 }
 
-func (r *ParentReconciler) status(obj client.Object) interface{} {
-	return reflect.ValueOf(obj).Elem().FieldByName("Status").Addr().Interface()
-}
-
-func (r *ParentReconciler) statusConditions(obj client.Object) []metav1.Condition {
-	statusValue := reflect.ValueOf(r.status(obj)).Elem()
+func (r *ParentReconciler) conditions(obj client.Object) []metav1.Condition {
+	// return obj.Status.Conditions
+	status := r.status(obj)
+	if status == nil {
+		return nil
+	}
+	statusValue := reflect.ValueOf(status).Elem()
 	conditionsValue := statusValue.FieldByName("Conditions")
-	if conditionsValue.IsZero() {
+	if !conditionsValue.IsValid() || conditionsValue.IsZero() {
 		return nil
 	}
 	conditions, ok := conditionsValue.Interface().([]metav1.Condition)
@@ -244,6 +244,43 @@ func (r *ParentReconciler) statusConditions(obj client.Object) []metav1.Conditio
 		return nil
 	}
 	return conditions
+}
+
+func (r *ParentReconciler) copyGeneration(obj client.Object) {
+	// obj.Status.ObservedGeneration = obj.Generation
+	status := r.status(obj)
+	if status == nil {
+		return
+	}
+	statusValue := reflect.ValueOf(status).Elem()
+	if !statusValue.IsValid() {
+		return
+	}
+	observedGenerationValue := statusValue.FieldByName("ObservedGeneration")
+	if !observedGenerationValue.CanInt() || !observedGenerationValue.CanSet() {
+		return
+	}
+	generation := obj.GetGeneration()
+	observedGenerationValue.SetInt(generation)
+}
+
+func (r *ParentReconciler) hasStatus(obj client.Object) bool {
+	status := r.status(obj)
+	return status != nil
+}
+
+func (r *ParentReconciler) status(obj client.Object) interface{} {
+	if obj == nil {
+		return nil
+	}
+	statusValue := reflect.ValueOf(obj).Elem().FieldByName("Status")
+	if statusValue.Kind() == reflect.Pointer {
+		statusValue = statusValue.Elem()
+	}
+	if !statusValue.IsValid() || !statusValue.CanAddr() {
+		return nil
+	}
+	return statusValue.Addr().Interface()
 }
 
 // syncLastTransitionTime restores a condition's LastTransitionTime value for

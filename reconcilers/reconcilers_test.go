@@ -95,7 +95,7 @@ func TestConfig_TrackAndGet(t *testing.T) {
 	})
 }
 
-func TestParentReconcilerWithNoStatus(t *testing.T) {
+func TestParentReconciler_NoStatus(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource-no-status"
 	testKey := types.NamespacedName{Namespace: testNamespace, Name: testName}
@@ -130,6 +130,188 @@ func TestParentReconcilerWithNoStatus(t *testing.T) {
 	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
 		return &reconcilers.ParentReconciler{
 			Type:       &resources.TestResourceNoStatus{},
+			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
+			Config:     c,
+		}
+	})
+}
+
+func TestParentReconciler_EmptyStatus(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource-empty-status"
+	testKey := types.NamespacedName{Namespace: testNamespace, Name: testName}
+
+	scheme := runtime.NewScheme()
+	_ = resources.AddToScheme(scheme)
+
+	resource := dies.TestResourceEmptyStatusBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
+			d.AddAnnotation("blah", "blah")
+		})
+
+	rts := rtesting.ReconcilerTestSuite{{
+		Name: "resource exists",
+		Key:  testKey,
+		GivenObjects: []client.Object{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, parent *resources.TestResourceEmptyStatus) error {
+						return nil
+					},
+				}
+			},
+		},
+	}}
+	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+		return &reconcilers.ParentReconciler{
+			Type:       &resources.TestResourceEmptyStatus{},
+			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
+			Config:     c,
+		}
+	})
+}
+
+func TestParentReconciler_NilableStatus(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+	testKey := types.NamespacedName{Namespace: testNamespace, Name: testName}
+
+	scheme := runtime.NewScheme()
+	_ = resources.AddToScheme(scheme)
+
+	resource := dies.TestResourceNilableStatusBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
+		}).
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionUnknown).Reason("Initializing"),
+			)
+		})
+
+	rts := rtesting.ReconcilerTestSuite{{
+		Name: "nil status",
+		Key:  testKey,
+		GivenObjects: []client.Object{
+			resource.Status(nil),
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, parent *resources.TestResourceNilableStatus) error {
+						if parent.Status != nil {
+							t.Errorf("status expected to be nil")
+						}
+						return nil
+					},
+				}
+			},
+		},
+	}, {
+		Name: "status conditions are initialized",
+		Key:  testKey,
+		GivenObjects: []client.Object{
+			resource.StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.ConditionsDie()
+			}),
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, parent *resources.TestResourceNilableStatus) error {
+						expected := []metav1.Condition{
+							{Type: apis.ConditionReady, Status: metav1.ConditionUnknown, Reason: "Initializing"},
+						}
+						if diff := cmp.Diff(expected, parent.Status.Conditions, rtesting.IgnoreLastTransitionTime); diff != "" {
+							t.Errorf("Unexpected condition (-expected, +actual): %s", diff)
+						}
+						return nil
+					},
+				}
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated",
+				`Updated status`),
+		},
+		ExpectStatusUpdates: []client.Object{
+			resource,
+		},
+	}, {
+		Name: "reconciler mutated status",
+		Key:  testKey,
+		GivenObjects: []client.Object{
+			resource,
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, parent *resources.TestResourceNilableStatus) error {
+						if parent.Status.Fields == nil {
+							parent.Status.Fields = map[string]string{}
+						}
+						parent.Status.Fields["Reconciler"] = "ran"
+						return nil
+					},
+				}
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated",
+				`Updated status`),
+		},
+		ExpectStatusUpdates: []client.Object{
+			resource.StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("Reconciler", "ran")
+			}),
+		},
+	}, {
+		Name: "status update failed",
+		Key:  testKey,
+		GivenObjects: []client.Object{
+			resource,
+		},
+		WithReactors: []rtesting.ReactionFunc{
+			rtesting.InduceFailure("update", "TestResourceNilableStatus", rtesting.InduceFailureOpts{
+				SubResource: "status",
+			}),
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				return &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, parent *resources.TestResourceNilableStatus) error {
+						if parent.Status.Fields == nil {
+							parent.Status.Fields = map[string]string{}
+						}
+						parent.Status.Fields["Reconciler"] = "ran"
+						return nil
+					},
+				}
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "StatusUpdateFailed",
+				`Failed to update status: inducing failure for update TestResourceNilableStatus`),
+		},
+		ExpectStatusUpdates: []client.Object{
+			resource.StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("Reconciler", "ran")
+			}),
+		},
+		ShouldErr: true,
+	}}
+
+	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+		return &reconcilers.ParentReconciler{
+			Type:       &resources.TestResourceNilableStatus{},
 			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
 			Config:     c,
 		}
