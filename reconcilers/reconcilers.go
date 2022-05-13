@@ -131,11 +131,61 @@ func (r *ParentReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manage
 	ctx = StashParentType(ctx, r.Type)
 	ctx = StashCastParentType(ctx, r.Type)
 
+	if err := r.validate(ctx); err != nil {
+		return err
+	}
+
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return err
 	}
 	return bldr.Complete(r)
+}
+
+func (r *ParentReconciler) validate(ctx context.Context) error {
+	// validate Type value
+	if r.Type == nil {
+		return fmt.Errorf("ParentReconciler %q must define Type", r.Name)
+	}
+
+	// validate Reconciler value
+	if r.Reconciler == nil {
+		return fmt.Errorf("ParentReconciler %q must define Reconciler", r.Name)
+	}
+
+	// warn users of common pitfalls. These are not blockers.
+
+	log := logr.FromContextOrDiscard(ctx)
+
+	parentType := reflect.TypeOf(r.Type).Elem()
+	statusField, hasStatus := parentType.FieldByName("Status")
+	if !hasStatus {
+		log.Info("parent resource missing status field, operations related to status will be skipped")
+		return nil
+	}
+
+	statusType := statusField.Type
+	if statusType.Kind() == reflect.Ptr {
+		log.Info("parent status is nilable, status is typically a struct")
+		statusType = statusType.Elem()
+	}
+
+	observedGenerationField, hasObservedGeneration := statusType.FieldByName("ObservedGeneration")
+	if !hasObservedGeneration || observedGenerationField.Type.Kind() != reflect.Int64 {
+		log.Info("parent status missing ObservedGeneration field of type int64, generation will not be managed")
+	}
+
+	initializeConditionsMethod, hasInitializeConditions := reflect.PtrTo(statusType).MethodByName("InitializeConditions")
+	if !hasInitializeConditions || initializeConditionsMethod.Type.NumIn() != 1 || initializeConditionsMethod.Type.NumOut() != 0 {
+		log.Info("parent status missing InitializeConditions() method, conditions will not be auto-initialized")
+	}
+
+	conditionsField, hasConditions := statusType.FieldByName("Conditions")
+	if !hasConditions || !conditionsField.Type.AssignableTo(reflect.TypeOf([]metav1.Condition{})) {
+		log.Info("parent status is missing field Conditions of type []metav1.Condition, condition timestamps will not be managed")
+	}
+
+	return nil
 }
 
 func (r *ParentReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
