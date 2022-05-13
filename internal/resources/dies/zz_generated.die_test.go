@@ -42,11 +42,38 @@ func TestTestResourceStatusDie_MissingMethods(t *testingx.T) {
 	}
 }
 
+func TestTestResourceEmptyStatusDie_MissingMethods(t *testingx.T) {
+	die := TestResourceEmptyStatusBlank
+	ignore := []string{"TypeMeta", "ObjectMeta"}
+	diff := testing.DieFieldDiff(die).Delete(ignore...)
+	if diff.Len() != 0 {
+		t.Errorf("found missing fields for TestResourceEmptyStatusDie: %s", diff.List())
+	}
+}
+
+func TestTestResourceEmptyStatusStatusDie_MissingMethods(t *testingx.T) {
+	die := TestResourceEmptyStatusStatusBlank
+	ignore := []string{}
+	diff := testing.DieFieldDiff(die).Delete(ignore...)
+	if diff.Len() != 0 {
+		t.Errorf("found missing fields for TestResourceEmptyStatusStatusDie: %s", diff.List())
+	}
+}
+
 func TestTestResourceNoStatusDie_MissingMethods(t *testingx.T) {
 	die := TestResourceNoStatusBlank
 	ignore := []string{"TypeMeta", "ObjectMeta"}
 	diff := testing.DieFieldDiff(die).Delete(ignore...)
 	if diff.Len() != 0 {
 		t.Errorf("found missing fields for TestResourceNoStatusDie: %s", diff.List())
+	}
+}
+
+func TestTestResourceNilableStatusDie_MissingMethods(t *testingx.T) {
+	die := TestResourceNilableStatusBlank
+	ignore := []string{"TypeMeta", "ObjectMeta"}
+	diff := testing.DieFieldDiff(die).Delete(ignore...)
+	if diff.Len() != 0 {
+		t.Errorf("found missing fields for TestResourceNilableStatusDie: %s", diff.List())
 	}
 }

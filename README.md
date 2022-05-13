@@ -41,6 +41,8 @@ The parent is responsible for:
 - fetching the resource being reconciled
 - creating a stash to pass state between sub reconcilers
 - passing the resource to each sub reconciler in turn
+- initialize conditions on the status by calling status.InitializeConditions() if defined
+- normalizing the .status.conditions[].lastTransitionTime for status conditions that are metav1.Condition (the previous timestamp is preserved if the condition is otherwise unchanged)
 - reflects the observed generation on the status
 - updates the resource status if it was modified
 - logging the reconcilers activities

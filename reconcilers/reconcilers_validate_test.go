@@ -9,11 +9,98 @@ import (
 	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
+	"github.com/vmware-labs/reconciler-runtime/internal/resources"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+func TestParentReconciler_validate(t *testing.T) {
+	tests := []struct {
+		name         string
+		reconciler   *ParentReconciler
+		shouldErr    string
+		expectedLogs []string
+	}{
+		{
+			name:       "empty",
+			reconciler: &ParentReconciler{},
+			shouldErr:  `ParentReconciler "" must define Type`,
+		},
+		{
+			name: "valid",
+			reconciler: &ParentReconciler{
+				Type:       &resources.TestResource{},
+				Reconciler: Sequence{},
+			},
+		},
+		{
+			name: "missing type",
+			reconciler: &ParentReconciler{
+				Name:       "missing type",
+				Reconciler: Sequence{},
+			},
+			shouldErr: `ParentReconciler "missing type" must define Type`,
+		},
+		{
+			name: "missing reconciler",
+			reconciler: &ParentReconciler{
+				Name: "missing reconciler",
+				Type: &resources.TestResource{},
+			},
+			shouldErr: `ParentReconciler "missing reconciler" must define Reconciler`,
+		},
+		{
+			name: "type has no status",
+			reconciler: &ParentReconciler{
+				Type:       &resources.TestResourceNoStatus{},
+				Reconciler: Sequence{},
+			},
+			expectedLogs: []string{
+				"parent resource missing status field, operations related to status will be skipped",
+			},
+		},
+		{
+			name: "type has empty status",
+			reconciler: &ParentReconciler{
+				Type:       &resources.TestResourceEmptyStatus{},
+				Reconciler: Sequence{},
+			},
+			expectedLogs: []string{
+				"parent status missing ObservedGeneration field of type int64, generation will not be managed",
+				"parent status missing InitializeConditions() method, conditions will not be auto-initialized",
+				"parent status is missing field Conditions of type []metav1.Condition, condition timestamps will not be managed",
+			},
+		},
+		{
+			name: "type has nilable status",
+			reconciler: &ParentReconciler{
+				Type:       &resources.TestResourceNilableStatus{},
+				Reconciler: Sequence{},
+			},
+			expectedLogs: []string{
+				"parent status is nilable, status is typically a struct",
+			},
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &bufferedSink{}
+			ctx := logr.NewContext(context.TODO(), logr.New(sink))
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+			if diff := cmp.Diff(c.expectedLogs, sink.Lines); diff != "" {
+				t.Errorf("%s: unexpected logs (-expected, +actual): %s", c.name, diff)
+			}
+		})
+	}
+}
 
 func TestSyncReconciler_validate(t *testing.T) {
 	tests := []struct {
@@ -999,4 +1086,27 @@ func TestWithFinalizer_validate(t *testing.T) {
 			}
 		})
 	}
+}
+
+var _ logr.LogSink = &bufferedSink{}
+
+type bufferedSink struct {
+	Lines []string
+}
+
+func (s *bufferedSink) Init(info logr.RuntimeInfo) {}
+func (s *bufferedSink) Enabled(level int) bool {
+	return true
+}
+func (s *bufferedSink) Info(level int, msg string, keysAndValues ...interface{}) {
+	s.Lines = append(s.Lines, msg)
+}
+func (s *bufferedSink) Error(err error, msg string, keysAndValues ...interface{}) {
+	s.Lines = append(s.Lines, msg)
+}
+func (s *bufferedSink) WithValues(keysAndValues ...interface{}) logr.LogSink {
+	return s
+}
+func (s *bufferedSink) WithName(name string) logr.LogSink {
+	return s
 }

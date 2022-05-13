@@ -339,6 +339,220 @@ func (d *TestResourceStatusDie) Fields(v map[string]string) *TestResourceStatusD
 	})
 }
 
+var TestResourceEmptyStatusBlank = (&TestResourceEmptyStatusDie{}).DieFeed(resources.TestResourceEmptyStatus{})
+
+type TestResourceEmptyStatusDie struct {
+	v1.FrozenObjectMeta
+	mutable bool
+	r       resources.TestResourceEmptyStatus
+}
+
+// DieImmutable returns a new die for the current die's state that is either mutable (`false`) or immutable (`true`).
+func (d *TestResourceEmptyStatusDie) DieImmutable(immutable bool) *TestResourceEmptyStatusDie {
+	if d.mutable == !immutable {
+		return d
+	}
+	d = d.DeepCopy()
+	d.mutable = !immutable
+	return d
+}
+
+// DieFeed returns a new die with the provided resource.
+func (d *TestResourceEmptyStatusDie) DieFeed(r resources.TestResourceEmptyStatus) *TestResourceEmptyStatusDie {
+	if d.mutable {
+		d.FrozenObjectMeta = v1.FreezeObjectMeta(r.ObjectMeta)
+		d.r = r
+		return d
+	}
+	return &TestResourceEmptyStatusDie{
+		FrozenObjectMeta: v1.FreezeObjectMeta(r.ObjectMeta),
+		mutable:          d.mutable,
+		r:                r,
+	}
+}
+
+// DieFeedPtr returns a new die with the provided resource pointer. If the resource is nil, the empty value is used instead.
+func (d *TestResourceEmptyStatusDie) DieFeedPtr(r *resources.TestResourceEmptyStatus) *TestResourceEmptyStatusDie {
+	if r == nil {
+		r = &resources.TestResourceEmptyStatus{}
+	}
+	return d.DieFeed(*r)
+}
+
+// DieRelease returns the resource managed by the die.
+func (d *TestResourceEmptyStatusDie) DieRelease() resources.TestResourceEmptyStatus {
+	if d.mutable {
+		return d.r
+	}
+	return *d.r.DeepCopy()
+}
+
+// DieReleasePtr returns a pointer to the resource managed by the die.
+func (d *TestResourceEmptyStatusDie) DieReleasePtr() *resources.TestResourceEmptyStatus {
+	r := d.DieRelease()
+	return &r
+}
+
+// DieReleaseUnstructured returns the resource managed by the die as an unstructured object.
+func (d *TestResourceEmptyStatusDie) DieReleaseUnstructured() runtime.Unstructured {
+	r := d.DieReleasePtr()
+	u, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	return &unstructured.Unstructured{
+		Object: u,
+	}
+}
+
+// DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
+func (d *TestResourceEmptyStatusDie) DieStamp(fn func(r *resources.TestResourceEmptyStatus)) *TestResourceEmptyStatusDie {
+	r := d.DieRelease()
+	fn(&r)
+	return d.DieFeed(r)
+}
+
+// DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
+func (d *TestResourceEmptyStatusDie) DeepCopy() *TestResourceEmptyStatusDie {
+	r := *d.r.DeepCopy()
+	return &TestResourceEmptyStatusDie{
+		FrozenObjectMeta: v1.FreezeObjectMeta(r.ObjectMeta),
+		mutable:          d.mutable,
+		r:                r,
+	}
+}
+
+var _ runtime.Object = (*TestResourceEmptyStatusDie)(nil)
+
+func (d *TestResourceEmptyStatusDie) DeepCopyObject() runtime.Object {
+	return d.r.DeepCopy()
+}
+
+func (d *TestResourceEmptyStatusDie) GetObjectKind() schema.ObjectKind {
+	r := d.DieRelease()
+	return r.GetObjectKind()
+}
+
+func (d *TestResourceEmptyStatusDie) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.r)
+}
+
+func (d *TestResourceEmptyStatusDie) UnmarshalJSON(b []byte) error {
+	if d == TestResourceEmptyStatusBlank {
+		return fmtx.Errorf("cannot unmarshal into the blank die, create a copy first")
+	}
+	if !d.mutable {
+		return fmtx.Errorf("cannot unmarshal into immutable dies, create a mutable version first")
+	}
+	r := &resources.TestResourceEmptyStatus{}
+	err := json.Unmarshal(b, r)
+	*d = *d.DieFeed(*r)
+	return err
+}
+
+// MetadataDie stamps the resource's ObjectMeta field with a mutable die.
+func (d *TestResourceEmptyStatusDie) MetadataDie(fn func(d *v1.ObjectMetaDie)) *TestResourceEmptyStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceEmptyStatus) {
+		d := v1.ObjectMetaBlank.DieImmutable(false).DieFeed(r.ObjectMeta)
+		fn(d)
+		r.ObjectMeta = d.DieRelease()
+	})
+}
+
+// SpecDie stamps the resource's spec field with a mutable die.
+func (d *TestResourceEmptyStatusDie) SpecDie(fn func(d *TestResourceSpecDie)) *TestResourceEmptyStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceEmptyStatus) {
+		d := TestResourceSpecBlank.DieImmutable(false).DieFeed(r.Spec)
+		fn(d)
+		r.Spec = d.DieRelease()
+	})
+}
+
+// StatusDie stamps the resource's status field with a mutable die.
+func (d *TestResourceEmptyStatusDie) StatusDie(fn func(d *TestResourceEmptyStatusStatusDie)) *TestResourceEmptyStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceEmptyStatus) {
+		d := TestResourceEmptyStatusStatusBlank.DieImmutable(false).DieFeed(r.Status)
+		fn(d)
+		r.Status = d.DieRelease()
+	})
+}
+
+func (d *TestResourceEmptyStatusDie) Spec(v resources.TestResourceSpec) *TestResourceEmptyStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceEmptyStatus) {
+		r.Spec = v
+	})
+}
+
+func (d *TestResourceEmptyStatusDie) Status(v resources.TestResourceEmptyStatusStatus) *TestResourceEmptyStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceEmptyStatus) {
+		r.Status = v
+	})
+}
+
+var TestResourceEmptyStatusStatusBlank = (&TestResourceEmptyStatusStatusDie{}).DieFeed(resources.TestResourceEmptyStatusStatus{})
+
+type TestResourceEmptyStatusStatusDie struct {
+	mutable bool
+	r       resources.TestResourceEmptyStatusStatus
+}
+
+// DieImmutable returns a new die for the current die's state that is either mutable (`false`) or immutable (`true`).
+func (d *TestResourceEmptyStatusStatusDie) DieImmutable(immutable bool) *TestResourceEmptyStatusStatusDie {
+	if d.mutable == !immutable {
+		return d
+	}
+	d = d.DeepCopy()
+	d.mutable = !immutable
+	return d
+}
+
+// DieFeed returns a new die with the provided resource.
+func (d *TestResourceEmptyStatusStatusDie) DieFeed(r resources.TestResourceEmptyStatusStatus) *TestResourceEmptyStatusStatusDie {
+	if d.mutable {
+		d.r = r
+		return d
+	}
+	return &TestResourceEmptyStatusStatusDie{
+		mutable: d.mutable,
+		r:       r,
+	}
+}
+
+// DieFeedPtr returns a new die with the provided resource pointer. If the resource is nil, the empty value is used instead.
+func (d *TestResourceEmptyStatusStatusDie) DieFeedPtr(r *resources.TestResourceEmptyStatusStatus) *TestResourceEmptyStatusStatusDie {
+	if r == nil {
+		r = &resources.TestResourceEmptyStatusStatus{}
+	}
+	return d.DieFeed(*r)
+}
+
+// DieRelease returns the resource managed by the die.
+func (d *TestResourceEmptyStatusStatusDie) DieRelease() resources.TestResourceEmptyStatusStatus {
+	if d.mutable {
+		return d.r
+	}
+	return *d.r.DeepCopy()
+}
+
+// DieReleasePtr returns a pointer to the resource managed by the die.
+func (d *TestResourceEmptyStatusStatusDie) DieReleasePtr() *resources.TestResourceEmptyStatusStatus {
+	r := d.DieRelease()
+	return &r
+}
+
+// DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
+func (d *TestResourceEmptyStatusStatusDie) DieStamp(fn func(r *resources.TestResourceEmptyStatusStatus)) *TestResourceEmptyStatusStatusDie {
+	r := d.DieRelease()
+	fn(&r)
+	return d.DieFeed(r)
+}
+
+// DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
+func (d *TestResourceEmptyStatusStatusDie) DeepCopy() *TestResourceEmptyStatusStatusDie {
+	r := *d.r.DeepCopy()
+	return &TestResourceEmptyStatusStatusDie{
+		mutable: d.mutable,
+		r:       r,
+	}
+}
+
 var TestResourceNoStatusBlank = (&TestResourceNoStatusDie{}).DieFeed(resources.TestResourceNoStatus{})
 
 type TestResourceNoStatusDie struct {
@@ -456,8 +670,155 @@ func (d *TestResourceNoStatusDie) MetadataDie(fn func(d *v1.ObjectMetaDie)) *Tes
 	})
 }
 
+// SpecDie stamps the resource's spec field with a mutable die.
+func (d *TestResourceNoStatusDie) SpecDie(fn func(d *TestResourceSpecDie)) *TestResourceNoStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNoStatus) {
+		d := TestResourceSpecBlank.DieImmutable(false).DieFeed(r.Spec)
+		fn(d)
+		r.Spec = d.DieRelease()
+	})
+}
+
 func (d *TestResourceNoStatusDie) Spec(v resources.TestResourceSpec) *TestResourceNoStatusDie {
 	return d.DieStamp(func(r *resources.TestResourceNoStatus) {
 		r.Spec = v
+	})
+}
+
+var TestResourceNilableStatusBlank = (&TestResourceNilableStatusDie{}).DieFeed(resources.TestResourceNilableStatus{})
+
+type TestResourceNilableStatusDie struct {
+	v1.FrozenObjectMeta
+	mutable bool
+	r       resources.TestResourceNilableStatus
+}
+
+// DieImmutable returns a new die for the current die's state that is either mutable (`false`) or immutable (`true`).
+func (d *TestResourceNilableStatusDie) DieImmutable(immutable bool) *TestResourceNilableStatusDie {
+	if d.mutable == !immutable {
+		return d
+	}
+	d = d.DeepCopy()
+	d.mutable = !immutable
+	return d
+}
+
+// DieFeed returns a new die with the provided resource.
+func (d *TestResourceNilableStatusDie) DieFeed(r resources.TestResourceNilableStatus) *TestResourceNilableStatusDie {
+	if d.mutable {
+		d.FrozenObjectMeta = v1.FreezeObjectMeta(r.ObjectMeta)
+		d.r = r
+		return d
+	}
+	return &TestResourceNilableStatusDie{
+		FrozenObjectMeta: v1.FreezeObjectMeta(r.ObjectMeta),
+		mutable:          d.mutable,
+		r:                r,
+	}
+}
+
+// DieFeedPtr returns a new die with the provided resource pointer. If the resource is nil, the empty value is used instead.
+func (d *TestResourceNilableStatusDie) DieFeedPtr(r *resources.TestResourceNilableStatus) *TestResourceNilableStatusDie {
+	if r == nil {
+		r = &resources.TestResourceNilableStatus{}
+	}
+	return d.DieFeed(*r)
+}
+
+// DieRelease returns the resource managed by the die.
+func (d *TestResourceNilableStatusDie) DieRelease() resources.TestResourceNilableStatus {
+	if d.mutable {
+		return d.r
+	}
+	return *d.r.DeepCopy()
+}
+
+// DieReleasePtr returns a pointer to the resource managed by the die.
+func (d *TestResourceNilableStatusDie) DieReleasePtr() *resources.TestResourceNilableStatus {
+	r := d.DieRelease()
+	return &r
+}
+
+// DieReleaseUnstructured returns the resource managed by the die as an unstructured object.
+func (d *TestResourceNilableStatusDie) DieReleaseUnstructured() runtime.Unstructured {
+	r := d.DieReleasePtr()
+	u, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	return &unstructured.Unstructured{
+		Object: u,
+	}
+}
+
+// DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
+func (d *TestResourceNilableStatusDie) DieStamp(fn func(r *resources.TestResourceNilableStatus)) *TestResourceNilableStatusDie {
+	r := d.DieRelease()
+	fn(&r)
+	return d.DieFeed(r)
+}
+
+// DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
+func (d *TestResourceNilableStatusDie) DeepCopy() *TestResourceNilableStatusDie {
+	r := *d.r.DeepCopy()
+	return &TestResourceNilableStatusDie{
+		FrozenObjectMeta: v1.FreezeObjectMeta(r.ObjectMeta),
+		mutable:          d.mutable,
+		r:                r,
+	}
+}
+
+var _ runtime.Object = (*TestResourceNilableStatusDie)(nil)
+
+func (d *TestResourceNilableStatusDie) DeepCopyObject() runtime.Object {
+	return d.r.DeepCopy()
+}
+
+func (d *TestResourceNilableStatusDie) GetObjectKind() schema.ObjectKind {
+	r := d.DieRelease()
+	return r.GetObjectKind()
+}
+
+func (d *TestResourceNilableStatusDie) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.r)
+}
+
+func (d *TestResourceNilableStatusDie) UnmarshalJSON(b []byte) error {
+	if d == TestResourceNilableStatusBlank {
+		return fmtx.Errorf("cannot unmarshal into the blank die, create a copy first")
+	}
+	if !d.mutable {
+		return fmtx.Errorf("cannot unmarshal into immutable dies, create a mutable version first")
+	}
+	r := &resources.TestResourceNilableStatus{}
+	err := json.Unmarshal(b, r)
+	*d = *d.DieFeed(*r)
+	return err
+}
+
+// MetadataDie stamps the resource's ObjectMeta field with a mutable die.
+func (d *TestResourceNilableStatusDie) MetadataDie(fn func(d *v1.ObjectMetaDie)) *TestResourceNilableStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNilableStatus) {
+		d := v1.ObjectMetaBlank.DieImmutable(false).DieFeed(r.ObjectMeta)
+		fn(d)
+		r.ObjectMeta = d.DieRelease()
+	})
+}
+
+// SpecDie stamps the resource's spec field with a mutable die.
+func (d *TestResourceNilableStatusDie) SpecDie(fn func(d *TestResourceSpecDie)) *TestResourceNilableStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNilableStatus) {
+		d := TestResourceSpecBlank.DieImmutable(false).DieFeed(r.Spec)
+		fn(d)
+		r.Spec = d.DieRelease()
+	})
+}
+
+func (d *TestResourceNilableStatusDie) Spec(v resources.TestResourceSpec) *TestResourceNilableStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNilableStatus) {
+		r.Spec = v
+	})
+}
+
+func (d *TestResourceNilableStatusDie) Status(v *resources.TestResourceStatus) *TestResourceNilableStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNilableStatus) {
+		r.Status = v
 	})
 }

@@ -56,5 +56,23 @@ func (d *TestResourceStatusDie) AddField(key, value string) *TestResourceStatusD
 	})
 }
 
-// +die:object=true
+// +die:object=true,spec=TestResourceSpec
+type _ = resources.TestResourceEmptyStatus
+
+// +die
+type _ = resources.TestResourceEmptyStatusStatus
+
+// +die:object=true,spec=TestResourceSpec
 type _ = resources.TestResourceNoStatus
+
+// +die:object=true,spec=TestResourceSpec
+type _ = resources.TestResourceNilableStatus
+
+// StatusDie stamps the resource's status field with a mutable die.
+func (d *TestResourceNilableStatusDie) StatusDie(fn func(d *TestResourceStatusDie)) *TestResourceNilableStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNilableStatus) {
+		d := TestResourceStatusBlank.DieImmutable(false).DieFeedPtr(r.Status)
+		fn(d)
+		r.Status = d.DieReleasePtr()
+	})
+}
