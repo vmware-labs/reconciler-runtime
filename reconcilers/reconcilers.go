@@ -746,6 +746,20 @@ type ChildReconciler struct {
 	//     func(a1, a2 client.Object) bool
 	SemanticEquals interface{}
 
+	// ListOptions allows custom options to be use when listing potential child resources. Each
+	// resource retrieved as part of the listing is confirmed via OurChild.
+	//
+	// Defaults to filtering by the parent's namespace:
+	//     []client.ListOption{
+	//         client.InNamespace(parent.GetNamespace()),
+	//     }
+	//
+	// Expected function signature:
+	//     func(ctx context.Context, parent client.Object) []client.ListOption
+	//
+	// +optional
+	ListOptions interface{}
+
 	// OurChild is used when there are multiple ChildReconciler for the same ChildType
 	// controlled by the same parent object. The function return true for child resources
 	// managed by this ChildReconciler. Objects returned from the DesiredChild function
@@ -880,6 +894,19 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 		}
 	}
 
+	// validate ListOptions function signature:
+	//     nil
+	//     func(ctx context.Context, parent client.Object) []client.ListOption
+	if r.ListOptions != nil {
+		fn := reflect.TypeOf(r.ListOptions)
+		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
+			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(castParentType).AssignableTo(fn.In(1)) ||
+			!reflect.TypeOf([]client.ListOption{}).AssignableTo(fn.Out(0)) {
+			return fmt.Errorf("ChildReconciler %q must implement ListOptions: nil | func(context.Context, %s) []client.ListOption, found: %s", r.Name, reflect.TypeOf(castParentType), fn)
+		}
+	}
+
 	// validate OurChild function signature:
 	//     nil
 	//     func(parent, child client.Object) bool
@@ -954,7 +981,7 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 
 	actual := newEmpty(r.ChildType).(client.Object)
 	children := newEmpty(r.ChildListType).(client.ObjectList)
-	if err := c.List(ctx, children, client.InNamespace(parent.GetNamespace())); err != nil {
+	if err := c.List(ctx, children, r.listOptions(ctx, parent)...); err != nil {
 		return nil, err
 	}
 	items := r.filterChildren(parent, children)
@@ -1178,6 +1205,20 @@ func (r *ChildReconciler) filterChildren(parent client.Object, children client.O
 		}
 	}
 	return items
+}
+
+func (r *ChildReconciler) listOptions(ctx context.Context, parent client.Object) []client.ListOption {
+	if r.ListOptions == nil {
+		return []client.ListOption{
+			client.InNamespace(parent.GetNamespace()),
+		}
+	}
+	fn := reflect.ValueOf(r.ListOptions)
+	out := fn.Call([]reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(parent),
+	})
+	return out[0].Interface().([]client.ListOption)
 }
 
 func (r *ChildReconciler) ourChild(parent, obj client.Object) bool {
