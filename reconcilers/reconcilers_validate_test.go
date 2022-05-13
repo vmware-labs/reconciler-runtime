@@ -844,6 +844,36 @@ func TestChildReconciler_validate(t *testing.T) {
 			shouldErr: `ChildReconciler "ListOptions out 1" must implement ListOptions: nil | func(context.Context, *v1.ConfigMap) []client.ListOption, found: func(context.Context, *v1.ConfigMap) client.ListOptions`,
 		},
 		{
+			name:   "Finalizer without OurChild",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ChildReconciler{
+				Name:                       "Finalizer without OurChild",
+				ChildType:                  &corev1.Pod{},
+				ChildListType:              &corev1.PodList{},
+				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
+				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
+				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
+				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
+				Finalizer:                  "my-finalizer",
+			},
+			shouldErr: `ChildReconciler "Finalizer without OurChild" must implement OurChild`,
+		},
+		{
+			name:   "SkipOwnerReference without OurChild",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ChildReconciler{
+				Name:                       "SkipOwnerReference without OurChild",
+				ChildType:                  &corev1.Pod{},
+				ChildListType:              &corev1.PodList{},
+				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
+				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
+				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
+				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
+				SkipOwnerReference:         true,
+			},
+			shouldErr: `ChildReconciler "SkipOwnerReference without OurChild" must implement OurChild`,
+		},
+		{
 			name:   "OurChild",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler{

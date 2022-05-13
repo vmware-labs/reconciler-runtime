@@ -945,8 +945,13 @@ func TestChildReconciler(t *testing.T) {
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
 				r.Finalizer = testFinalizer
+				r.SkipOwnerReference = true
+				r.OurChild = func(parent, child client.Object) bool { return true }
 				return r
 			},
+		},
+		ExpectTracks: []rtesting.TrackRequest{
+			rtesting.NewTrackRequest(configMapCreate, resource, scheme),
 		},
 		ExpectEvents: []rtesting.Event{
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
@@ -966,7 +971,10 @@ func TestChildReconciler(t *testing.T) {
 				d.AddField("foo", "bar")
 			}),
 		ExpectCreates: []client.Object{
-			configMapCreate,
+			configMapCreate.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.OwnerReferences()
+				}),
 		},
 		ExpectPatches: []rtesting.PatchRef{
 			{
@@ -1027,14 +1035,22 @@ func TestChildReconciler(t *testing.T) {
 				d.AddField("foo", "bar")
 			}),
 		GivenObjects: []client.Object{
-			configMapGiven,
+			configMapGiven.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.OwnerReferences()
+				}),
 		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
 				r.Finalizer = testFinalizer
+				r.SkipOwnerReference = true
+				r.OurChild = func(parent, child client.Object) bool { return true }
 				return r
 			},
+		},
+		ExpectTracks: []rtesting.TrackRequest{
+			rtesting.NewTrackRequest(configMapGiven, resource, scheme),
 		},
 		ExpectEvents: []rtesting.Event{
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated",
@@ -1054,6 +1070,9 @@ func TestChildReconciler(t *testing.T) {
 			}),
 		ExpectUpdates: []client.Object{
 			configMapGiven.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.OwnerReferences()
+				}).
 				AddData("new", "field"),
 		},
 	}, {
@@ -1067,14 +1086,22 @@ func TestChildReconciler(t *testing.T) {
 				d.AddField("foo", "bar")
 			}),
 		GivenObjects: []client.Object{
-			configMapGiven,
+			configMapGiven.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.OwnerReferences()
+				}),
 		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
 				r.Finalizer = testFinalizer
+				r.SkipOwnerReference = true
+				r.OurChild = func(parent, child client.Object) bool { return true }
 				return r
 			},
+		},
+		ExpectTracks: []rtesting.TrackRequest{
+			rtesting.NewTrackRequest(configMapGiven, resource, scheme),
 		},
 		ExpectEvents: []rtesting.Event{
 			rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
@@ -1097,6 +1124,9 @@ func TestChildReconciler(t *testing.T) {
 			}),
 		ExpectUpdates: []client.Object{
 			configMapGiven.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.OwnerReferences()
+				}).
 				AddData("new", "field"),
 		},
 		ExpectPatches: []rtesting.PatchRef{
@@ -1134,12 +1164,17 @@ func TestChildReconciler(t *testing.T) {
 				d.Finalizers(testFinalizer)
 			}),
 		GivenObjects: []client.Object{
-			configMapGiven,
+			configMapGiven.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.OwnerReferences()
+				}),
 		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
 				r.Finalizer = testFinalizer
+				r.SkipOwnerReference = true
+				r.OurChild = func(parent, child client.Object) bool { return true }
 				return r
 			},
 		},
@@ -1174,12 +1209,17 @@ func TestChildReconciler(t *testing.T) {
 				d.Finalizers("some.other.finalizer")
 			}),
 		GivenObjects: []client.Object{
-			configMapGiven,
+			configMapGiven.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.OwnerReferences()
+				}),
 		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
 				r.Finalizer = testFinalizer
+				r.SkipOwnerReference = true
+				r.OurChild = func(parent, child client.Object) bool { return true }
 				return r
 			},
 		},
@@ -1256,12 +1296,17 @@ func TestChildReconciler(t *testing.T) {
 				d.Finalizers(testFinalizer)
 			}),
 		GivenObjects: []client.Object{
-			configMapGiven,
+			configMapGiven.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.OwnerReferences()
+				}),
 		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
 				r.Finalizer = testFinalizer
+				r.SkipOwnerReference = true
+				r.OurChild = func(parent, child client.Object) bool { return true }
 				return r
 			},
 		},
@@ -1495,6 +1540,8 @@ func TestChildReconciler(t *testing.T) {
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
 				r.Finalizer = testFinalizer
+				r.SkipOwnerReference = true
+				r.OurChild = func(parent, child client.Object) bool { return true }
 				return r
 			},
 		},
@@ -1523,12 +1570,17 @@ func TestChildReconciler(t *testing.T) {
 				d.Finalizers(testFinalizer)
 			}),
 		GivenObjects: []client.Object{
-			configMapGiven,
+			configMapGiven.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.OwnerReferences()
+				}),
 		},
 		Metadata: map[string]interface{}{
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				r := defaultChildReconciler(c)
 				r.Finalizer = testFinalizer
+				r.SkipOwnerReference = true
+				r.OurChild = func(parent, child client.Object) bool { return true }
 				return r
 			},
 		},
