@@ -885,6 +885,32 @@ func TestChildReconciler(t *testing.T) {
 			},
 		},
 	}, {
+		Name: "child is in sync, in a different namespace",
+		Parent: resourceReady.
+			SpecDie(func(d *dies.TestResourceSpecDie) {
+				d.AddField("foo", "bar")
+			}).
+			StatusDie(func(d *dies.TestResourceStatusDie) {
+				d.AddField("foo", "bar")
+			}),
+		GivenObjects: []client.Object{
+			configMapGiven.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.Namespace("other-ns")
+				}),
+		},
+		Metadata: map[string]interface{}{
+			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+				r := defaultChildReconciler(c)
+				r.ListOptions = func(ctx context.Context, parent *resources.TestResource) []client.ListOption {
+					return []client.ListOption{
+						client.InNamespace("other-ns"),
+					}
+				}
+				return r
+			},
+		},
+	}, {
 		Name: "create child",
 		Parent: resource.
 			SpecDie(func(d *dies.TestResourceSpecDie) {
