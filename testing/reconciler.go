@@ -95,13 +95,6 @@ type VerifyFunc func(t *testing.T, result controllerruntime.Result, err error)
 // ReconcilerTestSuite represents a list of reconciler test cases.
 type ReconcilerTestSuite []ReconcilerTestCase
 
-// Deprecated: Use Run instead
-// Test executes the test case.
-func (tc *ReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
-	t.Helper()
-	tc.Run(t, scheme, factory)
-}
-
 // Run executes the test case.
 func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
 	t.Helper()
@@ -350,13 +343,6 @@ var (
 	SafeDeployDiff = cmpopts.IgnoreUnexported(resource.Quantity{})
 )
 
-// Deprecated: Use Run instead
-// Test executes the reconciler test suite.
-func (ts ReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
-	t.Helper()
-	ts.Run(t, scheme, factory)
-}
-
 // Run executes the reconciler test suite.
 func (ts ReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
 	t.Helper()
@@ -374,7 +360,7 @@ func (ts ReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	for _, test := range testsToExecute {
 		t.Run(test.Name, func(t *testing.T) {
 			t.Helper()
-			test.Test(t, scheme, factory)
+			test.Run(t, scheme, factory)
 		})
 	}
 	if len(focused) > 0 {
