@@ -74,10 +74,10 @@ func TestConfig_TrackAndGet(t *testing.T) {
 		},
 	}}
 
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
 		return &reconcilers.SyncReconciler{
 			Sync: func(ctx context.Context, parent *resources.TestResource) error {
-				c := reconcilers.RetrieveConfig(ctx)
+				c := reconcilers.RetrieveConfigOrDie(ctx)
 
 				cm := &corev1.ConfigMap{}
 				err := c.TrackAndGet(ctx, types.NamespacedName{Namespace: "track-namespace", Name: "track-name"}, cm)
@@ -127,7 +127,7 @@ func TestParentReconciler_NoStatus(t *testing.T) {
 			},
 		},
 	}}
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
 		return &reconcilers.ParentReconciler{
 			Type:       &resources.TestResourceNoStatus{},
 			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
@@ -168,7 +168,7 @@ func TestParentReconciler_EmptyStatus(t *testing.T) {
 			},
 		},
 	}}
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
 		return &reconcilers.ParentReconciler{
 			Type:       &resources.TestResourceEmptyStatus{},
 			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
@@ -309,7 +309,7 @@ func TestParentReconciler_NilableStatus(t *testing.T) {
 		ShouldErr: true,
 	}}
 
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
 		return &reconcilers.ParentReconciler{
 			Type:       &resources.TestResourceNilableStatus{},
 			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
@@ -544,10 +544,10 @@ func TestParentReconciler(t *testing.T) {
 			"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 				return &reconcilers.SyncReconciler{
 					Sync: func(ctx context.Context, parent *resources.TestResource) error {
-						if config := reconcilers.RetrieveConfig(ctx); config != c {
+						if config := reconcilers.RetrieveConfigOrDie(ctx); config != c {
 							t.Errorf("expected config in context, found %#v", config)
 						}
-						if parentConfig := reconcilers.RetrieveParentConfig(ctx); parentConfig != c {
+						if parentConfig := reconcilers.RetrieveParentConfigOrDie(ctx); parentConfig != c {
 							t.Errorf("expected parent config in context, found %#v", parentConfig)
 						}
 						return nil
@@ -578,7 +578,7 @@ func TestParentReconciler(t *testing.T) {
 		},
 	}}
 
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
 		return &reconcilers.ParentReconciler{
 			Type:       &resources.TestResource{},
 			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
@@ -770,7 +770,7 @@ func TestSyncReconciler(t *testing.T) {
 		ShouldErr: true,
 	}}
 
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
 		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c)
 	})
 }
@@ -1706,7 +1706,7 @@ func TestChildReconciler(t *testing.T) {
 		ShouldErr: true,
 	}}
 
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
 		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c)
 	})
 }
@@ -1951,7 +1951,7 @@ func TestSequence(t *testing.T) {
 		ExpectedResult: ctrl.Result{RequeueAfter: 1 * time.Minute},
 	}}
 
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
 		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c)
 	})
 }
@@ -2149,7 +2149,7 @@ func TestCastParent(t *testing.T) {
 		ShouldErr: true,
 	}}
 
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
 		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c)
 	})
 }
@@ -2183,8 +2183,8 @@ func TestWithConfig(t *testing.T) {
 					},
 					Reconciler: &reconcilers.SyncReconciler{
 						Sync: func(ctx context.Context, parent *resources.TestResource) error {
-							ac := reconcilers.RetrieveConfig(ctx)
-							apc := reconcilers.RetrieveParentConfig(ctx)
+							ac := reconcilers.RetrieveConfigOrDie(ctx)
+							apc := reconcilers.RetrieveParentConfigOrDie(ctx)
 
 							if ac != c {
 								t.Errorf("unexpected config")
@@ -2206,7 +2206,7 @@ func TestWithConfig(t *testing.T) {
 		},
 	}}
 
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
 		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c)
 	})
 }
@@ -2350,7 +2350,7 @@ func TestWithFinalizer(t *testing.T) {
 		},
 	}}
 
-	rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
 		var syncErr, finalizeErr error
 		if err, ok := rtc.Metadata["SyncError"]; ok {
 			syncErr = err.(error)

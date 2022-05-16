@@ -93,13 +93,6 @@ type SubReconcilerTestCase struct {
 // SubReconcilerTestSuite represents a list of subreconciler test cases.
 type SubReconcilerTestSuite []SubReconcilerTestCase
 
-// Deprecated: Use Run instead
-// Test executes the test case.
-func (tc *SubReconcilerTestCase) Test(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
-	t.Helper()
-	tc.Run(t, scheme, factory)
-}
-
 // Run executes the test case.
 func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
 	t.Helper()
@@ -328,13 +321,6 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	if diff := cmp.Diff(originalGivenObjects, givenObjects, SafeDeployDiff, IgnoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
 		t.Errorf("Given objects mutated by test %q (-expected, +actual): %v", tc.Name, diff)
 	}
-}
-
-// Deprecated: Use Run instead
-// Test executes the subreconciler test suite.
-func (ts SubReconcilerTestSuite) Test(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
-	t.Helper()
-	ts.Run(t, scheme, factory)
 }
 
 // Run executes the subreconciler test suite.

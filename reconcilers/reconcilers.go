@@ -381,6 +381,7 @@ func StashCastParentType(ctx context.Context, currentType client.Object) context
 	return context.WithValue(ctx, castParentTypeStashKey, currentType)
 }
 
+// RetrieveRequest returns the reconciler Request from the context, or empty if not found.
 func RetrieveRequest(ctx context.Context) ctrl.Request {
 	value := ctx.Value(requestStashKey)
 	if req, ok := value.(ctrl.Request); ok {
@@ -389,38 +390,45 @@ func RetrieveRequest(ctx context.Context) ctrl.Request {
 	return ctrl.Request{}
 }
 
-func RetrieveConfig(ctx context.Context) Config {
+// RetrieveConfig returns the Config from the context. An error is returned if not found.
+func RetrieveConfig(ctx context.Context) (Config, error) {
 	value := ctx.Value(configStashKey)
 	if config, ok := value.(Config); ok {
-		return config
+		return config, nil
 	}
-	return Config{}
+	return Config{}, fmt.Errorf("config must exist on the context. Check that the context is from a ParentReconciler or WithConfig")
 }
 
+// RetrieveConfigOrDie returns the Config from the context. Panics if not found.
 func RetrieveConfigOrDie(ctx context.Context) Config {
-	config := RetrieveConfig(ctx)
-	if config.IsEmpty() {
-		panic(fmt.Errorf("config must exist on the context. Check that the context is from a ParentReconciler or WithConfig"))
+	config, err := RetrieveConfig(ctx)
+	if err != nil {
+		panic(err)
 	}
 	return config
 }
 
-func RetrieveParentConfig(ctx context.Context) Config {
+// RetrieveParentConfig returns the Config from the context used to load the parent resource. An
+// error is returned if not found.
+func RetrieveParentConfig(ctx context.Context) (Config, error) {
 	value := ctx.Value(parentConfigStashKey)
 	if parentConfig, ok := value.(Config); ok {
-		return parentConfig
+		return parentConfig, nil
 	}
-	return Config{}
+	return Config{}, fmt.Errorf("parent config must exist on the context. Check that the context is from a ParentReconciler")
 }
 
+// RetrieveParentConfigOrDie returns the Config from the context used to load the parent resource.
+// Panics if not found.
 func RetrieveParentConfigOrDie(ctx context.Context) Config {
-	config := RetrieveParentConfig(ctx)
-	if config.IsEmpty() {
-		panic(fmt.Errorf("parent config must exist on the context. Check that the context is from a ParentReconciler"))
+	config, err := RetrieveParentConfig(ctx)
+	if err != nil {
+		panic(err)
 	}
 	return config
 }
 
+// RetrieveParentType returns the parent type object, or nil if not found.
 func RetrieveParentType(ctx context.Context) client.Object {
 	value := ctx.Value(parentTypeStashKey)
 	if parentType, ok := value.(client.Object); ok {
@@ -429,6 +437,7 @@ func RetrieveParentType(ctx context.Context) client.Object {
 	return nil
 }
 
+// RetrieveCastParentType returns the parent type object, or nil if not found.
 func RetrieveCastParentType(ctx context.Context) client.Object {
 	value := ctx.Value(castParentTypeStashKey)
 	if currentType, ok := value.(client.Object); ok {
@@ -1452,7 +1461,7 @@ func (r *WithConfig) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bld
 	if err := r.validate(ctx); err != nil {
 		return err
 	}
-	c, err := r.Config(ctx, RetrieveConfig(ctx))
+	c, err := r.Config(ctx, RetrieveConfigOrDie(ctx))
 	if err != nil {
 		return err
 	}
@@ -1479,7 +1488,7 @@ func (r *WithConfig) Reconcile(ctx context.Context, parent client.Object) (ctrl.
 		WithName(r.Name)
 	ctx = logr.NewContext(ctx, log)
 
-	c, err := r.Config(ctx, RetrieveConfig(ctx))
+	c, err := r.Config(ctx, RetrieveConfigOrDie(ctx))
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -1600,7 +1609,7 @@ func ClearParentFinalizer(ctx context.Context, parent client.Object, finalizer s
 }
 
 func ensureParentFinalizer(ctx context.Context, parent client.Object, finalizer string, add bool) error {
-	config := RetrieveParentConfig(ctx)
+	config := RetrieveParentConfigOrDie(ctx)
 	if config.IsEmpty() {
 		panic(fmt.Errorf("parent config must exist on the context. Check that the context from a ParentReconciler"))
 	}
