@@ -942,7 +942,7 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 	}
 	if r.OurChild == nil && r.SkipOwnerReference {
 		// OurChild is required when SkipOwnerReference is true
-		return fmt.Errorf("ChildReconciler %q must implement OurChild", r.Name)
+		return fmt.Errorf("ChildReconciler %q must implement OurChild since owner references are not used", r.Name)
 	}
 
 	// validate Sanitize function signature:

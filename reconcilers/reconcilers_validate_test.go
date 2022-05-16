@@ -856,7 +856,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
 				Finalizer:                  "my-finalizer",
 			},
-			shouldErr: `ChildReconciler "Finalizer without OurChild" must implement OurChild`,
+			shouldErr: `ChildReconciler "Finalizer without OurChild" must implement OurChild since owner references are not used`,
 		},
 		{
 			name:   "SkipOwnerReference without OurChild",
@@ -871,7 +871,7 @@ func TestChildReconciler_validate(t *testing.T) {
 				SemanticEquals:             func(a1, a2 *corev1.Pod) bool { return false },
 				SkipOwnerReference:         true,
 			},
-			shouldErr: `ChildReconciler "SkipOwnerReference without OurChild" must implement OurChild`,
+			shouldErr: `ChildReconciler "SkipOwnerReference without OurChild" must implement OurChild since owner references are not used`,
 		},
 		{
 			name:   "OurChild",
