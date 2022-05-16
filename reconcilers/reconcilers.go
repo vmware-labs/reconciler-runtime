@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/vmware-labs/reconciler-runtime/tracker"
@@ -693,8 +694,17 @@ type ChildReconciler struct {
 	// the child resource automatically, like when the parent and child are in different
 	// namespaces, scopes or clusters.
 	//
+	// Use of a finalizer implies that SkipOwnerReference is true, and OurChild must be defined.
+	//
 	// +optional
 	Finalizer string
+
+	// SkipOwnerReference when true will not create and find child resources via an owner
+	// reference. OurChild must be defined for the reconciler to distinguish the child being
+	// reconciled from other resources of the same type.
+	//
+	// Any child resource created is tracked for changes.
+	SkipOwnerReference bool
 
 	// Setup performs initialization on the manager and builder this reconciler
 	// will run with. It's common to setup field indexes and watch resources.
@@ -766,6 +776,8 @@ type ChildReconciler struct {
 	// should match this function, otherwise they may be orphaned. If not specified, all
 	// children match.
 	//
+	// OurChild is required when a Finalizer is defined or SkipOwnerReference is true.
+	//
 	// Expected function signature:
 	//     func(parent, child client.Object) bool
 	//
@@ -805,7 +817,11 @@ func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 		return err
 	}
 
-	bldr.Owns(r.ChildType)
+	if r.SkipOwnerReference {
+		bldr.Watches(&source.Kind{Type: r.ChildType}, EnqueueTracked(ctx, r.ChildType))
+	} else {
+		bldr.Owns(r.ChildType)
+	}
 
 	if r.Setup == nil {
 		return nil
@@ -815,6 +831,11 @@ func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager
 
 func (r *ChildReconciler) validate(ctx context.Context) error {
 	castParentType := RetrieveCastParentType(ctx)
+
+	// default implicit values
+	if r.Finalizer != "" {
+		r.SkipOwnerReference = true
+	}
 
 	// validate ChildType value
 	if r.ChildType == nil {
@@ -919,6 +940,10 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 			return fmt.Errorf("ChildReconciler %q must implement OurChild: nil | func(%s, %s) bool, found: %s", r.Name, reflect.TypeOf(castParentType), reflect.TypeOf(r.ChildType), fn)
 		}
 	}
+	if r.OurChild == nil && r.SkipOwnerReference {
+		// OurChild is required when SkipOwnerReference is true
+		return fmt.Errorf("ChildReconciler %q must implement OurChild since owner references are not used", r.Name)
+	}
 
 	// validate Sanitize function signature:
 	//     nil
@@ -1009,8 +1034,10 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 		return nil, err
 	}
 	if desired != nil {
-		if err := ctrl.SetControllerReference(parent, desired, c.Scheme()); err != nil {
-			return nil, err
+		if !r.SkipOwnerReference {
+			if err := ctrl.SetControllerReference(parent, desired, c.Scheme()); err != nil {
+				return nil, err
+			}
 		}
 		if !r.ourChild(parent, desired) {
 			log.Info("object returned from DesiredChild does not match OurChild, this can result in orphaned children", "child", namespaceName(desired))
@@ -1050,6 +1077,15 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 				"Failed to create %s %q: %v", typeName(r.ChildType), desired.GetName(), err)
 			return nil, err
 		}
+		if r.SkipOwnerReference {
+			// track since we can't lean on owner refs
+
+			// normally tracks should occur before API operations, but when creating a resource with a
+			// generated name, we need to know the actual resource name.
+			if err := c.Tracker.TrackChild(ctx, parent, desired, c.Scheme()); err != nil {
+				return nil, err
+			}
+		}
 		pc.Recorder.Eventf(parent, corev1.EventTypeNormal, "Created",
 			"Created %s %q", typeName(r.ChildType), desired.GetName())
 		return desired, nil
@@ -1078,6 +1114,12 @@ func (r *ChildReconciler) reconcile(ctx context.Context, parent client.Object) (
 	current := actual.DeepCopyObject().(client.Object)
 	r.mergeBeforeUpdate(current, desiredPatched)
 	log.Info("updating child", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
+	if r.SkipOwnerReference {
+		// track since we can't lean on owner refs
+		if err := c.Tracker.TrackChild(ctx, parent, current, c.Scheme()); err != nil {
+			return nil, err
+		}
+	}
 	if err := c.Update(ctx, current); err != nil {
 		log.Error(err, "unable to update child", "child", namespaceName(current))
 		pc.Recorder.Eventf(parent, corev1.EventTypeWarning, "UpdateFailed",
@@ -1222,7 +1264,7 @@ func (r *ChildReconciler) listOptions(ctx context.Context, parent client.Object)
 }
 
 func (r *ChildReconciler) ourChild(parent, obj client.Object) bool {
-	if !metav1.IsControlledBy(obj, parent) {
+	if !r.SkipOwnerReference && !metav1.IsControlledBy(obj, parent) {
 		return false
 	}
 	// TODO do we need to remove resources pending deletion?

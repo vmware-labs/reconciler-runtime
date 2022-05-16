@@ -141,7 +141,7 @@ The [`ChildReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-run
 The ChildReconciler is responsible for:
 - looking up an existing child
 - creating/updating/deleting the child resource based on the desired state
-- setting the owner reference on the child resource
+- setting the owner reference on the child resource (when not using a finalizer)
 - logging the reconcilers activities
 - recording child mutations and errors for the parent resource
 - adapting to child resource changes applied by mutating webhooks
@@ -155,6 +155,8 @@ The implementor is responsible for:
 - defining the status subresource [according to the contract](#status) 
 
 When a finalizer is defined, the parent resource is patched to add the finalizer before creating the child; it is removed after the child is deleted. If the parent resource is pending deletion, the desired child method is not called, and existing children are deleted.
+
+Using a finalizer means that the child resource will not use an owner reference. The OurChild method must be implemented in a way that can uniquely and unambiguously identify the child that this parent resource is responsible for from any other resources of the same kind. The child resource is tracked explicitly.
 
 > Warning: It is crucial that each ChildReconciler using a finalizer have a unique and stable finalizer name. Two reconcilers that use the same finalizer, or a reconciler that changed the name of its finalizer, may leak the child resource when the parent is deleted, or the parent resource may never terminate.
 

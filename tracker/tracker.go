@@ -29,8 +29,10 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Tracker defines the interface through which an object can register
@@ -39,6 +41,9 @@ type Tracker interface {
 	// Track tells us that "obj" is tracking changes to the
 	// referenced object.
 	Track(ctx context.Context, ref Key, obj types.NamespacedName)
+
+	// TrackChild tracks the child by the parent.
+	TrackChild(ctx context.Context, parent, child client.Object, s *runtime.Scheme) error
 
 	// Lookup returns actively tracked objects for the reference.
 	Lookup(ctx context.Context, ref Key) []types.NamespacedName
@@ -88,6 +93,23 @@ var _ Tracker = (*impl)(nil)
 
 // set is a map from keys to expirations
 type set map[types.NamespacedName]time.Time
+
+// TrackChild implements Tracker.
+func (i *impl) TrackChild(ctx context.Context, parent, child client.Object, s *runtime.Scheme) error {
+	gvks, _, err := s.ObjectKinds(child)
+	if err != nil {
+		return err
+	}
+	if len(gvks) != 1 {
+		return fmt.Errorf("expected exactly one GVK, found: %s", gvks)
+	}
+	i.Track(
+		ctx,
+		NewKey(gvks[0], types.NamespacedName{Namespace: child.GetNamespace(), Name: child.GetName()}),
+		types.NamespacedName{Namespace: parent.GetNamespace(), Name: parent.GetName()},
+	)
+	return nil
+}
 
 // Track implements Tracker.
 func (i *impl) Track(ctx context.Context, ref Key, obj types.NamespacedName) {

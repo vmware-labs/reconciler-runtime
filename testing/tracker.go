@@ -7,6 +7,7 @@ package testing
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/vmware-labs/reconciler-runtime/tracker"
@@ -67,6 +68,22 @@ var _ tracker.Tracker = &mockTracker{}
 func (t *mockTracker) Track(ctx context.Context, ref tracker.Key, obj types.NamespacedName) {
 	t.Tracker.Track(ctx, ref, obj)
 	t.reqs = append(t.reqs, TrackRequest{Tracked: ref, Tracker: obj})
+}
+
+func (t *mockTracker) TrackChild(ctx context.Context, parent, child client.Object, s *runtime.Scheme) error {
+	gvks, _, err := s.ObjectKinds(child)
+	if err != nil {
+		return err
+	}
+	if len(gvks) != 1 {
+		return fmt.Errorf("expected exactly one GVK, found: %s", gvks)
+	}
+	t.Track(
+		ctx,
+		tracker.NewKey(gvks[0], types.NamespacedName{Namespace: child.GetNamespace(), Name: child.GetName()}),
+		types.NamespacedName{Namespace: parent.GetNamespace(), Name: parent.GetName()},
+	)
+	return nil
 }
 
 func (t *mockTracker) getTrackRequests() []TrackRequest {
