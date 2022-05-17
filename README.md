@@ -34,6 +34,7 @@
 ## Reconcilers
 
 <a name="parentreconciler" />
+
 ### ResourceReconciler
 
 A [`ResourceReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ResourceReconciler) (formerly ParentReconciler) is responsible for orchestrating the reconciliation of a single resource. The reconciler delegates the manipulation of other resources to SubReconcilers.
@@ -266,6 +267,7 @@ rules:
 Higher order reconcilers are SubReconcilers that do not perform work directly, but instead compose other SubReconcilers in new patterns.
 
 <a name="castparent" />
+
 #### CastResource
 
 A [`CastResource`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#CastResource) (formerly CastParent) casts the ResourceReconciler's type by projecting the resource data onto a new struct. Casting the reconciled resource is useful to create cross cutting reconcilers that can operate on common portion of multiple  resource kinds, commonly referred to as a duck type.
