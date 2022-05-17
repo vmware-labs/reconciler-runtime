@@ -9,12 +9,12 @@
 
 <!-- ToC managed by https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one -->
 - [Reconcilers](#reconcilers)
-	- [ParentReconciler](#parentreconciler)
+	- [ResourceReconciler](#resourcereconciler)
 	- [SubReconciler](#subreconciler)
 		- [SyncReconciler](#syncreconciler)
 		- [ChildReconciler](#childreconciler)
 	- [Higher-order Reconcilers](#higher-order-reconcilers)
-		- [CastParent](#castparent)
+		- [CastResource](#castresource)
 		- [Sequence](#sequence)
 		- [WithConfig](#withconfig)
 		- [WithFinalizer](#withfinalizer)
@@ -33,11 +33,12 @@
 
 ## Reconcilers
 
-### ParentReconciler
+<a name="parentreconciler" />
+### ResourceReconciler
 
-A [`ParentReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ParentReconciler) is responsible for orchestrating the reconciliation of a single resource. The reconciler delegates the manipulation of other resources to SubReconcilers.
+A [`ResourceReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ResourceReconciler) (formerly ParentReconciler) is responsible for orchestrating the reconciliation of a single resource. The reconciler delegates the manipulation of other resources to SubReconcilers.
 
-The parent is responsible for:
+The resource reconciler is responsible for:
 - fetching the resource being reconciled
 - creating a stash to pass state between sub reconcilers
 - passing the resource to each sub reconciler in turn
@@ -53,11 +54,11 @@ The implementor is responsible for:
 
 **Example:**
 
-Parent reconcilers tend to be quite simple, as they delegate their work to sub reconcilers. We'll use an example from projectriff of the Function resource, which uses Kpack to build images from a git repo. In this case the FunctionTargetImageReconciler resolves the target image for the function, and FunctionChildImageReconciler creates a child Kpack Image resource based on the resolve value. 
+Resource reconcilers tend to be quite simple, as they delegate their work to sub reconcilers. We'll use an example from projectriff of the Function resource, which uses Kpack to build images from a git repo. In this case the FunctionTargetImageReconciler resolves the target image for the function, and FunctionChildImageReconciler creates a child Kpack Image resource based on the resolve value. 
 
 ```go
-func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
-	return &reconcilers.ParentReconciler{
+func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler {
+	return &reconcilers.ResourceReconciler{
 		Name: "Function",
 		Type: &buildv1alpha1.Function{},
 		Reconciler: reconcilers.Sequence{
@@ -73,7 +74,7 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 
 **Recommended RBAC:**
 
-Replace `<group>` and `<resource>` with values for the parent type.
+Replace `<group>` and `<resource>` with values for the reconciled resource type.
 
 ```go
 // +kubebuilder:rbac:groups=<group>,resources=<resource>,verbs=get;list;watch;create;update;patch;delete
@@ -102,31 +103,31 @@ rules:
 
 ### SubReconciler
 
-The [`SubReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SubReconciler) interface defines the contract between the parent and sub reconcilers.
+The [`SubReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SubReconciler) interface defines the contract between the host and sub reconcilers.
 
 #### SyncReconciler
 
-The [`SyncReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SyncReconciler) is the minimal type-aware sub reconciler. It is used to manage a portion of the parent's reconciliation that is custom, or whose behavior is not covered by another sub reconciler type. Common uses include looking up reference data for the reconciliation, or controlling resources that are not kubernetes resources.
+The [`SyncReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SyncReconciler) is the minimal type-aware sub reconciler. It is used to manage a portion of the resource reconciliation that is custom, or whose behavior is not covered by another sub reconciler type. Common uses include looking up reference data for the reconciliation, or controlling APIs that are not Kubernetes resources.
 
-When a resource is deleted that has pending finalizers, the Finalize method is called instead of the Sync method. If the SyncDuringFinalization field is true, the Sync method will also by called. If creating state that must be manually cleaned up, it is the users responsibility to define and clear finalizers. Using the [parent finalizer helper methods](#finalizers) is strongly encouraged with working under a [ParentReconciler](#parentreconciler).
+When a resource is deleted that has pending finalizers, the Finalize method is called instead of the Sync method. If the SyncDuringFinalization field is true, the Sync method will also by called. If creating state that must be manually cleaned up, it is the users responsibility to define and clear finalizers. Using the [finalizer helper methods](#finalizers) is strongly encouraged with working under a [ResourceReconciler](#resourcereconciler).
 
 **Example:**
 
-While sync reconcilers have the ability to do anything a reconciler can do, it's best to keep them focused on a single goal, letting the parent reconciler structure multiple sub reconcilers together. In this case, we use the parent resource and the client to resolve the target image and stash the value on the parent's status. The status is a good place to stash simple values that can be made public. More [advanced forms of stashing](#stash) are also available. Learn more about [status and its contract](#status).
+While sync reconcilers have the ability to do anything a reconciler can do, it's best to keep them focused on a single goal, letting the resource reconciler structure multiple sub reconcilers together. In this case, we use the reconciled resource and the client to resolve the target image and stash the value on the resource's status. The status is a good place to stash simple values that can be made public. More [advanced forms of stashing](#stash) are also available. Learn more about [status and its contract](#status).
 
 ```go
 func FunctionTargetImageReconciler(c reconcilers.Config) reconcilers.SubReconciler {
 	return &reconcilers.SyncReconciler{
 		Name: "TargetImage",
-		Sync: func(ctx context.Context, parent *buildv1alpha1.Function) error {
+		Sync: func(ctx context.Context, resource *buildv1alpha1.Function) error {
 			log := logr.FromContextOrDiscard(ctx)
 
-			targetImage, err := resolveTargetImage(ctx, c.Client, parent)
+			targetImage, err := resolveTargetImage(ctx, c.Client, resource)
 			if err != nil {
 				return err
 			}
-			parent.Status.MarkImageResolved()
-			parent.Status.TargetImage = targetImage
+			resource.Status.MarkImageResolved()
+			resource.Status.TargetImage = targetImage
 			return nil
 		},
 	}
@@ -136,7 +137,7 @@ func FunctionTargetImageReconciler(c reconcilers.Config) reconcilers.SubReconcil
 
 #### ChildReconciler
 
-The [`ChildReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ChildReconciler) is a sub reconciler that is responsible for managing a single controlled resource. A developer defines their desired state for the child resource (if any), and the reconciler creates/updates/deletes the resource to match the desired state. The child resource is also used to update the parent's status. Mutations and errors are recorded for the parent.
+The [`ChildReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ChildReconciler) is a sub reconciler that is responsible for managing a single controlled resource. Within a child reconciler, the reconciled resource is referred to as the parent resource to avoid ambiguity with the child resource. A developer defines their desired state for the child resource (if any), and the reconciler creates/updates/deletes the resource to match the desired state. The child resource is also used to update the parent's status. Mutations and errors are recorded for the parent.
 
 The ChildReconciler is responsible for:
 - looking up an existing child
@@ -264,24 +265,23 @@ rules:
 
 Higher order reconcilers are SubReconcilers that do not perform work directly, but instead compose other SubReconcilers in new patterns.
 
-#### CastParent
+<a name="castparent" />
+#### CastResource
 
-A [`CastParent`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#CastParent) casts the ParentReconciler's type by projecting the resource data onto a new struct. Casting the parent resource is useful to create cross cutting reconcilers that can operate on common portion of multiple parent resources, commonly referred to as a duck type.
-
-JSON encoding is used as the intermediate representation. Operations on a cast parent are read-only. Attempts to mutate the parent will result in the reconciler erring, although read/write support may be added in the future.
+A [`CastResource`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#CastResource) (formerly CastParent) casts the ResourceReconciler's type by projecting the resource data onto a new struct. Casting the reconciled resource is useful to create cross cutting reconcilers that can operate on common portion of multiple  resource kinds, commonly referred to as a duck type.
 
 **Example:**
 
 ```go
-func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
-	return &reconcilers.ParentReconciler{
+func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler {
+	return &reconcilers.ResourceReconciler{
 		Name: "Function",
 		Type: &buildv1alpha1.Function{},
 		Reconciler: reconcilers.Sequence{
-			&reconcilers.CastParent{
+			&reconcilers.CastResource{
 				Type: &duckv1alpha1.ImageRef{},
 				Reconciler: &reconcilers.SyncReconciler{
-					Sync: func(ctx context.Context, parent *duckv1alpha1.ImageRef) error {
+					Sync: func(ctx context.Context, resource *duckv1alpha1.ImageRef) error {
 						// do something with the duckv1alpha1.ImageRef instead of a buildv1alpha1.Function
 						return nil
 					},
@@ -301,11 +301,11 @@ A [`Sequence`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reco
 
 **Example:**
 
-A Sequence is commonly used in a ParentReconciler, but may be used anywhere a SubReconciler is accepted. 
+A Sequence is commonly used in a ResourceReconciler, but may be used anywhere a SubReconciler is accepted. 
 
 ```go
-func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
-	return &reconcilers.ParentReconciler{
+func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler {
+	return &reconcilers.ResourceReconciler{
 		Name: "Function",
 		Type: &buildv1alpha1.Function{},
 		Reconciler: reconcilers.Sequence{
@@ -321,7 +321,7 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ParentReconciler {
 
 #### WithConfig
 
-[`WithConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#WithConfig) overrides the config that nested reconcilers consume. The config can be retrieved from the context via [`RetrieveConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveConfig). The config used to load the parent resource should be used for interactions with the parent resource, which can be retrieved from the context via [`RetrieveParentConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveParentConfig).
+[`WithConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#WithConfig) overrides the config that nested reconcilers consume. The config can be retrieved from the context via [`RetrieveConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveConfig). For interactions with the reconciled resource, the config originally used to load that resource should be used, which can be retrieved from the context via [`RetrieveOriginalConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveOriginalConfig).
 
 **Example:**
 
@@ -349,26 +349,26 @@ func SwapRESTConfig(rc *rest.Config) *reconcilers.SubReconciler {
 
 #### WithFinalizer
 
-[`WithFinalizer`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#WithFinalizer) allows external state to be allocated and then cleaned up once the parent resource is deleted. When the parent resource is not terminating, the finalizer is set on the parent resource before the nested reconciler is called. When the parent resource is terminating, the finalizer is cleared only after the nested reconciler returns without an error.
+[`WithFinalizer`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#WithFinalizer) allows external state to be allocated and then cleaned up once the resource is deleted. When the resource is not terminating, the finalizer is set on the reconciled resource before the nested reconciler is called. When the resource is terminating, the finalizer is cleared only after the nested reconciler returns without an error.
 
-The [Finalizers](#finalizers) utilities are used to manage the finalizer on the parent resource.
+The [Finalizers](#finalizers) utilities are used to manage the finalizer on the reconciled resource.
 
-> Warning: It is crucial that each WithFinalizer have a unique and stable finalizer name. Two reconcilers that use the same finalizer, or a reconciler that changed the name of its finalizer, may leak the external state when the parent is deleted, or the parent resource may never terminate.
+> Warning: It is crucial that each WithFinalizer have a unique and stable finalizer name. Two reconcilers that use the same finalizer, or a reconciler that changed the name of its finalizer, may leak the external state when the reconciled resource is deleted, or the resource may never terminate.
 
 **Example:**
 
-`WithFinalizer` can be used to wrap any other [SubReconciler](#subreconciler), which can then safely allocate external state while the parent resource is not terminating, and then cleanup that state once the parent resource is terminating.
+`WithFinalizer` can be used to wrap any other [SubReconciler](#subreconciler), which can then safely allocate external state while the resource is not terminating, and then cleanup that state once the resource is terminating.
 
 ```go
 func SyncExternalState() *reconcilers.SubReconciler {
 	return &reconcilers.WithFinalizer{
 		Finalizer: "unique.finalizer.name"
 		Reconciler: &reconcilers.SyncReconciler{
-			Sync: func(ctx context.Context, parent *resources.TestResource) error {
+			Sync: func(ctx context.Context, resource *resources.TestResource) error {
 				// allocate external state
 				return nil
 			},
-			Finalize: func(ctx context.Context, parent *resources.TestResource) error {
+			Finalize: func(ctx context.Context, resource *resources.TestResource) error {
 				// cleanup the external state
 				return nil
 			},
@@ -445,9 +445,9 @@ rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c recon
 
 ### SubReconcilerTestSuite
 
-For more complex reconcilers, the number of moving parts can make it difficult to fully cover all aspects of the reonciler and handle corner cases and sources of error. The [`SubReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase) enables testing a single sub reconciler in isolation from the parent. While very similar to ReconcilerTestCase, these are the differences:
+For more complex reconcilers, the number of moving parts can make it difficult to fully cover all aspects of the reonciler and handle corner cases and sources of error. The [`SubReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase) enables testing a single sub reconciler in isolation from the resource. While very similar to ReconcilerTestCase, these are the differences:
 
-- `Key` is replaced with `Parent` since the parent resource is not lookedup, but handed to the reconciler. `ExpectParent` is the mutated value of the parent resource after the reconciler runs.
+- `Key` is replaced with `Resource` since the resource is not lookedup, but handed to the reconciler. `ExpectResource` is the mutated value of the resource after the reconciler runs.
 - `GivenStashedValues` is a map of stashed value to seed, `ExpectStashedValues` are individually compared with the actual stashed value after the reconciler runs.
 - `ExpectStatusUpdates` is not available
 
@@ -462,7 +462,7 @@ processorImagesConfigMap := ...
 rts := rtesting.SubReconcilerTestSuite{
 	{
 		Name:   "missing images configmap",
-		Parent: processor,
+		Resource: processor,
 		ExpectTracks: []rtesting.TrackRequest{
 			rtesting.NewTrackRequest(processorImagesConfigMap, processor, scheme),
 		},
@@ -470,7 +470,7 @@ rts := rtesting.SubReconcilerTestSuite{
 	},
 	{
 		Name:   "stash processor image",
-		Parent: processor,
+		Resource: processor,
 		GivenObjects: []client.Object{
 			processorImagesConfigMap,
 		},
@@ -548,7 +548,7 @@ The stream gateways in projectriff fetch the image references they use to run fr
 func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string) reconcilers.SubReconciler {
 	return &reconcilers.SyncReconciler{
 		Name: "SyncConfig",
-		Sync: func(ctx context.Context, parent *streamingv1alpha1.InMemoryGateway) error {
+		Sync: func(ctx context.Context, resource *streamingv1alpha1.InMemoryGateway) error {
 			log := logr.FromContextOrDiscard(ctx)
 			c := reconciler.RetrieveConfig(ctx)
 
@@ -559,8 +559,8 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 				return err
 			}
 			// consume the configmap
-			parent.Status.GatewayImage = config.Data[gatewayImageKey]
-			parent.Status.ProvisionerImage = config.Data[provisionerImageKey]
+			resource.Status.GatewayImage = config.Data[gatewayImageKey]
+			resource.Status.ProvisionerImage = config.Data[provisionerImageKey]
 			return nil
 		},
 
@@ -613,17 +613,17 @@ type MyResource struct {
 
 ### Finalizers
 
-[Finalizers](https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/) allow a reconciler to clean up state for a resource that has been deleted by a client, and not yet fully removed. Terminating resources have `.metadata.deletionTimestamp` set. Resources with finalizers will stay in this terminating state until all finalizers are cleared from the resource. While using the [Kubernetes garbage collector](https://kubernetes.io/docs/concepts/architecture/garbage-collection/) is recommended when possible, finalizer are useful for cases when state exists outside of the same cluster, scope, and namespace of the parent resource that needs to be cleaned up when no longer used.
+[Finalizers](https://kubernetes.io/docs/concepts/overview/working-with-objects/finalizers/) allow a reconciler to clean up state for a resource that has been deleted by a client, and not yet fully removed. Terminating resources have `.metadata.deletionTimestamp` set. Resources with finalizers will stay in this terminating state until all finalizers are cleared from the resource. While using the [Kubernetes garbage collector](https://kubernetes.io/docs/concepts/architecture/garbage-collection/) is recommended when possible, finalizer are useful for cases when state exists outside of the same cluster, scope, and namespace of the reconciled resource that needs to be cleaned up when no longer used.
 
 Deleting a resource that uses finalizers requires the controller to be running.
 
 > Note: [WithFinalizer](#withfinalizer) can be used in lieu of, or in conjunction with, [ChildReconciler](#childreconciler)#Finalizer. The distinction is the scope within the reconciler tree where a finalizer is applied. While a reconciler can define as many finalizer on the resource as it desires, in practice, it's best to minimize the number of finalizers as setting and clearing each finalizer makes a request to the API Server. 
 >
-> A single WithFinalizer will always add a finalizer to the parent resource. It can then compose multiple ChildReconcilers, as well as other reconcilers that do not natively support managing finalizers (e.g. SyncReconciler). On the other hand, the ChildReconciler will only set the finalizer when it is required potentially reducing the number of finalizers, but only covers that exact sub-reconciler. It's important the external state that needs to be cleaned up be covered by a finalizer, it does not matter which finalizer is used.
+> A single WithFinalizer will always add a finalizer to the reconciled resource. It can then compose multiple ChildReconcilers, as well as other reconcilers that do not natively support managing finalizers (e.g. SyncReconciler). On the other hand, the ChildReconciler will only set the finalizer when it is required potentially reducing the number of finalizers, but only covers that exact sub-reconciler. It's important the external state that needs to be cleaned up be covered by a finalizer, it does not matter which finalizer is used.
 
-The [AddParentFinalizer](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#AddParentFinalizer) and [ClearParentFinalizer](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ClearParentFinalizer) functions patch the parent resource to update its finalizers. These methods work with [CastParents](#castparent) resources and use the same client the [ParentReconciler](#parentreconciler) used to originally load the parent resource. They can be called inside [SubReconcilers](#subreconciler) that may use a different client.
+The [AddFinalizer](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#AddFinalizer) and [ClearFinalizer](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ClearFinalizer) functions patch the reconciled resource to update its finalizers. These methods work with [CastResource](#castresource) resources and use the same client the [ResourceReconciler](#resourcereconciler) used to originally load the reconciled resource. They can be called inside [SubReconcilers](#subreconciler) that may use a different client.
 
-When an update is required, only the `.metadata.finalizers` field is patched. The parent's `.metadata.resourceVersion` is used as an optimistic concurrency lock, and is updated with the value returned from the server. Any error from the server will cause the resource reconciliation to err. When testing with the [SubReconcilerTestSuite](#subreconcilertestsuite), the resource version of the parent defaults to `"999"`, the patch bytes include the resource version and the response increments the parent's resource version. For a parent with the default resource version that patches a finalizer, the expected parent will have a resource version of `"1000"`.
+When an update is required, only the `.metadata.finalizers` field is patched. The reconciled resource's `.metadata.resourceVersion` is used as an optimistic concurrency lock, and is updated with the value returned from the server. Any error from the server will cause the resource reconciliation to err. When testing with the [SubReconcilerTestSuite](#subreconcilertestsuite), the resource version of the resource defaults to `"999"`, the patch bytes include the resource version and the response increments the reonciled resource's version. For a resource with the default version that patches a finalizer, the expected reconciled resource will have a resource version of `"1000"`.
 
 A minimal test case for a sub reconciler that adds a finalizer may look like:
 
@@ -631,12 +631,12 @@ A minimal test case for a sub reconciler that adds a finalizer may look like:
 	...
 	{
 		Name: "add 'test.finalizer' finalizer",
-		Parent: resourceDie,
+		Resource: resourceDie,
 		ExpectEvents: []rtesting.Event{
 			rtesting.NewEvent(resourceDie, scheme, corev1.EventTypeNormal, "FinalizerPatched",
 				`Patched finalizer %q`, "test.finalizer"),
 		},
-		ExpectParent: resourceDie.
+		ExpectResource: resourceDie.
 			MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 				d.Finalizers("test.finalizer")
 				d.ResourceVersion("1000")
