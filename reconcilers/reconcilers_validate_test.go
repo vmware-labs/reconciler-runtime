@@ -18,71 +18,71 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func TestParentReconciler_validate(t *testing.T) {
+func TestResourceReconciler_validate(t *testing.T) {
 	tests := []struct {
 		name         string
-		reconciler   *ParentReconciler
+		reconciler   *ResourceReconciler
 		shouldErr    string
 		expectedLogs []string
 	}{
 		{
 			name:       "empty",
-			reconciler: &ParentReconciler{},
-			shouldErr:  `ParentReconciler "" must define Type`,
+			reconciler: &ResourceReconciler{},
+			shouldErr:  `ResourceReconciler "" must define Type`,
 		},
 		{
 			name: "valid",
-			reconciler: &ParentReconciler{
+			reconciler: &ResourceReconciler{
 				Type:       &resources.TestResource{},
 				Reconciler: Sequence{},
 			},
 		},
 		{
 			name: "missing type",
-			reconciler: &ParentReconciler{
+			reconciler: &ResourceReconciler{
 				Name:       "missing type",
 				Reconciler: Sequence{},
 			},
-			shouldErr: `ParentReconciler "missing type" must define Type`,
+			shouldErr: `ResourceReconciler "missing type" must define Type`,
 		},
 		{
 			name: "missing reconciler",
-			reconciler: &ParentReconciler{
+			reconciler: &ResourceReconciler{
 				Name: "missing reconciler",
 				Type: &resources.TestResource{},
 			},
-			shouldErr: `ParentReconciler "missing reconciler" must define Reconciler`,
+			shouldErr: `ResourceReconciler "missing reconciler" must define Reconciler`,
 		},
 		{
 			name: "type has no status",
-			reconciler: &ParentReconciler{
+			reconciler: &ResourceReconciler{
 				Type:       &resources.TestResourceNoStatus{},
 				Reconciler: Sequence{},
 			},
 			expectedLogs: []string{
-				"parent resource missing status field, operations related to status will be skipped",
+				"resource missing status field, operations related to status will be skipped",
 			},
 		},
 		{
 			name: "type has empty status",
-			reconciler: &ParentReconciler{
+			reconciler: &ResourceReconciler{
 				Type:       &resources.TestResourceEmptyStatus{},
 				Reconciler: Sequence{},
 			},
 			expectedLogs: []string{
-				"parent status missing ObservedGeneration field of type int64, generation will not be managed",
-				"parent status missing InitializeConditions() method, conditions will not be auto-initialized",
-				"parent status is missing field Conditions of type []metav1.Condition, condition timestamps will not be managed",
+				"resource status missing ObservedGeneration field of type int64, generation will not be managed",
+				"resource status missing InitializeConditions() method, conditions will not be auto-initialized",
+				"resource status is missing field Conditions of type []metav1.Condition, condition timestamps will not be managed",
 			},
 		},
 		{
 			name: "type has nilable status",
-			reconciler: &ParentReconciler{
+			reconciler: &ResourceReconciler{
 				Type:       &resources.TestResourceNilableStatus{},
 				Reconciler: Sequence{},
 			},
 			expectedLogs: []string{
-				"parent status is nilable, status is typically a struct",
+				"resource status is nilable, status is typically a struct",
 			},
 		},
 	}
@@ -105,37 +105,37 @@ func TestParentReconciler_validate(t *testing.T) {
 func TestSyncReconciler_validate(t *testing.T) {
 	tests := []struct {
 		name       string
-		parent     client.Object
+		resource   client.Object
 		reconciler *SyncReconciler
 		shouldErr  string
 	}{
 		{
 			name:       "empty",
-			parent:     &corev1.ConfigMap{},
+			resource:   &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{},
 			shouldErr:  `SyncReconciler "" must implement Sync`,
 		},
 		{
-			name:   "valid",
-			parent: &corev1.ConfigMap{},
+			name:     "valid",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
 			},
 		},
 		{
-			name:   "valid Sync with result",
-			parent: &corev1.ConfigMap{},
+			name:     "valid Sync with result",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) (ctrl.Result, error) {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) (ctrl.Result, error) {
 					return ctrl.Result{}, nil
 				},
 			},
 		},
 		{
-			name:   "Sync num in",
-			parent: &corev1.ConfigMap{},
+			name:     "Sync num in",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
 				Name: "Sync num in",
 				Sync: func() error {
@@ -145,78 +145,78 @@ func TestSyncReconciler_validate(t *testing.T) {
 			shouldErr: `SyncReconciler "Sync num in" must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func() error`,
 		},
 		{
-			name:   "Sync in 1",
-			parent: &corev1.ConfigMap{},
+			name:     "Sync in 1",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
 				Name: "Sync in 1",
-				Sync: func(ctx context.Context, parent *corev1.Secret) error {
+				Sync: func(ctx context.Context, resource *corev1.Secret) error {
 					return nil
 				},
 			},
 			shouldErr: `SyncReconciler "Sync in 1" must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.Secret) error`,
 		},
 		{
-			name:   "Sync num out",
-			parent: &corev1.ConfigMap{},
+			name:     "Sync num out",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
 				Name: "Sync num out",
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) {
 				},
 			},
 			shouldErr: `SyncReconciler "Sync num out" must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap)`,
 		},
 		{
-			name:   "Sync out 1",
-			parent: &corev1.ConfigMap{},
+			name:     "Sync out 1",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
 				Name: "Sync out 1",
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) string {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) string {
 					return ""
 				},
 			},
 			shouldErr: `SyncReconciler "Sync out 1" must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap) string`,
 		},
 		{
-			name:   "Sync result out 1",
-			parent: &corev1.ConfigMap{},
+			name:     "Sync result out 1",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
 				Name: "Sync result out 1",
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) (ctrl.Result, string) {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) (ctrl.Result, string) {
 					return ctrl.Result{}, ""
 				},
 			},
 			shouldErr: `SyncReconciler "Sync result out 1" must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap) (reconcile.Result, string)`,
 		},
 		{
-			name:   "valid Finalize",
-			parent: &corev1.ConfigMap{},
+			name:     "valid Finalize",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
-				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) error {
+				Finalize: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
 			},
 		},
 		{
-			name:   "valid Finalize with result",
-			parent: &corev1.ConfigMap{},
+			name:     "valid Finalize with result",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
-				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) (ctrl.Result, error) {
+				Finalize: func(ctx context.Context, resource *corev1.ConfigMap) (ctrl.Result, error) {
 					return ctrl.Result{}, nil
 				},
 			},
 		},
 		{
-			name:   "Finalize num in",
-			parent: &corev1.ConfigMap{},
+			name:     "Finalize num in",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
 				Name: "Finalize num in",
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
 				Finalize: func() error {
@@ -226,55 +226,55 @@ func TestSyncReconciler_validate(t *testing.T) {
 			shouldErr: `SyncReconciler "Finalize num in" must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func() error`,
 		},
 		{
-			name:   "Finalize in 1",
-			parent: &corev1.ConfigMap{},
+			name:     "Finalize in 1",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
 				Name: "Finalize in 1",
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
-				Finalize: func(ctx context.Context, parent *corev1.Secret) error {
+				Finalize: func(ctx context.Context, resource *corev1.Secret) error {
 					return nil
 				},
 			},
 			shouldErr: `SyncReconciler "Finalize in 1" must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.Secret) error`,
 		},
 		{
-			name:   "Finalize num out",
-			parent: &corev1.ConfigMap{},
+			name:     "Finalize num out",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
 				Name: "Finalize num out",
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
-				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) {
+				Finalize: func(ctx context.Context, resource *corev1.ConfigMap) {
 				},
 			},
 			shouldErr: `SyncReconciler "Finalize num out" must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap)`,
 		},
 		{
-			name:   "Finalize out 1",
-			parent: &corev1.ConfigMap{},
+			name:     "Finalize out 1",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
 				Name: "Finalize out 1",
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
-				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) string {
+				Finalize: func(ctx context.Context, resource *corev1.ConfigMap) string {
 					return ""
 				},
 			},
 			shouldErr: `SyncReconciler "Finalize out 1" must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap) string`,
 		},
 		{
-			name:   "Finalize result out 1",
-			parent: &corev1.ConfigMap{},
+			name:     "Finalize result out 1",
+			resource: &corev1.ConfigMap{},
 			reconciler: &SyncReconciler{
 				Name: "Finalize result out 1",
-				Sync: func(ctx context.Context, parent *corev1.ConfigMap) error {
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
-				Finalize: func(ctx context.Context, parent *corev1.ConfigMap) (ctrl.Result, string) {
+				Finalize: func(ctx context.Context, resource *corev1.ConfigMap) (ctrl.Result, string) {
 					return ctrl.Result{}, ""
 				},
 			},
@@ -284,7 +284,7 @@ func TestSyncReconciler_validate(t *testing.T) {
 
 	for _, c := range tests {
 		t.Run(c.name, func(t *testing.T) {
-			ctx := StashCastParentType(context.TODO(), c.parent)
+			ctx := StashResourceType(context.TODO(), c.resource)
 			err := c.reconciler.validate(ctx)
 			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
 				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
@@ -1023,7 +1023,7 @@ func TestChildReconciler_validate(t *testing.T) {
 
 	for _, c := range tests {
 		t.Run(c.name, func(t *testing.T) {
-			ctx := StashCastParentType(context.TODO(), c.parent)
+			ctx := StashResourceType(context.TODO(), c.parent)
 			err := c.reconciler.validate(ctx)
 			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
 				t.Errorf("validate() error = %q, shouldErr %q", err.Error(), c.shouldErr)
@@ -1032,60 +1032,60 @@ func TestChildReconciler_validate(t *testing.T) {
 	}
 }
 
-func TestCastParent_validate(t *testing.T) {
+func TestCastResource_validate(t *testing.T) {
 	tests := []struct {
 		name       string
-		parent     client.Object
-		reconciler *CastParent
+		resource   client.Object
+		reconciler *CastResource
 		shouldErr  string
 	}{
 		{
 			name:       "empty",
-			parent:     &corev1.ConfigMap{},
-			reconciler: &CastParent{},
-			shouldErr:  `CastParent "" must define Type`,
+			resource:   &corev1.ConfigMap{},
+			reconciler: &CastResource{},
+			shouldErr:  `CastResource "" must define Type`,
 		},
 		{
-			name:   "valid",
-			parent: &corev1.ConfigMap{},
-			reconciler: &CastParent{
+			name:     "valid",
+			resource: &corev1.ConfigMap{},
+			reconciler: &CastResource{
 				Type: &corev1.Secret{},
 				Reconciler: &SyncReconciler{
-					Sync: func(ctx context.Context, parent *corev1.Secret) error {
+					Sync: func(ctx context.Context, resource *corev1.Secret) error {
 						return nil
 					},
 				},
 			},
 		},
 		{
-			name:   "missing type",
-			parent: &corev1.ConfigMap{},
-			reconciler: &CastParent{
+			name:     "missing type",
+			resource: &corev1.ConfigMap{},
+			reconciler: &CastResource{
 				Name: "missing type",
 				Type: nil,
 				Reconciler: &SyncReconciler{
-					Sync: func(ctx context.Context, parent *corev1.Secret) error {
+					Sync: func(ctx context.Context, resource *corev1.Secret) error {
 						return nil
 					},
 				},
 			},
-			shouldErr: `CastParent "missing type" must define Type`,
+			shouldErr: `CastResource "missing type" must define Type`,
 		},
 		{
-			name:   "missing reconciler",
-			parent: &corev1.ConfigMap{},
-			reconciler: &CastParent{
+			name:     "missing reconciler",
+			resource: &corev1.ConfigMap{},
+			reconciler: &CastResource{
 				Name:       "missing reconciler",
 				Type:       &corev1.Secret{},
 				Reconciler: nil,
 			},
-			shouldErr: `CastParent "missing reconciler" must define Reconciler`,
+			shouldErr: `CastResource "missing reconciler" must define Reconciler`,
 		},
 	}
 
 	for _, c := range tests {
 		t.Run(c.name, func(t *testing.T) {
-			ctx := StashCastParentType(context.TODO(), c.parent)
+			ctx := StashResourceType(context.TODO(), c.resource)
 			err := c.reconciler.validate(ctx)
 			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
 				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
@@ -1101,19 +1101,19 @@ func TestWithConfig_validate(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		parent     client.Object
+		resource   client.Object
 		reconciler *WithConfig
 		shouldErr  string
 	}{
 		{
 			name:       "empty",
-			parent:     &corev1.ConfigMap{},
+			resource:   &corev1.ConfigMap{},
 			reconciler: &WithConfig{},
 			shouldErr:  `WithConfig "" must define Config`,
 		},
 		{
-			name:   "valid",
-			parent: &corev1.ConfigMap{},
+			name:     "valid",
+			resource: &corev1.ConfigMap{},
 			reconciler: &WithConfig{
 				Reconciler: &Sequence{},
 				Config: func(ctx context.Context, c Config) (Config, error) {
@@ -1122,8 +1122,8 @@ func TestWithConfig_validate(t *testing.T) {
 			},
 		},
 		{
-			name:   "missing config",
-			parent: &corev1.ConfigMap{},
+			name:     "missing config",
+			resource: &corev1.ConfigMap{},
 			reconciler: &WithConfig{
 				Name:       "missing config",
 				Reconciler: &Sequence{},
@@ -1131,8 +1131,8 @@ func TestWithConfig_validate(t *testing.T) {
 			shouldErr: `WithConfig "missing config" must define Config`,
 		},
 		{
-			name:   "missing reconciler",
-			parent: &corev1.ConfigMap{},
+			name:     "missing reconciler",
+			resource: &corev1.ConfigMap{},
 			reconciler: &WithConfig{
 				Name: "missing reconciler",
 				Config: func(ctx context.Context, c Config) (Config, error) {
@@ -1157,27 +1157,27 @@ func TestWithConfig_validate(t *testing.T) {
 func TestWithFinalizer_validate(t *testing.T) {
 	tests := []struct {
 		name       string
-		parent     client.Object
+		resource   client.Object
 		reconciler *WithFinalizer
 		shouldErr  string
 	}{
 		{
 			name:       "empty",
-			parent:     &corev1.ConfigMap{},
+			resource:   &corev1.ConfigMap{},
 			reconciler: &WithFinalizer{},
 			shouldErr:  `WithFinalizer "" must define Finalizer`,
 		},
 		{
-			name:   "valid",
-			parent: &corev1.ConfigMap{},
+			name:     "valid",
+			resource: &corev1.ConfigMap{},
 			reconciler: &WithFinalizer{
 				Reconciler: &Sequence{},
 				Finalizer:  "my-finalizer",
 			},
 		},
 		{
-			name:   "missing finalizer",
-			parent: &corev1.ConfigMap{},
+			name:     "missing finalizer",
+			resource: &corev1.ConfigMap{},
 			reconciler: &WithFinalizer{
 				Name:       "missing finalizer",
 				Reconciler: &Sequence{},
@@ -1185,8 +1185,8 @@ func TestWithFinalizer_validate(t *testing.T) {
 			shouldErr: `WithFinalizer "missing finalizer" must define Finalizer`,
 		},
 		{
-			name:   "missing reconciler",
-			parent: &corev1.ConfigMap{},
+			name:     "missing reconciler",
+			resource: &corev1.ConfigMap{},
 			reconciler: &WithFinalizer{
 				Name:      "missing reconciler",
 				Finalizer: "my-finalizer",

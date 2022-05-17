@@ -34,8 +34,10 @@ type SubReconcilerTestCase struct {
 
 	// inputs
 
-	// Parent is the initial object passed to the sub reconciler
+	// Deprecated use Resource
 	Parent client.Object
+	// Resource is the initial object passed to the sub reconciler
+	Resource client.Object
 	// GivenStashedValues adds these items to the stash passed into the reconciler. Factories are resolved to their object.
 	GivenStashedValues map[reconcilers.StashKey]interface{}
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
@@ -48,8 +50,10 @@ type SubReconcilerTestCase struct {
 
 	// side effects
 
-	// ExpectParent is the expected parent as mutated after the sub reconciler, or nil if no modification
+	// Deprecated use ExpectResource
 	ExpectParent client.Object
+	// ExpectResource is the expected reconciled resource as mutated after the sub reconciler, or nil if no modification
+	ExpectResource client.Object
 	// ExpectStashedValues ensures each value is stashed. Values in the stash that are not expected are ignored. Factories are resolved to their object.
 	ExpectStashedValues map[reconcilers.StashKey]interface{}
 	// ExpectTracks holds the ordered list of Track calls expected during reconciliation
@@ -100,6 +104,16 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		t.SkipNow()
 	}
 
+	// TODO remove deprecation shim
+	if tc.Resource == nil && tc.Parent != nil {
+		t.Log("Parent field is deprecated for SubReconcilerTestCase, use Resource instead")
+		tc.Resource = tc.Parent
+	}
+	if tc.ExpectResource == nil && tc.ExpectParent != nil {
+		t.Log("ExpectParent field is deprecated for SubReconcilerTestCase, use ExpectResource instead")
+		tc.ExpectResource = tc.ExpectParent
+	}
+
 	// Record the given objects
 	givenObjects := make([]client.Object, 0, len(tc.GivenObjects))
 	originalGivenObjects := make([]client.Object, 0, len(tc.GivenObjects))
@@ -113,13 +127,13 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		apiGivenObjects = append(apiGivenObjects, f.DeepCopyObject().(client.Object))
 	}
 
-	clientWrapper := NewFakeClient(scheme, append(givenObjects, tc.Parent.DeepCopyObject().(client.Object))...)
+	clientWrapper := NewFakeClient(scheme, append(givenObjects, tc.Resource.DeepCopyObject().(client.Object))...)
 	for i := range tc.WithReactors {
 		// in reverse order since we prepend
 		reactor := tc.WithReactors[len(tc.WithReactors)-1-i]
 		clientWrapper.PrependReactor("*", "*", reactor)
 	}
-	apiReader := NewFakeClient(scheme, append(apiGivenObjects, tc.Parent.DeepCopyObject().(client.Object))...)
+	apiReader := NewFakeClient(scheme, append(apiGivenObjects, tc.Resource.DeepCopyObject().(client.Object))...)
 	tracker := createTracker()
 	recorder := &eventRecorder{
 		events: []Event{},
@@ -157,21 +171,21 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	}
 
 	ctx = reconcilers.StashConfig(ctx, c)
-	ctx = reconcilers.StashParentConfig(ctx, c)
+	ctx = reconcilers.StashOriginalConfig(ctx, c)
 
-	parent := tc.Parent.DeepCopyObject().(client.Object)
-	if parent.GetResourceVersion() == "" {
+	resource := tc.Resource.DeepCopyObject().(client.Object)
+	if resource.GetResourceVersion() == "" {
 		// this value is also set by the test client when resource are added as givens
-		parent.SetResourceVersion("999")
+		resource.SetResourceVersion("999")
 	}
 	ctx = reconcilers.StashRequest(ctx, reconcile.Request{
-		NamespacedName: types.NamespacedName{Namespace: parent.GetNamespace(), Name: parent.GetName()},
+		NamespacedName: types.NamespacedName{Namespace: resource.GetNamespace(), Name: resource.GetName()},
 	})
-	ctx = reconcilers.StashParentType(ctx, parent.DeepCopyObject().(client.Object))
-	ctx = reconcilers.StashCastParentType(ctx, parent.DeepCopyObject().(client.Object))
+	ctx = reconcilers.StashOriginalResourceType(ctx, resource.DeepCopyObject().(client.Object))
+	ctx = reconcilers.StashResourceType(ctx, resource.DeepCopyObject().(client.Object))
 
 	// Run the Reconcile we're testing.
-	result, err := func(ctx context.Context, parent client.Object) (reconcile.Result, error) {
+	result, err := func(ctx context.Context, resource client.Object) (reconcile.Result, error) {
 		if tc.ShouldPanic {
 			defer func() {
 				if r := recover(); r == nil {
@@ -180,8 +194,8 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 			}()
 		}
 
-		return r.Reconcile(ctx, parent)
-	}(ctx, parent)
+		return r.Reconcile(ctx, resource)
+	}(ctx, resource)
 
 	if (err != nil) != tc.ShouldErr {
 		t.Errorf("Reconcile() error = %v, ShouldErr %v", err, tc.ShouldErr)
@@ -197,17 +211,17 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		tc.Verify(t, result, err)
 	}
 
-	// compare parent
-	expectedParent := tc.Parent.DeepCopyObject().(client.Object)
-	if tc.ExpectParent != nil {
-		expectedParent = tc.ExpectParent.DeepCopyObject().(client.Object)
+	// compare resource
+	expectedResource := tc.Resource.DeepCopyObject().(client.Object)
+	if tc.ExpectResource != nil {
+		expectedResource = tc.ExpectResource.DeepCopyObject().(client.Object)
 	}
-	if expectedParent.GetResourceVersion() == "" {
-		// mirror defaulting of the parent
-		expectedParent.SetResourceVersion("999")
+	if expectedResource.GetResourceVersion() == "" {
+		// mirror defaulting of the resource
+		expectedResource.SetResourceVersion("999")
 	}
-	if diff := cmp.Diff(expectedParent, parent, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, cmpopts.EquateEmpty()); diff != "" {
-		t.Errorf("Unexpected parent mutations(-expected, +actual): %s", diff)
+	if diff := cmp.Diff(expectedResource, resource, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, cmpopts.EquateEmpty()); diff != "" {
+		t.Errorf("Unexpected reconciled resource mutations(-expected, +actual): %s", diff)
 	}
 
 	// compare stashed

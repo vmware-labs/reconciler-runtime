@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	ref "k8s.io/client-go/tools/reference"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -24,18 +25,20 @@ type Event struct {
 }
 
 func NewEvent(factory client.Object, scheme *runtime.Scheme, eventtype, reason, messageFormat string, a ...interface{}) Event {
-	obj := factory.DeepCopyObject().(client.Object)
-	gvks, _, _ := scheme.ObjectKinds(obj)
-	apiVersion, kind := gvks[0].ToAPIVersionAndKind()
+	obj := factory.DeepCopyObject()
+	objref, err := ref.GetReference(scheme, obj)
+	if err != nil {
+		panic(fmt.Sprintf("Could not construct reference to: '%#v' due to: '%v'. Will not report event: '%v' '%v' '%v'", obj, err, eventtype, reason, fmt.Sprintf(messageFormat, a...)))
+	}
 
 	return Event{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: apiVersion,
-			Kind:       kind,
+			APIVersion: objref.APIVersion,
+			Kind:       objref.Kind,
 		},
 		NamespacedName: types.NamespacedName{
-			Namespace: obj.GetNamespace(),
-			Name:      obj.GetName(),
+			Namespace: objref.Namespace,
+			Name:      objref.Name,
 		},
 		Type:    eventtype,
 		Reason:  reason,
@@ -53,30 +56,11 @@ var (
 )
 
 func (r *eventRecorder) Event(object runtime.Object, eventtype, reason, message string) {
-	o := object.DeepCopyObject().(client.Object)
-	gvks, _, _ := r.scheme.ObjectKinds(o)
-	apiVersion, kind := gvks[0].ToAPIVersionAndKind()
-	r.events = append(r.events, Event{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: apiVersion,
-			Kind:       kind,
-		},
-		NamespacedName: types.NamespacedName{
-			Namespace: o.GetNamespace(),
-			Name:      o.GetName(),
-		},
-		Type:    eventtype,
-		Reason:  reason,
-		Message: message,
-	})
+	r.Eventf(object, eventtype, reason, message)
 }
 
 func (r *eventRecorder) Eventf(object runtime.Object, eventtype, reason, messageFmt string, args ...interface{}) {
-	r.Event(object, eventtype, reason, fmt.Sprintf(messageFmt, args...))
-}
-
-func (r *eventRecorder) PastEventf(object runtime.Object, timestamp metav1.Time, eventtype, reason, messageFmt string, args ...interface{}) {
-	panic("not implemented")
+	r.events = append(r.events, NewEvent(object.(client.Object), r.scheme, eventtype, reason, messageFmt, args...))
 }
 
 func (r *eventRecorder) AnnotatedEventf(object runtime.Object, annotations map[string]string, eventtype, reason, messageFmt string, args ...interface{}) {
