@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -74,24 +75,52 @@ func TestConfig_TrackAndGet(t *testing.T) {
 		},
 	}}
 
-	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
-		return &reconcilers.SyncReconciler{
-			Sync: func(ctx context.Context, resource *resources.TestResource) error {
-				c := reconcilers.RetrieveConfigOrDie(ctx)
+	// run with typed objects
+	t.Run("typed", func(t *testing.T) {
+		rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+			return &reconcilers.SyncReconciler{
+				Sync: func(ctx context.Context, resource *resources.TestResource) error {
+					c := reconcilers.RetrieveConfigOrDie(ctx)
 
-				cm := &corev1.ConfigMap{}
-				err := c.TrackAndGet(ctx, types.NamespacedName{Namespace: "track-namespace", Name: "track-name"}, cm)
-				if err != nil {
-					return err
-				}
+					cm := &corev1.ConfigMap{}
+					err := c.TrackAndGet(ctx, types.NamespacedName{Namespace: "track-namespace", Name: "track-name"}, cm)
+					if err != nil {
+						return err
+					}
 
-				if expected, actual := "hello", cm.Data["greeting"]; expected != actual {
-					// should never get here
-					panic(fmt.Errorf("expected configmap to have greeting %q, found %q", expected, actual))
-				}
-				return nil
-			},
-		}
+					if expected, actual := "hello", cm.Data["greeting"]; expected != actual {
+						// should never get here
+						panic(fmt.Errorf("expected configmap to have greeting %q, found %q", expected, actual))
+					}
+					return nil
+				},
+			}
+		})
+	})
+
+	// run with unstructured objects
+	t.Run("unstructured", func(t *testing.T) {
+		rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+			return &reconcilers.SyncReconciler{
+				Sync: func(ctx context.Context, resource *resources.TestResource) error {
+					c := reconcilers.RetrieveConfigOrDie(ctx)
+
+					cm := &unstructured.Unstructured{}
+					cm.SetAPIVersion("v1")
+					cm.SetKind("ConfigMap")
+					err := c.TrackAndGet(ctx, types.NamespacedName{Namespace: "track-namespace", Name: "track-name"}, cm)
+					if err != nil {
+						return err
+					}
+
+					if expected, actual := "hello", cm.UnstructuredContent()["data"].(map[string]interface{})["greeting"].(string); expected != actual {
+						// should never get here
+						panic(fmt.Errorf("expected configmap to have greeting %q, found %q", expected, actual))
+					}
+					return nil
+				},
+			}
+		})
 	})
 }
 

@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	clientgotesting "k8s.io/client-go/testing"
+	ref "k8s.io/client-go/tools/reference"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -78,26 +79,14 @@ func (w *clientWrapper) PrependReactor(verb, kind string, reaction ReactionFunc)
 }
 
 func (w *clientWrapper) objmeta(obj runtime.Object) (schema.GroupVersionResource, string, string, error) {
-	gvks, _, err := w.Scheme().ObjectKinds(obj)
+	objref, err := ref.GetReference(w.Scheme(), obj)
 	if err != nil {
 		return schema.GroupVersionResource{}, "", "", err
 	}
-	gvk := gvks[0]
+
 	// NOTE kind != resource, but for this purpose it's good enough
-	gvr := schema.GroupVersionResource{
-		Group:    gvk.Group,
-		Version:  gvk.Version,
-		Resource: gvk.Kind,
-	}
-
-	if objmeta, ok := obj.(metav1.ObjectMetaAccessor); ok {
-		return gvr, objmeta.GetObjectMeta().GetNamespace(), objmeta.GetObjectMeta().GetName(), nil
-	}
-	if _, ok := obj.(metav1.ListMetaAccessor); ok {
-		return gvr, "", "", nil
-	}
-
-	return schema.GroupVersionResource{}, "", "", fmt.Errorf("invalid object")
+	gvr := schema.FromAPIVersionAndKind(objref.APIVersion, objref.Kind).GroupVersion().WithResource(objref.Kind)
+	return gvr, objref.Namespace, objref.Name, nil
 }
 
 func (w *clientWrapper) react(action Action) error {
