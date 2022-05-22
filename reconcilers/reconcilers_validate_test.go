@@ -14,8 +14,10 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/internal/resources"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func TestResourceReconciler_validate(t *testing.T) {
@@ -84,6 +86,478 @@ func TestResourceReconciler_validate(t *testing.T) {
 			expectedLogs: []string{
 				"resource status is nilable, status is typically a struct",
 			},
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &bufferedSink{}
+			ctx := logr.NewContext(context.TODO(), logr.New(sink))
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+			if diff := cmp.Diff(c.expectedLogs, sink.Lines); diff != "" {
+				t.Errorf("%s: unexpected logs (-expected, +actual): %s", c.name, diff)
+			}
+		})
+	}
+}
+
+func TestAggregateReconciler_validate(t *testing.T) {
+	req := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Namespace: "my-namespace",
+			Name:      "my-name",
+		},
+	}
+
+	tests := []struct {
+		name         string
+		reconciler   *AggregateReconciler
+		shouldErr    string
+		expectedLogs []string
+	}{
+		{
+			name:       "empty",
+			reconciler: &AggregateReconciler{},
+			shouldErr:  `AggregateReconciler "" must define Type`,
+		},
+		{
+			name: "valid",
+			reconciler: &AggregateReconciler{
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+			},
+		},
+		{
+			name: "Type missing",
+			reconciler: &AggregateReconciler{
+				Name: "Type missing",
+				// Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+			},
+			shouldErr: `AggregateReconciler "Type missing" must define Type`,
+		},
+		{
+			name: "ListType missing",
+			reconciler: &AggregateReconciler{
+				Name: "ListType missing",
+				Type: &resources.TestResource{},
+				// ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+			},
+			shouldErr: `AggregateReconciler "ListType missing" must define ListType`,
+		},
+		{
+			name: "Request missing",
+			reconciler: &AggregateReconciler{
+				Name:     "Request missing",
+				Type:     &resources.TestResource{},
+				ListType: &resources.TestResourceList{},
+				// Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+			},
+			shouldErr: `AggregateReconciler "Request missing" must define Request`,
+		},
+		{
+			name: "Reconciler missing",
+			reconciler: &AggregateReconciler{
+				Name:     "Reconciler missing",
+				Type:     &resources.TestResource{},
+				ListType: &resources.TestResourceList{},
+				Request:  req,
+				// Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+			},
+			shouldErr: `AggregateReconciler "Reconciler missing" must define Reconciler and/or DesiredResource`,
+		},
+		{
+			name: "MergeBeforeUpdate missing",
+			reconciler: &AggregateReconciler{
+				Name:       "MergeBeforeUpdate missing",
+				Type:       &resources.TestResource{},
+				ListType:   &resources.TestResourceList{},
+				Request:    req,
+				Reconciler: Sequence{},
+				// MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals: func(a1, a2 *resources.TestResource) bool { return true },
+			},
+			shouldErr: `AggregateReconciler "MergeBeforeUpdate missing" must define MergeBeforeUpdate`,
+		},
+		{
+			name: "MergeBeforeUpdate num in",
+			reconciler: &AggregateReconciler{
+				Name:              "MergeBeforeUpdate num in",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func() {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+			},
+			shouldErr: `AggregateReconciler "MergeBeforeUpdate num in" must implement MergeBeforeUpdate: func(*resources.TestResource, *resources.TestResource), found: func()`,
+		},
+		{
+			name: "MergeBeforeUpdate in 0",
+			reconciler: &AggregateReconciler{
+				Name:              "MergeBeforeUpdate in 0",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current *corev1.Pod, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+			},
+			shouldErr: `AggregateReconciler "MergeBeforeUpdate in 0" must implement MergeBeforeUpdate: func(*resources.TestResource, *resources.TestResource), found: func(*v1.Pod, *resources.TestResource)`,
+		},
+		{
+			name: "MergeBeforeUpdate in 1",
+			reconciler: &AggregateReconciler{
+				Name:              "MergeBeforeUpdate in 1",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current *resources.TestResource, desired *corev1.Pod) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+			},
+			shouldErr: `AggregateReconciler "MergeBeforeUpdate in 1" must implement MergeBeforeUpdate: func(*resources.TestResource, *resources.TestResource), found: func(*resources.TestResource, *v1.Pod)`,
+		},
+		{
+			name: "MergeBeforeUpdate num out",
+			reconciler: &AggregateReconciler{
+				Name:              "MergeBeforeUpdate num out",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) error { return nil },
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+			},
+			shouldErr: `AggregateReconciler "MergeBeforeUpdate num out" must implement MergeBeforeUpdate: func(*resources.TestResource, *resources.TestResource), found: func(*resources.TestResource, *resources.TestResource) error`,
+		},
+		{
+			name: "SemanticEquals missing",
+			reconciler: &AggregateReconciler{
+				Name:              "SemanticEquals missing",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				// SemanticEquals: func(a1, a2 *resources.TestResource) bool { return true },
+			},
+			shouldErr: `AggregateReconciler "SemanticEquals missing" must define SemanticEquals`,
+		},
+		{
+			name: "SemanticEquals num in",
+			reconciler: &AggregateReconciler{
+				Name:              "SemanticEquals num in",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func() bool { return false },
+			},
+			shouldErr: `AggregateReconciler "SemanticEquals num in" must implement SemanticEquals: func(*resources.TestResource, *resources.TestResource) bool, found: func() bool`,
+		},
+		{
+			name: "SemanticEquals in 0",
+			reconciler: &AggregateReconciler{
+				Name:              "SemanticEquals in 0",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1 *corev1.Pod, a2 *resources.TestResource) bool { return false },
+			},
+			shouldErr: `AggregateReconciler "SemanticEquals in 0" must implement SemanticEquals: func(*resources.TestResource, *resources.TestResource) bool, found: func(*v1.Pod, *resources.TestResource) bool`,
+		},
+		{
+			name: "SemanticEquals in 1",
+			reconciler: &AggregateReconciler{
+				Name:              "SemanticEquals in 1",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1 *resources.TestResource, a2 *corev1.Pod) bool { return false },
+			},
+			shouldErr: `AggregateReconciler "SemanticEquals in 1" must implement SemanticEquals: func(*resources.TestResource, *resources.TestResource) bool, found: func(*resources.TestResource, *v1.Pod) bool`,
+		},
+		{
+			name: "SemanticEquals num out",
+			reconciler: &AggregateReconciler{
+				Name:              "SemanticEquals num out",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) {},
+			},
+			shouldErr: `AggregateReconciler "SemanticEquals num out" must implement SemanticEquals: func(*resources.TestResource, *resources.TestResource) bool, found: func(*resources.TestResource, *resources.TestResource)`,
+		},
+		{
+			name: "SemanticEquals out 0",
+			reconciler: &AggregateReconciler{
+				Name:              "SemanticEquals out 0",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) error { return nil },
+			},
+			shouldErr: `AggregateReconciler "SemanticEquals out 0" must implement SemanticEquals: func(*resources.TestResource, *resources.TestResource) bool, found: func(*resources.TestResource, *resources.TestResource) error`,
+		},
+		{
+			name: "DesiredResource",
+			reconciler: &AggregateReconciler{
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				DesiredResource: func(ctx context.Context, resource *resources.TestResource) (*resources.TestResource, error) {
+					return nil, nil
+				},
+			},
+		},
+		{
+			name: "DesiredResource num in",
+			reconciler: &AggregateReconciler{
+				Name:              "DesiredResource num in",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				DesiredResource: func() (*resources.TestResource, error) {
+					return nil, nil
+				},
+			},
+			shouldErr: `AggregateReconciler "DesiredResource num in" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func() (*resources.TestResource, error)`,
+		},
+		{
+			name: "DesiredResource in 0",
+			reconciler: &AggregateReconciler{
+				Name:              "DesiredResource in 0",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				DesiredResource: func(err error, resource *resources.TestResource) (*resources.TestResource, error) {
+					return nil, nil
+				},
+			},
+			shouldErr: `AggregateReconciler "DesiredResource in 0" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func(error, *resources.TestResource) (*resources.TestResource, error)`,
+		},
+		{
+			name: "DesiredResource in 1",
+			reconciler: &AggregateReconciler{
+				Name:              "DesiredResource in 1",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				DesiredResource: func(ctx context.Context, resource *corev1.Pod) (*resources.TestResource, error) {
+					return nil, nil
+				},
+			},
+			shouldErr: `AggregateReconciler "DesiredResource in 1" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func(context.Context, *v1.Pod) (*resources.TestResource, error)`,
+		},
+		{
+			name: "DesiredResource num out",
+			reconciler: &AggregateReconciler{
+				Name:              "DesiredResource num out",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				DesiredResource:   func(ctx context.Context, resource *resources.TestResource) {},
+			},
+			shouldErr: `AggregateReconciler "DesiredResource num out" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func(context.Context, *resources.TestResource)`,
+		},
+		{
+			name: "DesiredResource out 0",
+			reconciler: &AggregateReconciler{
+				Name:              "DesiredResource out 0",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				DesiredResource: func(ctx context.Context, resource *resources.TestResource) (*corev1.Pod, error) {
+					return nil, nil
+				},
+			},
+			shouldErr: `AggregateReconciler "DesiredResource out 0" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func(context.Context, *resources.TestResource) (*v1.Pod, error)`,
+		},
+		{
+			name: "DesiredResource out 1",
+			reconciler: &AggregateReconciler{
+				Name:              "DesiredResource out 1",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				DesiredResource: func(ctx context.Context, resource *resources.TestResource) (*resources.TestResource, string) {
+					return nil, ""
+				},
+			},
+			shouldErr: `AggregateReconciler "DesiredResource out 1" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func(context.Context, *resources.TestResource) (*resources.TestResource, string)`,
+		},
+		{
+			name: "HarmonizeImmutableFields",
+			reconciler: &AggregateReconciler{
+				Type:                     &resources.TestResource{},
+				ListType:                 &resources.TestResourceList{},
+				Request:                  req,
+				Reconciler:               Sequence{},
+				MergeBeforeUpdate:        func(current, desired *resources.TestResource) {},
+				SemanticEquals:           func(a1, a2 *resources.TestResource) bool { return true },
+				HarmonizeImmutableFields: func(current, desired *resources.TestResource) {},
+			},
+		},
+		{
+			name: "HarmonizeImmutableFields num in",
+			reconciler: &AggregateReconciler{
+				Name:                     "HarmonizeImmutableFields num in",
+				Type:                     &resources.TestResource{},
+				ListType:                 &resources.TestResourceList{},
+				Request:                  req,
+				Reconciler:               Sequence{},
+				MergeBeforeUpdate:        func(current, desired *resources.TestResource) {},
+				SemanticEquals:           func(a1, a2 *resources.TestResource) bool { return true },
+				HarmonizeImmutableFields: func() {},
+			},
+			shouldErr: `AggregateReconciler "HarmonizeImmutableFields num in" must implement HarmonizeImmutableFields: nil | func(*resources.TestResource, *resources.TestResource), found: func()`,
+		},
+		{
+			name: "HarmonizeImmutableFields in 0",
+			reconciler: &AggregateReconciler{
+				Name:                     "HarmonizeImmutableFields in 0",
+				Type:                     &resources.TestResource{},
+				ListType:                 &resources.TestResourceList{},
+				Request:                  req,
+				Reconciler:               Sequence{},
+				MergeBeforeUpdate:        func(current, desired *resources.TestResource) {},
+				SemanticEquals:           func(a1, a2 *resources.TestResource) bool { return true },
+				HarmonizeImmutableFields: func(current *corev1.Pod, desired *resources.TestResource) {},
+			},
+			shouldErr: `AggregateReconciler "HarmonizeImmutableFields in 0" must implement HarmonizeImmutableFields: nil | func(*resources.TestResource, *resources.TestResource), found: func(*v1.Pod, *resources.TestResource)`,
+		},
+		{
+			name: "HarmonizeImmutableFields in 1",
+			reconciler: &AggregateReconciler{
+				Name:                     "HarmonizeImmutableFields in 1",
+				Type:                     &resources.TestResource{},
+				ListType:                 &resources.TestResourceList{},
+				Request:                  req,
+				Reconciler:               Sequence{},
+				MergeBeforeUpdate:        func(current, desired *resources.TestResource) {},
+				SemanticEquals:           func(a1, a2 *resources.TestResource) bool { return true },
+				HarmonizeImmutableFields: func(current *resources.TestResource, desired *corev1.Pod) {},
+			},
+			shouldErr: `AggregateReconciler "HarmonizeImmutableFields in 1" must implement HarmonizeImmutableFields: nil | func(*resources.TestResource, *resources.TestResource), found: func(*resources.TestResource, *v1.Pod)`,
+		},
+		{
+			name: "HarmonizeImmutableFields num out",
+			reconciler: &AggregateReconciler{
+				Name:                     "HarmonizeImmutableFields num out",
+				Type:                     &resources.TestResource{},
+				ListType:                 &resources.TestResourceList{},
+				Request:                  req,
+				Reconciler:               Sequence{},
+				MergeBeforeUpdate:        func(current, desired *resources.TestResource) {},
+				SemanticEquals:           func(a1, a2 *resources.TestResource) bool { return true },
+				HarmonizeImmutableFields: func(current, desired *resources.TestResource) error { return nil },
+			},
+			shouldErr: `AggregateReconciler "HarmonizeImmutableFields num out" must implement HarmonizeImmutableFields: nil | func(*resources.TestResource, *resources.TestResource), found: func(*resources.TestResource, *resources.TestResource) error`,
+		},
+		{
+			name: "Sanitize",
+			reconciler: &AggregateReconciler{
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				Sanitize:          func(child *resources.TestResource) resources.TestResourceSpec { return child.Spec },
+			},
+		},
+		{
+			name: "Sanitize num in",
+			reconciler: &AggregateReconciler{
+				Name:              "Sanitize num in",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				Sanitize:          func() resources.TestResourceSpec { return resources.TestResourceSpec{} },
+			},
+			shouldErr: `AggregateReconciler "Sanitize num in" must implement Sanitize: nil | func(*resources.TestResource) interface{}, found: func() resources.TestResourceSpec`,
+		},
+		{
+			name: "Sanitize in 1",
+			reconciler: &AggregateReconciler{
+				Name:              "Sanitize in 1",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				Sanitize:          func(child *corev1.Pod) corev1.PodSpec { return child.Spec },
+			},
+			shouldErr: `AggregateReconciler "Sanitize in 1" must implement Sanitize: nil | func(*resources.TestResource) interface{}, found: func(*v1.Pod) v1.PodSpec`,
+		},
+		{
+			name: "Sanitize num out",
+			reconciler: &AggregateReconciler{
+				Name:              "Sanitize num out",
+				Type:              &resources.TestResource{},
+				ListType:          &resources.TestResourceList{},
+				Request:           req,
+				Reconciler:        Sequence{},
+				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
+				SemanticEquals:    func(a1, a2 *resources.TestResource) bool { return true },
+				Sanitize:          func(child *resources.TestResource) {},
+			},
+			shouldErr: `AggregateReconciler "Sanitize num out" must implement Sanitize: nil | func(*resources.TestResource) interface{}, found: func(*resources.TestResource)`,
 		},
 	}
 
