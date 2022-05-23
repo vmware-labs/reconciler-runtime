@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -121,6 +122,11 @@ type ResourceReconciler struct {
 }
 
 func (r *ResourceReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	_, err := r.SetupWithManagerYieldingController(ctx, mgr)
+	return err
+}
+
+func (r *ResourceReconciler) SetupWithManagerYieldingController(ctx context.Context, mgr ctrl.Manager) (controller.Controller, error) {
 	if r.Name == "" {
 		r.Name = fmt.Sprintf("%sResourceReconciler", typeName(r.Type))
 	}
@@ -136,14 +142,14 @@ func (r *ResourceReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Mana
 	ctx = StashOriginalResourceType(ctx, r.Type)
 
 	if err := r.validate(ctx); err != nil {
-		return err
+		return nil, err
 	}
 
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
-		return err
+		return nil, err
 	}
-	return bldr.Complete(r)
+	return bldr.Build(r)
 }
 
 func (r *ResourceReconciler) validate(ctx context.Context) error {
@@ -468,6 +474,11 @@ func (r *AggregateReconciler) init() {
 }
 
 func (r *AggregateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	_, err := r.SetupWithManagerYieldingController(ctx, mgr)
+	return err
+}
+
+func (r *AggregateReconciler) SetupWithManagerYieldingController(ctx context.Context, mgr ctrl.Manager) (controller.Controller, error) {
 	if r.Name == "" {
 		r.Name = fmt.Sprintf("%sAggregateReconciler", typeName(r.Type))
 	}
@@ -486,19 +497,19 @@ func (r *AggregateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Man
 	ctx = StashOriginalResourceType(ctx, r.Type)
 
 	if err := r.validate(ctx); err != nil {
-		return err
+		return nil, err
 	}
 
 	r.init()
 
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
-		return err
+		return nil, err
 	}
 	if err := r.stamp.SetupWithManager(ctx, mgr, bldr); err != nil {
-		return err
+		return nil, err
 	}
-	return bldr.Complete(r)
+	return bldr.Build(r)
 }
 
 func (r *AggregateReconciler) validate(ctx context.Context) error {
