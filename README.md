@@ -107,7 +107,7 @@ rules:
 
 An [`AggregateReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#AggregateReconciler) is responsible for synthesizing a single resource, aggregated from other state. The AggregateReconciler is a fusion of the [ResourceReconciler](#resourcereconciler) and [ChildReconciler](#childreconciler). Instead of operating on all resources of a type, it will only operate on a specific resource identified by the type and request (namespace and name). Unlike the child reconciler, the "parent" and "child" resources are the same.
 
-The resource reconciler is responsible for:
+The aggregate reconciler is responsible for:
 - fetching the resource being reconciled
 - creating a stash to pass state between sub reconcilers
 - passing the resource to each sub reconciler in turn
@@ -125,18 +125,27 @@ The implementor is responsible for:
 
 **Example:**
 
-Resource reconcilers tend to be quite simple, as they delegate their work to sub reconcilers. We'll use an example from projectriff of the Function resource, which uses Kpack to build images from a git repo. In this case the FunctionTargetImageReconciler resolves the target image for the function, and FunctionChildImageReconciler creates a child Kpack Image resource based on the resolve value. 
+Aggregate reconcilers resemble a simplified child reconciler with many of the same methods combined directly into a parent reconciler. The `Reconciler` method is used to collect reference data and the `DesiredResource` method defines the desired state. Unlike with a child reconciler, the desired resource may be a direct mutation of the argument.
+
+In the example, we are controlling and existing `ValidatingWebhookConfiguration` named `my-trigger` (defined by `Request`). Based on other state in the cluster, the Reconcile method delegates to `DeriveWebhookRules()` to stash the rules for the webhook. Those rules are retrieved in the `DesiredResource` method, augmenting the `ValidatingWebhookConfiguration`. The `SemanticEquals` detects when the desired webhook config has changed in a meaningful way from the actual resource and needs to be updated,  and `MergeBeforeUpdate` is responsible for merging the desired state into the actual resource, which is then updated on the api server.
+
+The resulting `ValidatingWebhookConfiguration` will have the current desired rules defined by this reconciler, combined with existing state like the location of the webhook server, and other policies.
 
 ```go
 // AdmissionTriggerReconciler reconciles a ValidatingWebhookConfiguration object to
 // dynamically be notified of resource mutations. A less reliable, but potentially more
-// efficient than an informer watch across multiple resources.
-func AdmissionTriggerReconciler(c reconcilers.Config, req reconcile.Request) *reconcilers.AggregateReconciler {
+// efficient than an informer watching each tracked resource.
+func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReconciler {
 	return &reconcilers.AggregateReconciler{
 		Name:     "AdmissionTrigger",
 		Type:     &admissionregistrationv1.ValidatingWebhookConfiguration{},
 		ListType: &admissionregistrationv1.ValidatingWebhookConfigurationList{},
-		Request:  req,
+		Request:  reconcile.Request{
+			NamesspacedName: types.NamesspacedName{
+				// no namespace since ValidatingWebhookConfiguration is cluster scoped
+				Name: "my-trigger",
+			},
+		},
 		Reconciler: reconcilers.Sequence{
 			DeriveWebhookRules(),
 		},
