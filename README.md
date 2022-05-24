@@ -10,6 +10,7 @@
 <!-- ToC managed by https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one -->
 - [Reconcilers](#reconcilers)
 	- [ResourceReconciler](#resourcereconciler)
+	- [AggregateReconciler](#aggregatereconciler)
 	- [SubReconciler](#subreconciler)
 		- [SyncReconciler](#syncreconciler)
 		- [ChildReconciler](#childreconciler)
@@ -97,6 +98,99 @@ rules:
 - apiGroups: ["<group>"]
   resources: ["<resource>/status"]
   verbs: ["get", "update", "patch"]
+- apiGroups: ["core"]
+  resources: ["events"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+```
+
+### AggregateReconciler
+
+An [`AggregateReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#AggregateReconciler) is responsible for synthesizing a single resource, aggregated from other state. The AggregateReconciler is a fusion of the [ResourceReconciler](#resourcereconciler) and [ChildReconciler](#childreconciler). Instead of operating on all resources of a type, it will only operate on a specific resource identified by the type and request (namespace and name). Unlike the child reconciler, the "parent" and "child" resources are the same.
+
+The aggregate reconciler is responsible for:
+- fetching the resource being reconciled
+- creating a stash to pass state between sub reconcilers
+- passing the resource to each sub reconciler in turn
+- creates the resource if it does not exist
+- updates the resource if it drifts from the desired state
+- deletes the resource if no longer desired
+- logging the reconcilers activities
+- records events for mutations and errors
+
+The implementor is responsible for:
+- specifying the type, namespace and name of the aggregate resource
+- defining the desired state
+- indicating if two resources are semantically equal
+- merging the actual resource with the desired state (often as simple as copying the spec and labels)
+
+**Example:**
+
+Aggregate reconcilers resemble a simplified child reconciler with many of the same methods combined directly into a parent reconciler. The `Reconcile` method is used to collect reference data and the `DesiredResource` method defines the desired state. Unlike with a child reconciler, the desired resource may be a direct mutation of the argument.
+
+In the example, we are controlling and existing `ValidatingWebhookConfiguration` named `my-trigger` (defined by `Request`). Based on other state in the cluster, the Reconcile method delegates to `DeriveWebhookRules()` to stash the rules for the webhook. Those rules are retrieved in the `DesiredResource` method, augmenting the `ValidatingWebhookConfiguration`. The `SemanticEquals` detects when the desired webhook config has changed in a meaningful way from the actual resource and needs to be updated,  and `MergeBeforeUpdate` is responsible for merging the desired state into the actual resource, which is then updated on the api server.
+
+The resulting `ValidatingWebhookConfiguration` will have the current desired rules defined by this reconciler, combined with existing state like the location of the webhook server, and other policies.
+
+```go
+// AdmissionTriggerReconciler reconciles a ValidatingWebhookConfiguration object to
+// dynamically be notified of resource mutations. A less reliable, but potentially more
+// efficient than an informer watching each tracked resource.
+func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReconciler {
+	return &reconcilers.AggregateReconciler{
+		Name:     "AdmissionTrigger",
+		Type:     &admissionregistrationv1.ValidatingWebhookConfiguration{},
+		ListType: &admissionregistrationv1.ValidatingWebhookConfigurationList{},
+		Request:  reconcile.Request{
+			NamesspacedName: types.NamesspacedName{
+				// no namespace since ValidatingWebhookConfiguration is cluster scoped
+				Name: "my-trigger",
+			},
+		},
+		Reconciler: reconcilers.Sequence{
+			DeriveWebhookRules(),
+		},
+		DesiredResource: func(ctx context.Context, resource *admissionregistrationv1.ValidatingWebhookConfiguration) (client.Object, error) {
+			// assumes other aspects of the webhook config are part of a preexisting
+			// install, and that there is a server ready to receive the requests.
+			rules := RetrieveWebhookRules(ctx)
+			resource.Webhooks[0].Rules = rules
+			return resource, nil
+		},
+		SemanticEquals: func(a1, a2 *admissionregistrationv1.ValidatingWebhookConfiguration) bool {
+			return equality.Semantic.DeepEqual(a1.Webhooks[0].Rules, a2.Webhooks[0].Rules)
+		},
+		MergeBeforeUpdate: func(current, desired *admissionregistrationv1.ValidatingWebhookConfiguration) {
+			current.Webhooks[0].Rules = desired.Webhooks[0].Rules
+		},
+		Sanitize: func(resource *admissionregistrationv1.ValidatingWebhookConfiguration) []admissionregistrationv1.RuleWithOperations {
+			return resource.Webhooks[0].Rules
+		},
+
+		Config: c,
+	}
+}
+```
+
+**Recommended RBAC:**
+
+Replace `<group>` and `<resource>` with values for the reconciled resource type.
+
+```go
+// +kubebuilder:rbac:groups=<group>,resources=<resource>,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=events,verbs=get;list;watch;create;update;patch;delete
+```
+
+or
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: # any name that is bound to the ServiceAccount used by the client
+rules:
+- apiGroups: ["<group>"]
+  resources: ["<resource>"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: ["core"]
   resources: ["events"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]

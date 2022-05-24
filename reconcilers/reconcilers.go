@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -39,6 +40,7 @@ import (
 
 var (
 	_ reconcile.Reconciler = (*ResourceReconciler)(nil)
+	_ reconcile.Reconciler = (*AggregateReconciler)(nil)
 )
 
 // Config holds common resources for controllers. The configuration may be
@@ -120,6 +122,11 @@ type ResourceReconciler struct {
 }
 
 func (r *ResourceReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	_, err := r.SetupWithManagerYieldingController(ctx, mgr)
+	return err
+}
+
+func (r *ResourceReconciler) SetupWithManagerYieldingController(ctx context.Context, mgr ctrl.Manager) (controller.Controller, error) {
 	if r.Name == "" {
 		r.Name = fmt.Sprintf("%sResourceReconciler", typeName(r.Type))
 	}
@@ -135,14 +142,14 @@ func (r *ResourceReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Mana
 	ctx = StashOriginalResourceType(ctx, r.Type)
 
 	if err := r.validate(ctx); err != nil {
-		return err
+		return nil, err
 	}
 
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
-		return err
+		return nil, err
 	}
-	return bldr.Complete(r)
+	return bldr.Build(r)
 }
 
 func (r *ResourceReconciler) validate(ctx context.Context) error {
@@ -355,6 +362,296 @@ func (r *ResourceReconciler) syncLastTransitionTime(proposed, original []metav1.
 			}
 		}
 	}
+}
+
+// AggregateReconciler is a controller-runtime reconciler that reconciles a specific resource. The
+// Type resource is fetched for the reconciler
+// request and passed in turn to each SubReconciler. Finally, the reconciled
+// resource's status is compared with the original status, updating the API
+// server if needed.
+type AggregateReconciler struct {
+	// Name used to identify this reconciler.  Defaults to `{Type}ResourceReconciler`.  Ideally
+	// unique, but not required to be so.
+	//
+	// +optional
+	Name string
+
+	// Type of resource to reconcile
+	Type client.Object
+	// ListType is the listing type for the type. For example, corev1.PodList is the list type for
+	// corev1.Pod.
+	ListType client.ObjectList
+	// Request of resource to reconcile. Only the specific resource matching the namespace and name
+	// is reconciled. The namespace may be empty for cluster scoped resources.
+	Request ctrl.Request
+
+	// Reconciler is called for each reconciler request with the resource being reconciled.
+	// Typically, Reconciler is a Sequence of multiple SubReconcilers.
+	//
+	// +optional
+	Reconciler SubReconciler
+
+	// DesiredResource returns the desired resource to create/update, or nil if
+	// the resource should not exist.
+	//
+	// Expected function signature:
+	//     func(ctx context.Context, resource client.Object) (client.Object, error)
+	//
+	// +optional
+	DesiredResource interface{}
+
+	// HarmonizeImmutableFields allows fields that are immutable on the current
+	// object to be copied to the desired object in order to avoid creating
+	// updates which are guaranteed to fail.
+	//
+	// Expected function signature:
+	//     func(current, desired client.Object)
+	//
+	// +optional
+	HarmonizeImmutableFields interface{}
+
+	// MergeBeforeUpdate copies desired fields on to the current object before
+	// calling update. Typically fields to copy are the Spec, Labels and
+	// Annotations.
+	//
+	// Expected function signature:
+	//     func(current, desired client.Object)
+	MergeBeforeUpdate interface{}
+
+	// SemanticEquals compares two resources returning true if there is a
+	// meaningful difference that should trigger an update.
+	//
+	// Expected function signature:
+	//     func(a1, a2 client.Object) bool
+	SemanticEquals interface{}
+
+	// Sanitize is called with an object before logging the value. Any value may
+	// be returned. A meaningful subset of the resource is typically returned,
+	// like the Spec.
+	//
+	// Expected function signature:
+	//     func(resource client.Object) interface{}
+	//
+	// +optional
+	Sanitize interface{}
+
+	Config Config
+
+	// stamp manages the lifecycle of the aggregated resource.
+	stamp    *ChildReconciler
+	lazyInit sync.Once
+}
+
+func (r *AggregateReconciler) init() {
+	r.lazyInit.Do(func() {
+		if r.Reconciler == nil {
+			r.Reconciler = Sequence{}
+		}
+		if r.DesiredResource == nil {
+			r.DesiredResource = func(ctx context.Context, resource client.Object) (client.Object, error) {
+				return resource, nil
+			}
+		}
+
+		r.stamp = &ChildReconciler{
+			Name:          "AggregateReconciler",
+			ChildType:     r.Type,
+			ChildListType: r.ListType,
+
+			SkipOwnerReference: true,
+			OurChild: func(_, child client.Object) bool {
+				return child.GetNamespace() == r.Request.Namespace && child.GetName() == r.Request.Name
+			},
+			ReflectChildStatusOnParent: func(parent, child client.Object, err error) {},
+
+			DesiredChild:             r.DesiredResource,
+			HarmonizeImmutableFields: r.HarmonizeImmutableFields,
+			MergeBeforeUpdate:        r.MergeBeforeUpdate,
+			SemanticEquals:           r.SemanticEquals,
+			Sanitize:                 r.Sanitize,
+		}
+	})
+}
+
+func (r *AggregateReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+	_, err := r.SetupWithManagerYieldingController(ctx, mgr)
+	return err
+}
+
+func (r *AggregateReconciler) SetupWithManagerYieldingController(ctx context.Context, mgr ctrl.Manager) (controller.Controller, error) {
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sAggregateReconciler", typeName(r.Type))
+	}
+
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name).
+		WithValues(
+			"resourceType", gvk(r.Type, r.Config.Scheme()),
+			"request", r.Request,
+		)
+	ctx = logr.NewContext(ctx, log)
+
+	ctx = StashConfig(ctx, r.Config)
+	ctx = StashOriginalConfig(ctx, r.Config)
+	ctx = StashResourceType(ctx, r.Type)
+	ctx = StashOriginalResourceType(ctx, r.Type)
+
+	if err := r.validate(ctx); err != nil {
+		return nil, err
+	}
+
+	r.init()
+
+	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
+	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
+		return nil, err
+	}
+	if err := r.stamp.SetupWithManager(ctx, mgr, bldr); err != nil {
+		return nil, err
+	}
+	return bldr.Build(r)
+}
+
+func (r *AggregateReconciler) validate(ctx context.Context) error {
+	// validate Type value
+	if r.Type == nil {
+		return fmt.Errorf("AggregateReconciler %q must define Type", r.Name)
+	}
+	// validate ListType value
+	if r.ListType == nil {
+		return fmt.Errorf("AggregateReconciler %q must define ListType", r.Name)
+	}
+	// validate Request value
+	if r.Request.Name == "" {
+		return fmt.Errorf("AggregateReconciler %q must define Request", r.Name)
+	}
+
+	// validate Reconciler value
+	if r.Reconciler == nil && r.DesiredResource == nil {
+		return fmt.Errorf("AggregateReconciler %q must define Reconciler and/or DesiredResource", r.Name)
+	}
+
+	// validate DesiredResource function signature:
+	//     nil
+	//     func(ctx context.Context, resource client.Object) (client.Object, error)
+	if r.DesiredResource != nil {
+		fn := reflect.TypeOf(r.DesiredResource)
+		if fn.NumIn() != 2 || fn.NumOut() != 2 ||
+			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.Out(0)) ||
+			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(1)) {
+			return fmt.Errorf("AggregateReconciler %q must implement DesiredResource: nil | func(context.Context, %s) (%s, error), found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
+		}
+	}
+
+	// validate HarmonizeImmutableFields function signature:
+	//     nil
+	//     func(current, desired client.Object)
+	if r.HarmonizeImmutableFields != nil {
+		fn := reflect.TypeOf(r.HarmonizeImmutableFields)
+		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) {
+			return fmt.Errorf("AggregateReconciler %q must implement HarmonizeImmutableFields: nil | func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
+		}
+	}
+
+	// validate MergeBeforeUpdate function signature:
+	//     func(current, desired client.Object)
+	if r.MergeBeforeUpdate == nil {
+		return fmt.Errorf("AggregateReconciler %q must define MergeBeforeUpdate", r.Name)
+	} else {
+		fn := reflect.TypeOf(r.MergeBeforeUpdate)
+		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) {
+			return fmt.Errorf("AggregateReconciler %q must implement MergeBeforeUpdate: func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
+		}
+	}
+
+	// validate SemanticEquals function signature:
+	//     func(a1, a2 client.Object) bool
+	if r.SemanticEquals == nil {
+		return fmt.Errorf("AggregateReconciler %q must define SemanticEquals", r.Name)
+	} else {
+		fn := reflect.TypeOf(r.SemanticEquals)
+		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) ||
+			fn.Out(0).Kind() != reflect.Bool {
+			return fmt.Errorf("AggregateReconciler %q must implement SemanticEquals: func(%s, %s) bool, found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
+		}
+	}
+
+	// validate Sanitize function signature:
+	//     nil
+	//     func(child client.Object) interface{}
+	if r.Sanitize != nil {
+		fn := reflect.TypeOf(r.Sanitize)
+		if fn.NumIn() != 1 || fn.NumOut() != 1 ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) {
+			return fmt.Errorf("AggregateReconciler %q must implement Sanitize: nil | func(%s) interface{}, found: %s", r.Name, reflect.TypeOf(r.Type), fn)
+		}
+	}
+
+	return nil
+}
+
+func (r *AggregateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	if req.Namespace != r.Request.Namespace || req.Name != r.Request.Name {
+		// ignore other requests
+		return ctrl.Result{}, nil
+	}
+
+	ctx = WithStash(ctx)
+
+	c := r.Config
+
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name).
+		WithValues("resourceType", gvk(r.Type, c.Scheme()))
+	ctx = logr.NewContext(ctx, log)
+
+	ctx = StashRequest(ctx, req)
+	ctx = StashConfig(ctx, c)
+	ctx = StashOriginalConfig(ctx, r.Config)
+	ctx = StashOriginalResourceType(ctx, r.Type)
+	ctx = StashResourceType(ctx, r.Type)
+
+	r.init()
+
+	resource := r.Type.DeepCopyObject().(client.Object)
+	if err := c.Get(ctx, req.NamespacedName, resource); err != nil {
+		if apierrs.IsNotFound(err) {
+			// not found is ok
+			resource.SetNamespace(r.Request.Namespace)
+			resource.SetName(r.Request.Name)
+		} else {
+			log.Error(err, "unable to fetch resource")
+			return ctrl.Result{}, err
+		}
+	}
+
+	if !resource.GetDeletionTimestamp().IsZero() {
+		// resource is being deleted, nothing to do
+		return ctrl.Result{}, nil
+	}
+
+	reconcilerResult, err := r.Reconciler.Reconcile(ctx, resource)
+	if err != nil {
+		return reconcilerResult, err
+	}
+
+	// hack, ignore track requests from the child reconciler, we have it covered
+	ctx = StashConfig(ctx, Config{
+		Client:    c.Client,
+		APIReader: c.APIReader,
+		Recorder:  c.Recorder,
+		Tracker:   tracker.New(0),
+	})
+	stampResult, err := r.stamp.Reconcile(ctx, resource)
+	return AggregateResults(reconcilerResult, stampResult), err
 }
 
 const requestStashKey StashKey = "reconciler-runtime:request"

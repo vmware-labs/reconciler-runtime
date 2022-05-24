@@ -616,6 +616,390 @@ func TestResourceReconciler(t *testing.T) {
 	})
 }
 
+func TestAggregateReconciler(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+	key := types.NamespacedName{Namespace: testNamespace, Name: testName}
+
+	now := metav1.NewTime(time.Now().Truncate(time.Second))
+
+	scheme := runtime.NewScheme()
+	_ = resources.AddToScheme(scheme)
+	_ = clientgoscheme.AddToScheme(scheme)
+
+	configMapCreate := diecorev1.ConfigMapBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+		})
+	configMapGiven := configMapCreate.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
+		})
+
+	defaultAggregateReconciler := func(c reconcilers.Config) *reconcilers.AggregateReconciler {
+		return &reconcilers.AggregateReconciler{
+			Type:     &corev1.ConfigMap{},
+			ListType: &corev1.ConfigMapList{},
+			Request:  reconcile.Request{NamespacedName: key},
+
+			DesiredResource: func(ctx context.Context, resource *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+				resource.Data = map[string]string{
+					"foo": "bar",
+				}
+				return resource, nil
+			},
+			SemanticEquals: func(a1, a2 *corev1.ConfigMap) bool {
+				return equality.Semantic.DeepEqual(a1.Data, a2.Data)
+			},
+			MergeBeforeUpdate: func(current, desired *corev1.ConfigMap) {
+				current.Data = desired.Data
+			},
+
+			Config: c,
+		}
+	}
+
+	rts := rtesting.ReconcilerTestSuite{{
+		Name: "resource is in sync",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven.
+				AddData("foo", "bar"),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				return defaultAggregateReconciler(c)
+			},
+		},
+	}, {
+		Name: "ignore other resources",
+		Key:  types.NamespacedName{Namespace: testName, Name: "not-it"},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				return defaultAggregateReconciler(c)
+			},
+		},
+	}, {
+		Name: "ignore terminating resources",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.DeletionTimestamp(&now)
+				}),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				return defaultAggregateReconciler(c)
+			},
+		},
+	}, {
+		Name: "create resource",
+		Key:  key,
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				return defaultAggregateReconciler(c)
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(configMapGiven, scheme, corev1.EventTypeNormal, "Created",
+				`Created ConfigMap %q`, testName),
+		},
+		ExpectCreates: []client.Object{
+			configMapCreate.
+				AddData("foo", "bar"),
+		},
+	}, {
+		Name: "update resource",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				return defaultAggregateReconciler(c)
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(configMapGiven, scheme, corev1.EventTypeNormal, "Updated",
+				`Updated ConfigMap %q`, testName),
+		},
+		ExpectUpdates: []client.Object{
+			configMapGiven.
+				AddData("foo", "bar"),
+		},
+	}, {
+		Name: "delete resource",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				r := defaultAggregateReconciler(c)
+				r.DesiredResource = func(ctx context.Context, resource client.Object) (client.Object, error) {
+					return nil, nil
+				}
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(configMapGiven, scheme, corev1.EventTypeNormal, "Deleted",
+				`Deleted ConfigMap %q`, testName),
+		},
+		ExpectDeletes: []rtesting.DeleteRef{
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
+		},
+	}, {
+		Name: "preserve immutable fields",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven.
+				AddData("foo", "bar").
+				AddData("immutable", "field"),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				r := defaultAggregateReconciler(c)
+				r.HarmonizeImmutableFields = func(current, desired *corev1.ConfigMap) {
+					desired.Data["immutable"] = current.Data["immutable"]
+				}
+				return r
+			},
+		},
+	}, {
+		Name: "sanitize resource before logging",
+		Key:  key,
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				r := defaultAggregateReconciler(c)
+				r.Sanitize = func(child *corev1.ConfigMap) interface{} {
+					return child.Name
+				}
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(configMapGiven, scheme, corev1.EventTypeNormal, "Created",
+				`Created ConfigMap %q`, testName),
+		},
+		ExpectCreates: []client.Object{
+			configMapCreate.
+				AddData("foo", "bar"),
+		},
+	}, {
+		Name: "sanitize is mutation safe",
+		Key:  key,
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				r := defaultAggregateReconciler(c)
+				r.Sanitize = func(child *corev1.ConfigMap) interface{} {
+					child.Data["ignore"] = "me"
+					return child
+				}
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(configMapGiven, scheme, corev1.EventTypeNormal, "Created",
+				`Created ConfigMap %q`, testName),
+		},
+		ExpectCreates: []client.Object{
+			configMapCreate.
+				AddData("foo", "bar"),
+		},
+	}, {
+		Name: "error getting resources",
+		Key:  key,
+		WithReactors: []rtesting.ReactionFunc{
+			rtesting.InduceFailure("get", "ConfigMap"),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				return defaultAggregateReconciler(c)
+			},
+		},
+		ShouldErr: true,
+	}, {
+		Name: "error creating resource",
+		Key:  key,
+		WithReactors: []rtesting.ReactionFunc{
+			rtesting.InduceFailure("create", "ConfigMap"),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				return defaultAggregateReconciler(c)
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(configMapGiven, scheme, corev1.EventTypeWarning, "CreationFailed",
+				`Failed to create ConfigMap %q: inducing failure for create ConfigMap`, testName),
+		},
+		ExpectCreates: []client.Object{
+			configMapCreate.
+				AddData("foo", "bar"),
+		},
+		ShouldErr: true,
+	}, {
+		Name: "error updating resource",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		WithReactors: []rtesting.ReactionFunc{
+			rtesting.InduceFailure("update", "ConfigMap"),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				return defaultAggregateReconciler(c)
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(configMapGiven, scheme, corev1.EventTypeWarning, "UpdateFailed",
+				`Failed to update ConfigMap %q: inducing failure for update ConfigMap`, testName),
+		},
+		ExpectUpdates: []client.Object{
+			configMapGiven.
+				AddData("foo", "bar"),
+		},
+		ShouldErr: true,
+	}, {
+		Name: "error deleting resource",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven,
+		},
+		WithReactors: []rtesting.ReactionFunc{
+			rtesting.InduceFailure("delete", "ConfigMap"),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				r := defaultAggregateReconciler(c)
+				r.DesiredResource = func(ctx context.Context, resource client.Object) (client.Object, error) {
+					return nil, nil
+				}
+				return r
+			},
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(configMapGiven, scheme, corev1.EventTypeWarning, "DeleteFailed",
+				`Failed to delete ConfigMap %q: inducing failure for delete ConfigMap`, testName),
+		},
+		ExpectDeletes: []rtesting.DeleteRef{
+			rtesting.NewDeleteRefFromObject(configMapGiven, scheme),
+		},
+		ShouldErr: true,
+	}, {
+		Name: "reconcile result",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven.
+				AddData("foo", "bar"),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				r := defaultAggregateReconciler(c)
+				r.Reconciler = &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, resource client.Object) (ctrl.Result, error) {
+						return ctrl.Result{RequeueAfter: time.Hour}, nil
+					},
+				}
+				return r
+			},
+		},
+		ExpectedResult: ctrl.Result{RequeueAfter: time.Hour},
+	}, {
+		Name: "reconcile error",
+		Key:  key,
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				r := defaultAggregateReconciler(c)
+				r.Reconciler = &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, resource client.Object) error {
+						return fmt.Errorf("test error")
+					},
+				}
+				return r
+			},
+		},
+		ShouldErr: true,
+	}, {
+		Name: "context is stashable",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven.
+				AddData("foo", "bar"),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				r := defaultAggregateReconciler(c)
+				r.Reconciler = &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
+						var key reconcilers.StashKey = "foo"
+						// StashValue will panic if the context is not setup correctly
+						reconcilers.StashValue(ctx, key, "bar")
+						return nil
+					},
+				}
+				return r
+			},
+		},
+	}, {
+		Name: "context has config",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven.
+				AddData("foo", "bar"),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				r := defaultAggregateReconciler(c)
+				r.Reconciler = &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
+						if config := reconcilers.RetrieveConfigOrDie(ctx); config != c {
+							t.Errorf("expected config in context, found %#v", config)
+						}
+						if resourceConfig := reconcilers.RetrieveOriginalConfigOrDie(ctx); resourceConfig != c {
+							t.Errorf("expected original config in context, found %#v", resourceConfig)
+						}
+						return nil
+					},
+				}
+				return r
+			},
+		},
+	}, {
+		Name: "context has resource type",
+		Key:  key,
+		GivenObjects: []client.Object{
+			configMapGiven.
+				AddData("foo", "bar"),
+		},
+		Metadata: map[string]interface{}{
+			"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+				r := defaultAggregateReconciler(c)
+				r.Reconciler = &reconcilers.SyncReconciler{
+					Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
+						if resourceType, ok := reconcilers.RetrieveOriginalResourceType(ctx).(*corev1.ConfigMap); !ok {
+							t.Errorf("expected original resource type not in context, found %#v", resourceType)
+						}
+						if resourceType, ok := reconcilers.RetrieveResourceType(ctx).(*corev1.ConfigMap); !ok {
+							t.Errorf("expected resource type not in context, found %#v", resourceType)
+						}
+						return nil
+					},
+				}
+				return r
+			},
+		},
+	}}
+
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+		return rtc.Metadata["Reconciler"].(func(*testing.T, reconcilers.Config) reconcile.Reconciler)(t, c)
+	})
+}
+
 func TestSyncReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
