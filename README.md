@@ -125,7 +125,7 @@ The implementor is responsible for:
 
 **Example:**
 
-Aggregate reconcilers resemble a simplified child reconciler with many of the same methods combined directly into a parent reconciler. The `Reconciler` method is used to collect reference data and the `DesiredResource` method defines the desired state. Unlike with a child reconciler, the desired resource may be a direct mutation of the argument.
+Aggregate reconcilers resemble a simplified child reconciler with many of the same methods combined directly into a parent reconciler. The `Reconcile` method is used to collect reference data and the `DesiredResource` method defines the desired state. Unlike with a child reconciler, the desired resource may be a direct mutation of the argument.
 
 In the example, we are controlling and existing `ValidatingWebhookConfiguration` named `my-trigger` (defined by `Request`). Based on other state in the cluster, the Reconcile method delegates to `DeriveWebhookRules()` to stash the rules for the webhook. Those rules are retrieved in the `DesiredResource` method, augmenting the `ValidatingWebhookConfiguration`. The `SemanticEquals` detects when the desired webhook config has changed in a meaningful way from the actual resource and needs to be updated,  and `MergeBeforeUpdate` is responsible for merging the desired state into the actual resource, which is then updated on the api server.
 
