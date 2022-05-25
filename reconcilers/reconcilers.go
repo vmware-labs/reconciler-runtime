@@ -395,9 +395,6 @@ type AggregateReconciler struct {
 
 	// Type of resource to reconcile
 	Type client.Object
-	// ListType is the listing type for the type. For example, corev1.PodList is the list type for
-	// corev1.Pod.
-	ListType client.ObjectList
 	// Request of resource to reconcile. Only the specific resource matching the namespace and name
 	// is reconciled. The namespace may be empty for cluster scoped resources.
 	Request ctrl.Request
@@ -455,7 +452,7 @@ type AggregateReconciler struct {
 	Config Config
 
 	// stamp manages the lifecycle of the aggregated resource.
-	stamp    *ChildReconciler
+	stamp    *ResourceManager
 	lazyInit sync.Once
 }
 
@@ -470,18 +467,10 @@ func (r *AggregateReconciler) init() {
 			}
 		}
 
-		r.stamp = &ChildReconciler{
-			Name:          "AggregateReconciler",
-			ChildType:     r.Type,
-			ChildListType: r.ListType,
+		r.stamp = &ResourceManager{
+			Name: r.Name,
+			Type: r.Type,
 
-			SkipOwnerReference: true,
-			OurChild: func(_, child client.Object) bool {
-				return child.GetNamespace() == r.Request.Namespace && child.GetName() == r.Request.Name
-			},
-			ReflectChildStatusOnParent: func(parent, child client.Object, err error) {},
-
-			DesiredChild:             r.DesiredResource,
 			HarmonizeImmutableFields: r.HarmonizeImmutableFields,
 			MergeBeforeUpdate:        r.MergeBeforeUpdate,
 			SemanticEquals:           r.SemanticEquals,
@@ -528,7 +517,7 @@ func (r *AggregateReconciler) SetupWithManagerYieldingController(ctx context.Con
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return nil, err
 	}
-	if err := r.stamp.SetupWithManager(ctx, mgr, bldr); err != nil {
+	if err := r.stamp.Setup(ctx); err != nil {
 		return nil, err
 	}
 	return bldr.Build(r)
@@ -538,10 +527,6 @@ func (r *AggregateReconciler) validate(ctx context.Context) error {
 	// validate Type value
 	if r.Type == nil {
 		return fmt.Errorf("AggregateReconciler %q must define Type", r.Name)
-	}
-	// validate ListType value
-	if r.ListType == nil {
-		return fmt.Errorf("AggregateReconciler %q must define ListType", r.Name)
 	}
 	// validate Request value
 	if r.Request.Name == "" {
@@ -564,56 +549,6 @@ func (r *AggregateReconciler) validate(ctx context.Context) error {
 			!reflect.TypeOf(r.Type).AssignableTo(fn.Out(0)) ||
 			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(1)) {
 			return fmt.Errorf("AggregateReconciler %q must implement DesiredResource: nil | func(context.Context, %s) (%s, error), found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
-		}
-	}
-
-	// validate HarmonizeImmutableFields function signature:
-	//     nil
-	//     func(current, desired client.Object)
-	if r.HarmonizeImmutableFields != nil {
-		fn := reflect.TypeOf(r.HarmonizeImmutableFields)
-		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) {
-			return fmt.Errorf("AggregateReconciler %q must implement HarmonizeImmutableFields: nil | func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
-		}
-	}
-
-	// validate MergeBeforeUpdate function signature:
-	//     func(current, desired client.Object)
-	if r.MergeBeforeUpdate == nil {
-		return fmt.Errorf("AggregateReconciler %q must define MergeBeforeUpdate", r.Name)
-	} else {
-		fn := reflect.TypeOf(r.MergeBeforeUpdate)
-		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) {
-			return fmt.Errorf("AggregateReconciler %q must implement MergeBeforeUpdate: func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
-		}
-	}
-
-	// validate SemanticEquals function signature:
-	//     func(a1, a2 client.Object) bool
-	if r.SemanticEquals == nil {
-		return fmt.Errorf("AggregateReconciler %q must define SemanticEquals", r.Name)
-	} else {
-		fn := reflect.TypeOf(r.SemanticEquals)
-		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) ||
-			fn.Out(0).Kind() != reflect.Bool {
-			return fmt.Errorf("AggregateReconciler %q must implement SemanticEquals: func(%s, %s) bool, found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
-		}
-	}
-
-	// validate Sanitize function signature:
-	//     nil
-	//     func(child client.Object) interface{}
-	if r.Sanitize != nil {
-		fn := reflect.TypeOf(r.Sanitize)
-		if fn.NumIn() != 1 || fn.NumOut() != 1 ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) {
-			return fmt.Errorf("AggregateReconciler %q must implement Sanitize: nil | func(%s) interface{}, found: %s", r.Name, reflect.TypeOf(r.Type), fn)
 		}
 	}
 
@@ -660,9 +595,9 @@ func (r *AggregateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, nil
 	}
 
-	reconcilerResult, err := r.Reconciler.Reconcile(ctx, resource)
+	result, err := r.Reconciler.Reconcile(ctx, resource)
 	if err != nil {
-		return reconcilerResult, err
+		return result, err
 	}
 
 	// hack, ignore track requests from the child reconciler, we have it covered
@@ -672,8 +607,37 @@ func (r *AggregateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		Recorder:  c.Recorder,
 		Tracker:   tracker.New(0),
 	})
-	stampResult, err := r.stamp.Reconcile(ctx, resource)
-	return AggregateResults(reconcilerResult, stampResult), err
+	desired, err := r.desiredResource(ctx, resource)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	_, err = r.stamp.Manage(ctx, resource, resource, desired)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	return result, nil
+}
+
+func (r *AggregateReconciler) desiredResource(ctx context.Context, resource client.Object) (client.Object, error) {
+	if resource.GetDeletionTimestamp() != nil {
+		// the reconciled resource is pending deletion, cleanup the child resource
+		return nil, nil
+	}
+
+	fn := reflect.ValueOf(r.DesiredResource)
+	out := fn.Call([]reflect.Value{
+		reflect.ValueOf(ctx),
+		reflect.ValueOf(resource.DeepCopyObject()),
+	})
+	var obj client.Object
+	if !out[0].IsNil() {
+		obj = out[0].Interface().(client.Object)
+	}
+	var err error
+	if !out[1].IsNil() {
+		err = out[1].Interface().(error)
+	}
+	return obj, err
 }
 
 const requestStashKey StashKey = "reconciler-runtime:request"
@@ -1141,11 +1105,8 @@ type ChildReconciler struct {
 	// +optional
 	Sanitize interface{}
 
-	// mutationCache holds patches received from updates to a resource made by
-	// mutation webhooks. This cache is used to avoid unnecessary update calls
-	// that would actually have no effect.
-	mutationCache *cache.Expiring
-	lazyInit      sync.Once
+	stamp    *ResourceManager
+	lazyInit sync.Once
 }
 
 func (r *ChildReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
@@ -1223,45 +1184,6 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 		}
 	}
 
-	// validate HarmonizeImmutableFields function signature:
-	//     nil
-	//     func(current, desired client.Object)
-	if r.HarmonizeImmutableFields != nil {
-		fn := reflect.TypeOf(r.HarmonizeImmutableFields)
-		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
-			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) {
-			return fmt.Errorf("ChildReconciler %q must implement HarmonizeImmutableFields: nil | func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
-		}
-	}
-
-	// validate MergeBeforeUpdate function signature:
-	//     func(current, desired client.Object)
-	if r.MergeBeforeUpdate == nil {
-		return fmt.Errorf("ChildReconciler %q must implement MergeBeforeUpdate", r.Name)
-	} else {
-		fn := reflect.TypeOf(r.MergeBeforeUpdate)
-		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
-			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) {
-			return fmt.Errorf("ChildReconciler %q must implement MergeBeforeUpdate: func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
-		}
-	}
-
-	// validate SemanticEquals function signature:
-	//     func(a1, a2 client.Object) bool
-	if r.SemanticEquals == nil {
-		return fmt.Errorf("ChildReconciler %q must implement SemanticEquals", r.Name)
-	} else {
-		fn := reflect.TypeOf(r.SemanticEquals)
-		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
-			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(1)) ||
-			fn.Out(0).Kind() != reflect.Bool {
-			return fmt.Errorf("ChildReconciler %q must implement SemanticEquals: func(%s, %s) bool, found: %s", r.Name, reflect.TypeOf(r.ChildType), reflect.TypeOf(r.ChildType), fn)
-		}
-	}
-
 	// validate ListOptions function signature:
 	//     nil
 	//     func(ctx context.Context, resource client.Object) []client.ListOption
@@ -1292,17 +1214,6 @@ func (r *ChildReconciler) validate(ctx context.Context) error {
 		return fmt.Errorf("ChildReconciler %q must implement OurChild since owner references are not used", r.Name)
 	}
 
-	// validate Sanitize function signature:
-	//     nil
-	//     func(child client.Object) interface{}
-	if r.Sanitize != nil {
-		fn := reflect.TypeOf(r.Sanitize)
-		if fn.NumIn() != 1 || fn.NumOut() != 1 ||
-			!reflect.TypeOf(r.ChildType).AssignableTo(fn.In(0)) {
-			return fmt.Errorf("ChildReconciler %q must implement Sanitize: nil | func(%s) interface{}, found: %s", r.Name, reflect.TypeOf(r.ChildType), fn)
-		}
-	}
-
 	return nil
 }
 
@@ -1315,7 +1226,16 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, resource client.Object)
 	ctx = logr.NewContext(ctx, log)
 
 	r.lazyInit.Do(func() {
-		r.mutationCache = cache.NewExpiring()
+		r.stamp = &ResourceManager{
+			Name:                     r.Name,
+			Type:                     r.ChildType,
+			Finalizer:                r.Finalizer,
+			TrackDesired:             r.SkipOwnerReference,
+			HarmonizeImmutableFields: r.HarmonizeImmutableFields,
+			MergeBeforeUpdate:        r.MergeBeforeUpdate,
+			SemanticEquals:           r.SemanticEquals,
+			Sanitize:                 r.Sanitize,
+		}
 	})
 
 	child, err := r.reconcile(ctx, resource)
@@ -1391,114 +1311,8 @@ func (r *ChildReconciler) reconcile(ctx context.Context, resource client.Object)
 		}
 	}
 
-	// delete child if no longer needed
-	if desired == nil {
-		if !actual.GetCreationTimestamp().Time.IsZero() {
-			log.Info("deleting unwanted child", "child", namespaceName(actual))
-			if err := c.Delete(ctx, actual); err != nil {
-				log.Error(err, "unable to delete unwanted child", "child", namespaceName(actual))
-				pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "DeleteFailed",
-					"Failed to delete %s %q: %v", typeName(r.ChildType), actual.GetName(), err)
-				return nil, err
-			}
-			pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Deleted",
-				"Deleted %s %q", typeName(r.ChildType), actual.GetName())
-
-			if err := ClearFinalizer(ctx, resource, r.Finalizer); err != nil {
-				return nil, err
-			}
-		}
-		return nil, nil
-	}
-
-	if err := AddFinalizer(ctx, resource, r.Finalizer); err != nil {
-		return nil, err
-	}
-
-	// create child if it doesn't exist
-	if actual.GetName() == "" {
-		log.Info("creating child", "child", r.sanitize(desired))
-		if err := c.Create(ctx, desired); err != nil {
-			log.Error(err, "unable to create child", "child", namespaceName(desired))
-			pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "CreationFailed",
-				"Failed to create %s %q: %v", typeName(r.ChildType), desired.GetName(), err)
-			return nil, err
-		}
-		if r.SkipOwnerReference {
-			// track since we can't lean on owner refs
-
-			// normally tracks should occur before API operations, but when creating a resource with a
-			// generated name, we need to know the actual resource name.
-			if err := c.Tracker.TrackChild(ctx, resource, desired, c.Scheme()); err != nil {
-				return nil, err
-			}
-		}
-		pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Created",
-			"Created %s %q", typeName(r.ChildType), desired.GetName())
-		return desired, nil
-	}
-
-	// overwrite fields that should not be mutated
-	r.harmonizeImmutableFields(actual, desired)
-
-	// lookup and apply remote mutations
-	desiredPatched := desired.DeepCopyObject().(client.Object)
-	if patch, ok := r.mutationCache.Get(actual.GetUID()); ok {
-		// the only object added to the cache is *Patch
-		err := patch.(*Patch).Apply(desiredPatched)
-		if err != nil {
-			// there's not much we can do, but let the normal update proceed
-			log.Info("unable to patch desired child from mutation cache")
-		}
-	}
-
-	if r.semanticEquals(desiredPatched, actual) {
-		// child is unchanged
-		return actual, nil
-	}
-
-	// update child with desired changes
-	current := actual.DeepCopyObject().(client.Object)
-	r.mergeBeforeUpdate(current, desiredPatched)
-	log.Info("updating child", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
-	if r.SkipOwnerReference {
-		// track since we can't lean on owner refs
-		if err := c.Tracker.TrackChild(ctx, resource, current, c.Scheme()); err != nil {
-			return nil, err
-		}
-	}
-	if err := c.Update(ctx, current); err != nil {
-		log.Error(err, "unable to update child", "child", namespaceName(current))
-		pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "UpdateFailed",
-			"Failed to update %s %q: %v", typeName(r.ChildType), current.GetName(), err)
-		return nil, err
-	}
-	if r.semanticEquals(desired, current) {
-		r.mutationCache.Delete(current.GetUID())
-	} else {
-		base := current.DeepCopyObject().(client.Object)
-		r.mergeBeforeUpdate(base, desired)
-		patch, err := NewPatch(base, current)
-		if err != nil {
-			log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base))
-		} else {
-			r.mutationCache.Set(current.GetUID(), patch, 1*time.Hour)
-		}
-	}
-	log.Info("updated child")
-	pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Updated",
-		"Updated %s %q", typeName(r.ChildType), current.GetName())
-
-	return current, nil
-}
-
-func (r *ChildReconciler) semanticEquals(a1, a2 client.Object) bool {
-	fn := reflect.ValueOf(r.SemanticEquals)
-	out := fn.Call([]reflect.Value{
-		reflect.ValueOf(a1),
-		reflect.ValueOf(a2),
-	})
-	return out[0].Bool()
+	// create/update/delete desired child
+	return r.stamp.Manage(ctx, resource, actual, desired)
 }
 
 func (r *ChildReconciler) desiredChild(ctx context.Context, resource client.Object) (client.Object, error) {
@@ -1540,47 +1354,6 @@ func (r *ChildReconciler) reflectChildStatusOnParent(resource, child client.Obje
 		args[2] = reflect.New(fn.Type().In(2)).Elem()
 	}
 	fn.Call(args)
-}
-
-func (r *ChildReconciler) harmonizeImmutableFields(current, desired client.Object) {
-	if r.HarmonizeImmutableFields == nil {
-		return
-	}
-	fn := reflect.ValueOf(r.HarmonizeImmutableFields)
-	fn.Call([]reflect.Value{
-		reflect.ValueOf(current),
-		reflect.ValueOf(desired),
-	})
-}
-
-func (r *ChildReconciler) mergeBeforeUpdate(current, desired client.Object) {
-	fn := reflect.ValueOf(r.MergeBeforeUpdate)
-	fn.Call([]reflect.Value{
-		reflect.ValueOf(current),
-		reflect.ValueOf(desired),
-	})
-}
-
-func (r *ChildReconciler) sanitize(child client.Object) interface{} {
-	if r.Sanitize == nil {
-		return child
-	}
-	if child == nil {
-		return nil
-	}
-
-	// avoid accidental mutations in Sanitize method
-	child = child.DeepCopyObject().(client.Object)
-
-	fn := reflect.ValueOf(r.Sanitize)
-	out := fn.Call([]reflect.Value{
-		reflect.ValueOf(child),
-	})
-	var sanitized interface{}
-	if !out[0].IsNil() {
-		sanitized = out[0].Interface()
-	}
-	return sanitized
 }
 
 func (r *ChildReconciler) filterChildren(resource client.Object, children client.ObjectList) []client.Object {
@@ -1911,6 +1684,306 @@ func (r *WithFinalizer) Reconcile(ctx context.Context, resource client.Object) (
 		}
 	}
 	return result, err
+}
+
+// ResourceManager compares the actual and desired resources to create/update/delete as desired.
+type ResourceManager struct {
+	// Name used to identify this reconciler.  Defaults to `{Type}ResourceManager`.  Ideally
+	// unique, but not required to be so.
+	//
+	// +optional
+	Name string
+
+	// Type is the resource being created/updated/deleted by the reconciler.
+	Type client.Object
+
+	// Finalizer is set on the reconciled resource before a managed resource is created, and cleared
+	// after a managed resource is deleted. The value must be unique to this specific manager
+	// instance and not shared. Reusing a value may result in orphaned resources when the
+	// reconciled resource is deleted.
+	//
+	// Using a finalizer is encouraged when the Kubernetes garbage collector is unable to delete
+	// the child resource automatically, like when the reconciled resource and child are in different
+	// namespaces, scopes or clusters.
+	//
+	// +optional
+	Finalizer string
+
+	// TrackDesired when true, the desired resource is tracked after creates, before
+	// updates, and on delete errors.
+	TrackDesired bool
+
+	// HarmonizeImmutableFields allows fields that are immutable on the current
+	// object to be copied to the desired object in order to avoid creating
+	// updates which are guaranteed to fail.
+	//
+	// Expected function signature:
+	//     func(current, desired client.Object)
+	//
+	// +optional
+	HarmonizeImmutableFields interface{}
+
+	// MergeBeforeUpdate copies desired fields on to the current object before
+	// calling update. Typically fields to copy are the Spec, Labels and
+	// Annotations.
+	//
+	// Expected function signature:
+	//     func(current, desired client.Object)
+	MergeBeforeUpdate interface{}
+
+	// SemanticEquals compares two resources returning true if there is a
+	// meaningful difference that should trigger an update.
+	//
+	// Expected function signature:
+	//     func(a1, a2 client.Object) bool
+	SemanticEquals interface{}
+
+	// Sanitize is called with an object before logging the value. Any value may
+	// be returned. A meaningful subset of the resource is typically returned,
+	// like the Spec.
+	//
+	// Expected function signature:
+	//     func(child client.Object) interface{}
+	//
+	// +optional
+	Sanitize interface{}
+
+	// mutationCache holds patches received from updates to a resource made by
+	// mutation webhooks. This cache is used to avoid unnecessary update calls
+	// that would actually have no effect.
+	mutationCache *cache.Expiring
+	lazyInit      sync.Once
+}
+
+func (r *ResourceManager) Setup(ctx context.Context) error {
+	if r.Name == "" {
+		r.Name = fmt.Sprintf("%sResourceManager", typeName(r.Type))
+	}
+
+	return r.validate(ctx)
+}
+
+func (r *ResourceManager) validate(ctx context.Context) error {
+	// validate Type value
+	if r.Type == nil {
+		return fmt.Errorf("ResourceManager %q must define Type", r.Name)
+	}
+
+	// validate HarmonizeImmutableFields function signature:
+	//     nil
+	//     func(current, desired client.Object)
+	if r.HarmonizeImmutableFields != nil {
+		fn := reflect.TypeOf(r.HarmonizeImmutableFields)
+		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) {
+			return fmt.Errorf("ResourceManager %q must implement HarmonizeImmutableFields: nil | func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
+		}
+	}
+
+	// validate MergeBeforeUpdate function signature:
+	//     func(current, desired client.Object)
+	if r.MergeBeforeUpdate == nil {
+		return fmt.Errorf("ResourceManager %q must define MergeBeforeUpdate", r.Name)
+	} else {
+		fn := reflect.TypeOf(r.MergeBeforeUpdate)
+		if fn.NumIn() != 2 || fn.NumOut() != 0 ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) {
+			return fmt.Errorf("ResourceManager %q must implement MergeBeforeUpdate: func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
+		}
+	}
+
+	// validate SemanticEquals function signature:
+	//     func(a1, a2 client.Object) bool
+	if r.SemanticEquals == nil {
+		return fmt.Errorf("ResourceManager %q must define SemanticEquals", r.Name)
+	} else {
+		fn := reflect.TypeOf(r.SemanticEquals)
+		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) ||
+			fn.Out(0).Kind() != reflect.Bool {
+			return fmt.Errorf("ResourceManager %q must implement SemanticEquals: func(%s, %s) bool, found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
+		}
+	}
+
+	// validate Sanitize function signature:
+	//     nil
+	//     func(child client.Object) interface{}
+	if r.Sanitize != nil {
+		fn := reflect.TypeOf(r.Sanitize)
+		if fn.NumIn() != 1 || fn.NumOut() != 1 ||
+			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) {
+			return fmt.Errorf("ResourceManager %q must implement Sanitize: nil | func(%s) interface{}, found: %s", r.Name, reflect.TypeOf(r.Type), fn)
+		}
+	}
+
+	return nil
+}
+
+// Manage a specific resource to create/update/delete based on the actual and desired state. The
+// resource is the reconciled resource and used to record events for mutations. The actual and
+// desired objects represent the managed resource and must be compatible with the type field.
+func (r *ResourceManager) Manage(ctx context.Context, resource, actual, desired client.Object) (client.Object, error) {
+	log := logr.FromContextOrDiscard(ctx)
+	pc := RetrieveOriginalConfigOrDie(ctx)
+	c := RetrieveConfigOrDie(ctx)
+
+	r.lazyInit.Do(func() {
+		r.mutationCache = cache.NewExpiring()
+	})
+
+	if actual == nil && desired == nil {
+		return nil, nil
+	}
+
+	// delete resource if no longer needed
+	if desired == nil {
+		if !actual.GetCreationTimestamp().Time.IsZero() {
+			log.Info("deleting unwanted resource", "resource", namespaceName(actual))
+			if err := c.Delete(ctx, actual); err != nil {
+				log.Error(err, "unable to delete unwanted resource", "resource", namespaceName(actual))
+				pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "DeleteFailed",
+					"Failed to delete %s %q: %v", typeName(r.Type), actual.GetName(), err)
+				return nil, err
+			}
+			pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Deleted",
+				"Deleted %s %q", typeName(r.Type), actual.GetName())
+
+			if err := ClearFinalizer(ctx, resource, r.Finalizer); err != nil {
+				return nil, err
+			}
+		}
+		return nil, nil
+	}
+
+	if err := AddFinalizer(ctx, resource, r.Finalizer); err != nil {
+		return nil, err
+	}
+
+	// create resource if it doesn't exist
+	if actual.GetCreationTimestamp().Time.IsZero() {
+		log.Info("creating resource", "resource", r.sanitize(desired))
+		if err := c.Create(ctx, desired); err != nil {
+			log.Error(err, "unable to create resource", "resource", namespaceName(desired))
+			pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "CreationFailed",
+				"Failed to create %s %q: %v", typeName(r.Type), desired.GetName(), err)
+			return nil, err
+		}
+		if r.TrackDesired {
+			// normally tracks should occur before API operations, but when creating a resource with a
+			// generated name, we need to know the actual resource name.
+			if err := c.Tracker.TrackChild(ctx, resource, desired, c.Scheme()); err != nil {
+				return nil, err
+			}
+		}
+		pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Created",
+			"Created %s %q", typeName(r.Type), desired.GetName())
+		return desired, nil
+	}
+
+	// overwrite fields that should not be mutated
+	r.harmonizeImmutableFields(actual, desired)
+
+	// lookup and apply remote mutations
+	desiredPatched := desired.DeepCopyObject().(client.Object)
+	if patch, ok := r.mutationCache.Get(actual.GetUID()); ok {
+		// the only object added to the cache is *Patch
+		err := patch.(*Patch).Apply(desiredPatched)
+		if err != nil {
+			// there's not much we can do, but let the normal update proceed
+			log.Info("unable to patch desired child from mutation cache")
+		}
+	}
+
+	if r.semanticEquals(desiredPatched, actual) {
+		// resource is unchanged
+		return actual, nil
+	}
+
+	// update resource with desired changes
+	current := actual.DeepCopyObject().(client.Object)
+	r.mergeBeforeUpdate(current, desiredPatched)
+	log.Info("updating resource", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
+	if r.TrackDesired {
+		if err := c.Tracker.TrackChild(ctx, resource, current, c.Scheme()); err != nil {
+			return nil, err
+		}
+	}
+	if err := c.Update(ctx, current); err != nil {
+		log.Error(err, "unable to update resource", "resource", namespaceName(current))
+		pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "UpdateFailed",
+			"Failed to update %s %q: %v", typeName(r.Type), current.GetName(), err)
+		return nil, err
+	}
+	if r.semanticEquals(desired, current) {
+		r.mutationCache.Delete(current.GetUID())
+	} else {
+		base := current.DeepCopyObject().(client.Object)
+		r.mergeBeforeUpdate(base, desired)
+		patch, err := NewPatch(base, current)
+		if err != nil {
+			log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base))
+		} else {
+			r.mutationCache.Set(current.GetUID(), patch, 1*time.Hour)
+		}
+	}
+	log.Info("updated resource")
+	pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Updated",
+		"Updated %s %q", typeName(r.Type), current.GetName())
+
+	return current, nil
+}
+
+func (r *ResourceManager) semanticEquals(a1, a2 client.Object) bool {
+	fn := reflect.ValueOf(r.SemanticEquals)
+	out := fn.Call([]reflect.Value{
+		reflect.ValueOf(a1),
+		reflect.ValueOf(a2),
+	})
+	return out[0].Bool()
+}
+
+func (r *ResourceManager) harmonizeImmutableFields(current, desired client.Object) {
+	if r.HarmonizeImmutableFields == nil {
+		return
+	}
+	fn := reflect.ValueOf(r.HarmonizeImmutableFields)
+	fn.Call([]reflect.Value{
+		reflect.ValueOf(current),
+		reflect.ValueOf(desired),
+	})
+}
+
+func (r *ResourceManager) mergeBeforeUpdate(current, desired client.Object) {
+	fn := reflect.ValueOf(r.MergeBeforeUpdate)
+	fn.Call([]reflect.Value{
+		reflect.ValueOf(current),
+		reflect.ValueOf(desired),
+	})
+}
+
+func (r *ResourceManager) sanitize(resource client.Object) interface{} {
+	if r.Sanitize == nil {
+		return resource
+	}
+	if resource == nil {
+		return nil
+	}
+
+	// avoid accidental mutations in Sanitize method
+	resource = resource.DeepCopyObject().(client.Object)
+
+	fn := reflect.ValueOf(r.Sanitize)
+	out := fn.Call([]reflect.Value{
+		reflect.ValueOf(resource),
+	})
+	var sanitized interface{}
+	if !out[0].IsNil() {
+		sanitized = out[0].Interface()
+	}
+	return sanitized
 }
 
 func typeName(i interface{}) string {

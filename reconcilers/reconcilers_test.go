@@ -639,9 +639,8 @@ func TestAggregateReconciler(t *testing.T) {
 
 	defaultAggregateReconciler := func(c reconcilers.Config) *reconcilers.AggregateReconciler {
 		return &reconcilers.AggregateReconciler{
-			Type:     &corev1.ConfigMap{},
-			ListType: &corev1.ConfigMapList{},
-			Request:  reconcile.Request{NamespacedName: key},
+			Type:    &corev1.ConfigMap{},
+			Request: reconcile.Request{NamespacedName: key},
 
 			DesiredResource: func(ctx context.Context, resource *corev1.ConfigMap) (*corev1.ConfigMap, error) {
 				resource.Data = map[string]string{
