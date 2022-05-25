@@ -1845,11 +1845,11 @@ func (r *ResourceManager) Manage(ctx context.Context, resource, actual, desired 
 			if err := c.Delete(ctx, actual); err != nil {
 				log.Error(err, "unable to delete unwanted resource", "resource", namespaceName(actual))
 				pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "DeleteFailed",
-					"Failed to delete %s %q: %v", typeName(r.Type), actual.GetName(), err)
+					"Failed to delete %s %q: %v", typeName(actual), actual.GetName(), err)
 				return nil, err
 			}
 			pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Deleted",
-				"Deleted %s %q", typeName(r.Type), actual.GetName())
+				"Deleted %s %q", typeName(actual), actual.GetName())
 
 			if err := ClearFinalizer(ctx, resource, r.Finalizer); err != nil {
 				return nil, err
@@ -1868,7 +1868,7 @@ func (r *ResourceManager) Manage(ctx context.Context, resource, actual, desired 
 		if err := c.Create(ctx, desired); err != nil {
 			log.Error(err, "unable to create resource", "resource", namespaceName(desired))
 			pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "CreationFailed",
-				"Failed to create %s %q: %v", typeName(r.Type), desired.GetName(), err)
+				"Failed to create %s %q: %v", typeName(desired), desired.GetName(), err)
 			return nil, err
 		}
 		if r.TrackDesired {
@@ -1879,7 +1879,7 @@ func (r *ResourceManager) Manage(ctx context.Context, resource, actual, desired 
 			}
 		}
 		pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Created",
-			"Created %s %q", typeName(r.Type), desired.GetName())
+			"Created %s %q", typeName(desired), desired.GetName())
 		return desired, nil
 	}
 
@@ -1914,7 +1914,7 @@ func (r *ResourceManager) Manage(ctx context.Context, resource, actual, desired 
 	if err := c.Update(ctx, current); err != nil {
 		log.Error(err, "unable to update resource", "resource", namespaceName(current))
 		pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "UpdateFailed",
-			"Failed to update %s %q: %v", typeName(r.Type), current.GetName(), err)
+			"Failed to update %s %q: %v", typeName(current), current.GetName(), err)
 		return nil, err
 	}
 	if r.semanticEquals(desired, current) {
@@ -1931,7 +1931,7 @@ func (r *ResourceManager) Manage(ctx context.Context, resource, actual, desired 
 	}
 	log.Info("updated resource")
 	pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Updated",
-		"Updated %s %q", typeName(r.Type), current.GetName())
+		"Updated %s %q", typeName(current), current.GetName())
 
 	return current, nil
 }
@@ -1987,6 +1987,13 @@ func (r *ResourceManager) sanitize(resource client.Object) interface{} {
 }
 
 func typeName(i interface{}) string {
+	if obj, ok := i.(client.Object); ok {
+		kind := obj.GetObjectKind().GroupVersionKind().Kind
+		if kind != "" {
+			return kind
+		}
+	}
+
 	t := reflect.TypeOf(i)
 	// TODO do we need this?
 	if t.Kind() == reflect.Ptr {
