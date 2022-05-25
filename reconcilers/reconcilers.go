@@ -111,6 +111,12 @@ type ResourceReconciler struct {
 	// +optional
 	Name string
 
+	// Setup performs initialization on the manager and builder this reconciler
+	// will run with. It's common to setup field indexes and watch resources.
+	//
+	// +optional
+	Setup func(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error
+
 	// Type of resource to reconcile
 	Type client.Object
 
@@ -146,6 +152,11 @@ func (r *ResourceReconciler) SetupWithManagerYieldingController(ctx context.Cont
 	}
 
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
+	if r.Setup != nil {
+		if err := r.Setup(ctx, mgr, bldr); err != nil {
+			return nil, err
+		}
+	}
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return nil, err
 	}
@@ -376,6 +387,12 @@ type AggregateReconciler struct {
 	// +optional
 	Name string
 
+	// Setup performs initialization on the manager and builder this reconciler
+	// will run with. It's common to setup field indexes and watch resources.
+	//
+	// +optional
+	Setup func(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error
+
 	// Type of resource to reconcile
 	Type client.Object
 	// ListType is the listing type for the type. For example, corev1.PodList is the list type for
@@ -503,6 +520,11 @@ func (r *AggregateReconciler) SetupWithManagerYieldingController(ctx context.Con
 	r.init()
 
 	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
+	if r.Setup != nil {
+		if err := r.Setup(ctx, mgr, bldr); err != nil {
+			return nil, err
+		}
+	}
 	if err := r.Reconciler.SetupWithManager(ctx, mgr, bldr); err != nil {
 		return nil, err
 	}
