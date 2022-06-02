@@ -210,7 +210,7 @@ func (r conditionsImpl) SetCondition(new metav1.Condition) {
 			}
 		}
 	}
-	new.LastTransitionTime = metav1.NewTime(time.Now())
+	new.LastTransitionTime = metav1.NewTime(time.Now()).Rfc3339Copy()
 	conditions = append(conditions, new)
 	// Sorted for convenience of the consumer, i.e. kubectl.
 	sort.Slice(conditions, func(i, j int) bool { return conditions[i].Type < conditions[j].Type })
