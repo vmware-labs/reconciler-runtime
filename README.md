@@ -22,6 +22,7 @@
 - [Testing](#testing)
 	- [ReconcilerTests](#reconcilertests)
 	- [SubReconcilerTests](#subreconcilertests)
+	- [ExpectConfig](#expectconfig)
 - [Utilities](#utilities)
 	- [Config](#config)
 	- [Stash](#stash)
@@ -588,11 +589,15 @@ rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c re
 ```
 [full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/processor_reconciler_test.go#L279-L305)
 
+### ExpectConfig
+
+The [`ExpectConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ExpectConfig) is a testing object that can create a [Config](#config) with given test state that will observe the reconciler's behavior against the config and can assert that the observed behavior matches the expected behavior. When used with the `AdditionalConfigs` field of [ReconcilerTestCase](#reconcilertests) and [SubReconcilerTestCase](#subreconcilertests), the corresponding configs can be obtained with [`RetrieveAdditionalConfigs`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveAdditionalConfigs). Use of `RetrieveAdditionalConfigs` should be limited to a reconciler that is dedicated to work with multiple configs like [WithConfig](#withconfig); reconcilers nested under WithConfig should interact with the default config.
+
 ## Utilities
 
 ### Config
 
-The [`Config`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config) is a single object that contains the key APIs needed by a reconciler. The config object is provided to the reconciler when initialized and is preconfigured for the reconciler.
+The [`Config`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config) is a single object that contains the key APIs needed by a reconciler. The config object is provided to the reconciler when initialized and is preconfigured for the reconciler. To setup a Config for a test and make assertions that the expected behavior matches the observed behavior, use [ExpectConfig](#expectconfig)
 
 ### Stash
 

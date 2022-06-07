@@ -7,16 +7,11 @@ package testing
 
 import (
 	"context"
-	"strings"
 	"testing"
 
-	logrtesting "github.com/go-logr/logr/testing"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -71,6 +66,11 @@ type ReconcilerTestCase struct {
 	// ExpectStatusPatches builds the ordered list of objects whose status is patched during reconciliation
 	ExpectStatusPatches []PatchRef
 
+	// AdditionalConfigs holds ExceptConfigs that are available to the test case and will have
+	// their expectations checked again the observed config interactions. The key in this map is
+	// set as the ExpectConfig's name.
+	AdditionalConfigs map[string]ExpectConfig
+
 	// outputs
 
 	// ShouldErr is true if and only if reconciliation is expected to return an error
@@ -119,7 +119,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		t.SkipNow()
 	}
 
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	// Record the given objects
 	givenObjects := make([]client.Object, 0, len(tc.GivenObjects))
@@ -134,26 +134,31 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		apiGivenObjects = append(apiGivenObjects, f.DeepCopyObject().(client.Object))
 	}
 
-	clientWrapper := NewFakeClient(scheme, givenObjects...)
-	for i := range tc.WithReactors {
-		// in reverse order since we prepend
-		reactor := tc.WithReactors[len(tc.WithReactors)-1-i]
-		clientWrapper.PrependReactor("*", "*", reactor)
+	expectConfig := &ExpectConfig{
+		Name:                    "default",
+		Scheme:                  scheme,
+		GivenObjects:            givenObjects,
+		APIGivenObjects:         apiGivenObjects,
+		WithReactors:            tc.WithReactors,
+		ExpectTracks:            tc.ExpectTracks,
+		ExpectEvents:            tc.ExpectEvents,
+		ExpectCreates:           tc.ExpectCreates,
+		ExpectUpdates:           tc.ExpectUpdates,
+		ExpectPatches:           tc.ExpectPatches,
+		ExpectDeletes:           tc.ExpectDeletes,
+		ExpectDeleteCollections: tc.ExpectDeleteCollections,
+		ExpectStatusUpdates:     tc.ExpectStatusUpdates,
+		ExpectStatusPatches:     tc.ExpectStatusPatches,
 	}
-	apiReader := NewFakeClient(scheme, apiGivenObjects...)
-	tracker := createTracker()
-	recorder := &eventRecorder{
-		events: []Event{},
-		scheme: scheme,
+
+	configs := make(map[string]reconcilers.Config, len(tc.AdditionalConfigs))
+	for k, v := range tc.AdditionalConfigs {
+		v.Name = k
+		configs[k] = v.Config()
 	}
-	log := logrtesting.NewTestLogger(t)
-	c := factory(t, tc, reconcilers.Config{
-		Client:    clientWrapper,
-		APIReader: apiReader,
-		Tracker:   tracker,
-		Recorder:  recorder,
-		Log:       log,
-	})
+	ctx = reconcilers.StashAdditionalConfigs(ctx, configs)
+
+	r := factory(t, tc, expectConfig.Config())
 
 	if tc.CleanUp != nil {
 		defer func() {
@@ -173,7 +178,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	if request == (controllerruntime.Request{}) {
 		request.NamespacedName = tc.Key
 	}
-	result, err := c.Reconcile(ctx, request)
+	result, err := r.Reconcile(ctx, request)
 
 	if (err != nil) != tc.ShouldErr {
 		t.Errorf("Reconcile() error = %v, ShouldErr %v", err, tc.ShouldErr)
@@ -189,121 +194,9 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		tc.Verify(t, result, err)
 	}
 
-	// compare tracks
-	actualTracks := tracker.getTrackRequests()
-	for i, exp := range tc.ExpectTracks {
-		if i >= len(actualTracks) {
-			t.Errorf("Missing tracking request: %s", exp)
-			continue
-		}
-
-		if diff := cmp.Diff(exp, actualTracks[i]); diff != "" {
-			t.Errorf("Unexpected tracking request(-expected, +actual): %s", diff)
-		}
-	}
-	if actual, exp := len(actualTracks), len(tc.ExpectTracks); actual > exp {
-		for _, extra := range actualTracks[exp:] {
-			t.Errorf("Extra tracking request: %s", extra)
-		}
-	}
-
-	// compare events
-	actualEvents := recorder.events
-	for i, exp := range tc.ExpectEvents {
-		if i >= len(actualEvents) {
-			t.Errorf("Missing recorded event: %s", exp)
-			continue
-		}
-
-		if diff := cmp.Diff(exp, actualEvents[i]); diff != "" {
-			t.Errorf("Unexpected recorded event(-expected, +actual): %s", diff)
-		}
-	}
-	if actual, exp := len(actualEvents), len(tc.ExpectEvents); actual > exp {
-		for _, extra := range actualEvents[exp:] {
-			t.Errorf("Extra recorded event: %s", extra)
-		}
-	}
-
-	// compare create
-	CompareActions(t, "create", tc.ExpectCreates, clientWrapper.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
-
-	// compare update
-	CompareActions(t, "update", tc.ExpectUpdates, clientWrapper.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
-
-	// compare patches
-	for i, exp := range tc.ExpectPatches {
-		if i >= len(clientWrapper.PatchActions) {
-			t.Errorf("Missing patch: %#v", exp)
-			continue
-		}
-		actual := NewPatchRef(clientWrapper.PatchActions[i])
-
-		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected patch (-expected, +actual): %s", diff)
-		}
-	}
-	if actual, expected := len(clientWrapper.PatchActions), len(tc.ExpectPatches); actual > expected {
-		for _, extra := range clientWrapper.PatchActions[expected:] {
-			t.Errorf("Extra patch: %#v", extra)
-		}
-	}
-
-	// compare deletes
-	for i, exp := range tc.ExpectDeletes {
-		if i >= len(clientWrapper.DeleteActions) {
-			t.Errorf("Missing delete: %#v", exp)
-			continue
-		}
-		actual := NewDeleteRef(clientWrapper.DeleteActions[i])
-
-		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected delete (-expected, +actual): %s", diff)
-		}
-	}
-	if actual, expected := len(clientWrapper.DeleteActions), len(tc.ExpectDeletes); actual > expected {
-		for _, extra := range clientWrapper.DeleteActions[expected:] {
-			t.Errorf("Extra delete: %#v", extra)
-		}
-	}
-
-	// compare delete collections
-	for i, exp := range tc.ExpectDeleteCollections {
-		if i >= len(clientWrapper.DeleteCollectionActions) {
-			t.Errorf("Missing delete collection: %#v", exp)
-			continue
-		}
-		actual := NewDeleteCollectionRef(clientWrapper.DeleteCollectionActions[i])
-
-		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected delete collection (-expected, +actual): %s", diff)
-		}
-	}
-	if actual, expected := len(clientWrapper.DeleteCollectionActions), len(tc.ExpectDeleteCollections); actual > expected {
-		for _, extra := range clientWrapper.DeleteCollectionActions[expected:] {
-			t.Errorf("Extra delete collection: %#v", extra)
-		}
-	}
-
-	// compare status update
-	CompareActions(t, "status update", tc.ExpectStatusUpdates, clientWrapper.StatusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, SafeDeployDiff, cmpopts.EquateEmpty())
-
-	// status patch
-	for i, exp := range tc.ExpectStatusPatches {
-		if i >= len(clientWrapper.StatusPatchActions) {
-			t.Errorf("Missing status patch: %#v", exp)
-			continue
-		}
-		actual := NewPatchRef(clientWrapper.StatusPatchActions[i])
-
-		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected status patch (-expected, +actual): %s", diff)
-		}
-	}
-	if actual, expected := len(clientWrapper.StatusPatchActions), len(tc.ExpectStatusPatches); actual > expected {
-		for _, extra := range clientWrapper.StatusPatchActions[expected:] {
-			t.Errorf("Extra status patch: %#v", extra)
-		}
+	expectConfig.AssertExpectations(t)
+	for _, config := range tc.AdditionalConfigs {
+		config.AssertExpectations(t)
 	}
 
 	// Validate the given objects are not mutated by reconciliation
@@ -319,48 +212,6 @@ func normalizeResult(result controllerruntime.Result) controllerruntime.Result {
 	}
 	return result
 }
-
-func CompareActions(t *testing.T, actionName string, expectedActionFactories []client.Object, actualActions []objectAction, diffOptions ...cmp.Option) {
-	// TODO(scothis) this could be a really good place to play with generics
-	t.Helper()
-	for i, exp := range expectedActionFactories {
-		if i >= len(actualActions) {
-			t.Errorf("Missing %s: %#v", actionName, exp.DeepCopyObject())
-			continue
-		}
-		actual := actualActions[i].GetObject()
-
-		if diff := cmp.Diff(exp.DeepCopyObject(), actual, diffOptions...); diff != "" {
-			t.Errorf("Unexpected %s (-expected, +actual): %s", actionName, diff)
-		}
-	}
-	if actual, expected := len(actualActions), len(expectedActionFactories); actual > expected {
-		for _, extra := range actualActions[expected:] {
-			t.Errorf("Extra %s: %#v", actionName, extra)
-		}
-	}
-}
-
-var (
-	IgnoreLastTransitionTime = cmp.FilterPath(func(p cmp.Path) bool {
-		return strings.HasSuffix(p.String(), "LastTransitionTime")
-	}, cmp.Ignore())
-	IgnoreTypeMeta = cmp.FilterPath(func(p cmp.Path) bool {
-		path := p.String()
-		return strings.HasSuffix(path, "TypeMeta.APIVersion") || strings.HasSuffix(path, "TypeMeta.Kind")
-	}, cmp.Ignore())
-	IgnoreResourceVersion = cmp.FilterPath(func(p cmp.Path) bool {
-		path := p.String()
-		return strings.HasSuffix(path, "ObjectMeta.ResourceVersion")
-	}, cmp.Ignore())
-
-	statusSubresourceOnly = cmp.FilterPath(func(p cmp.Path) bool {
-		q := p.String()
-		return q != "" && !strings.HasPrefix(q, "Status")
-	}, cmp.Ignore())
-
-	SafeDeployDiff = cmpopts.IgnoreUnexported(resource.Quantity{})
-)
 
 // Run executes the reconciler test suite.
 func (ts ReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
@@ -391,71 +242,3 @@ func (ts ReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, factory 
 // ActionRecorderList/EventList to capture k8s actions/events produced during reconciliation
 // and FakeStatsReporter to capture stats.
 type ReconcilerFactory func(t *testing.T, rtc *ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler
-
-type PatchRef struct {
-	Group     string
-	Kind      string
-	Namespace string
-	Name      string
-	PatchType types.PatchType
-	Patch     []byte
-}
-
-func NewPatchRef(action PatchAction) PatchRef {
-	return PatchRef{
-		Group:     action.GetResource().Group,
-		Kind:      action.GetResource().Resource,
-		Namespace: action.GetNamespace(),
-		Name:      action.GetName(),
-		PatchType: action.GetPatchType(),
-		Patch:     action.GetPatch(),
-	}
-}
-
-type DeleteRef struct {
-	Group     string
-	Kind      string
-	Namespace string
-	Name      string
-}
-
-func NewDeleteRef(action DeleteAction) DeleteRef {
-	return DeleteRef{
-		Group:     action.GetResource().Group,
-		Kind:      action.GetResource().Resource,
-		Namespace: action.GetNamespace(),
-		Name:      action.GetName(),
-	}
-}
-
-func NewDeleteRefFromObject(obj client.Object, scheme *runtime.Scheme) DeleteRef {
-	gvks, _, err := scheme.ObjectKinds(obj.DeepCopyObject())
-	if err != nil {
-		panic(err)
-	}
-
-	return DeleteRef{
-		Group:     gvks[0].Group,
-		Kind:      gvks[0].Kind,
-		Namespace: obj.GetNamespace(),
-		Name:      obj.GetName(),
-	}
-}
-
-type DeleteCollectionRef struct {
-	Group     string
-	Kind      string
-	Namespace string
-	Labels    labels.Selector
-	Fields    fields.Selector
-}
-
-func NewDeleteCollectionRef(action DeleteCollectionAction) DeleteCollectionRef {
-	return DeleteCollectionRef{
-		Group:     action.GetResource().Group,
-		Kind:      action.GetResource().Resource,
-		Namespace: action.GetNamespace(),
-		Labels:    action.GetListRestrictions().Labels,
-		Fields:    action.GetListRestrictions().Fields,
-	}
-}
