@@ -36,8 +36,8 @@ cloud.google.com/go/storage v1.5.0/go.mod h1:tpKbwo567HUNpVclU5sGELwQWBDZ8gh0Zeo
 cloud.google.com/go/storage v1.6.0/go.mod h1:N7U0C8pVQ/+NIKOBQyamJIeKQKkZ+mxpohlUTyfDhBk=
 cloud.google.com/go/storage v1.8.0/go.mod h1:Wv1Oy7z6Yz3DshWRJFhqM/UCfaWIRTdp0RXyy7KQOVs=
 cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9ullr3+Kg0=
-dies.dev/diegen v0.4.0 h1:FnIkTb31eY6GINW+1eYrDU66od28XDYXvqD5hgYMyVs=
-dies.dev/diegen v0.4.0/go.mod h1:HkGYJ398qESbmu9kaVAyr0BJIH3p4kHwbEtovdhgkzk=
+dies.dev/diegen v0.5.0 h1:7psJU1vmKU9WF4UZa/oS/b+U0Zz2CKLny8O5uZrmuEY=
+dies.dev/diegen v0.5.0/go.mod h1:aFYzjlWlFlsHgE2QFVVS9EA/weNpyAG0cQdEZPqWF8Y=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 github.com/Azure/go-ansiterm v0.0.0-20210608223527-2377c96fe795/go.mod h1:LmzpDX56iTiv29bbRTIsUNlaFfuhWRQBWjQdVyAevI8=
 github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1/go.mod h1:xomTg63KZ2rFqZQzSB4Vz2SUXa1BpHTVz9L5PTmPC4E=
@@ -930,8 +930,9 @@ k8s.io/apiextensions-apiserver v0.23.0/go.mod h1:xIFAEEDlAZgpVBl/1VSjGDmLoXAWRG4
 k8s.io/apiextensions-apiserver v0.24.0 h1:JfgFqbA8gKJ/uDT++feAqk9jBIwNnL9YGdQvaI9DLtY=
 k8s.io/apiextensions-apiserver v0.24.0/go.mod h1:iuVe4aEpe6827lvO6yWQVxiPSpPoSKVjkq+MIdg84cM=
 k8s.io/apimachinery v0.23.0/go.mod h1:fFCTTBKvKcwTPFzjlcxp91uPFZr+JA0FubU4fLzzFYc=
-k8s.io/apimachinery v0.24.0 h1:ydFCyC/DjCvFCHK5OPMKBlxayQytB8pxy8YQInd5UyQ=
 k8s.io/apimachinery v0.24.0/go.mod h1:82Bi4sCzVBdpYjyI4jY6aHX+YCUchUIrZrXKedjd2UM=
+k8s.io/apimachinery v0.24.1 h1:ShD4aDxTQKN5zNf8K1RQ2u98ELLdIW7jEnlO9uAMX/I=
+k8s.io/apimachinery v0.24.1/go.mod h1:82Bi4sCzVBdpYjyI4jY6aHX+YCUchUIrZrXKedjd2UM=
 k8s.io/apiserver v0.23.0/go.mod h1:Cec35u/9zAepDPPFyT+UMrgqOCjgJ5qtfVJDxjZYmt4=
 k8s.io/apiserver v0.24.0/go.mod h1:WFx2yiOMawnogNToVvUYT9nn1jaIkMKj41ZYCVycsBA=
 k8s.io/client-go v0.23.0/go.mod h1:hrDnpnK1mSr65lHHcUuIZIXDgEbzc7/683c6hyG4jTA=

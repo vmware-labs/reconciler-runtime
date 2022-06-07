@@ -19,9 +19,11 @@
 		- [Sequence](#sequence)
 		- [WithConfig](#withconfig)
 		- [WithFinalizer](#withfinalizer)
+	- [AdmissionWebhookAdapter](#admissionwebhookadapter)
 - [Testing](#testing)
 	- [ReconcilerTests](#reconcilertests)
 	- [SubReconcilerTests](#subreconcilertests)
+	- [AdmissionWebhookTests](#admissionwebhooktests)
 	- [ExpectConfig](#expectconfig)
 - [Utilities](#utilities)
 	- [Config](#config)
@@ -475,6 +477,64 @@ func SyncExternalState() *reconcilers.SubReconciler {
 }
 ```
 
+### AdmissionWebhookAdapter
+
+[`AdmissionWebhookAdapter`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#AdmissionWebhookAdapter) allows using [SubReconciler](#subreconciler) to process [admission webhook requests](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#webhook-request-and-response). The full suite of sub-reconcilers are available, however, behavior that is [generally not accepted](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/#side-effects) within a webhook is discouraged. For example, new requests against the API server are discouraged (reading from an informer is ok), mutation requests against the API Server can cause a loop with the webhook processing its own requests.
+
+All requests are allowed by default unless the [response.Allowed](https://pkg.go.dev/k8s.io/api/admission/v1#AdmissionResponse.Allowed) field is explicitly set, or the reconciler returns an error. The raw admission request and response can be retrieved from the context via the [`RetrieveAdmissionRequest`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveAdmissionRequest) and [`RetrieveAdmissionResponse`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveAdmissionResponse) methods, respectively. The [`Result`](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/reconcile#Result) typically returned by a reconciler is unused.
+
+The request object is unmarshaled from the request object for most operations, and the old object for delete operations. If the webhhook handles multiple resources or versions of the same resource with different shapes, use of an unstructured type is recommended.
+
+If the resource being reconciled is mutated and the response does not already define a patch, a json patch is computed for the mutation and set on the response.
+
+Testing can be done on the reconciler directly with [SubReconcilerTests](#subreconcilertests), or through the webhook with [AdmissionWebhookTests](#admissionwebhooktests).
+
+**Example**
+
+The Service Binding controller uses a mutating webhook to intercept the creation and updating of workload resources. It projects services into the workload based on ServiceBindings that reference that workload, mutating the resource. If the resource is mutated, a patch is automatically created and added to the webhook response. The webhook allows workloads to be bound at admission time.
+
+```go
+func AdmissionProjectorWebhook(c reconcilers.Config) *reconcilers.AdmissionWebhookAdapter {
+	return &reconcilers.AdmissionWebhookAdapter{
+		Name: "AdmissionProjectorWebhook",
+		Type: &unstructured.Unstructured{},
+		Reconciler: &reconcilers.SyncReconciler{
+			Sync: func(ctx context.Context, workload *unstructured.Unstructured) error {
+				c := reconcilers.RetrieveConfigOrDie(ctx)
+
+				// find matching service bindings
+				serviceBindings := &servicebindingv1beta1.ServiceBindingList{}
+				if err := c.List(ctx, serviceBindings, client.InNamespace(workload.Namespace)); err != nil {
+					return err
+				}
+
+				// check that bindings are for this specific workload
+				activeServiceBindings := ...
+
+				// project active bindings into workload, the workload is mutated by the projector
+				projector := projector.New(resolver.New(c))
+				for i := range activeServiceBindings {
+					sb := activeServiceBindings[i].DeepCopy()
+					sb.Default()
+					if err := projector.Project(ctx, sb, workload); err != nil {
+						return err
+					}
+				}
+
+				return nil
+			},
+		},
+		Config: c,
+	}
+}
+```
+
+The webhook adapter can be registered with the controller manager at a path, in this case `/interceptor`. There MutatingWebhookConfiguration resource that intercepts 
+
+```go
+mgr.GetWebhookServer().Register("/interceptor", controllers.AdmissionProjectorWebhook(config).Build())
+```
+
 ## Testing
 
 While `controller-runtime` focuses its testing efforts on integration testing by spinning up a new API Server and etcd, `reconciler-runtime` focuses on unit testing reconcilers. The state for each test case is pure, preventing side effects from one test case impacting the next.
@@ -490,6 +550,8 @@ There are two test suites, one for reconcilers and an optimized harness for test
 ### ReconcilerTests
 
 [`ReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestCase) run the full reconciler via the controller runtime Reconciler's Reconcile method. There are two ways to compose a ReconcilerTestCase either as an unordered set using [`ReconcilerTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTests), or an order list using [`ReconcilerTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestSuite). When using `ReconcilerTests` the key for each test case is used as the name for that test case.
+
+**Example:**
 
 ```go
 testRequest := ... // request for the resource to reconcile
@@ -588,6 +650,73 @@ rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c re
 })
 ```
 [full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/processor_reconciler_test.go#L279-L305)
+
+
+### AdmissionWebhookTests
+
+[`AdmissionWebhookTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#AdmissionWebhookTestCase) runs the full webhook handler via the controller runtime webhook handler's Handle method. There are two ways to compose a AdmissionWebhookTestCase either as an unordered set using [`AdmissionWebhookTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#AdmissionWebhookTests), or an order list using [`AdmissionWebhookTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#AdmissionWebhookTestSuite). When using `AdmissionWebhookTestSuite` the key for each test case is used as the name for that test case.
+
+**Example**
+
+Service bindings project into workloads with a controller and a mutating webhook. The admission request for the workload resource along with a given ServiceBinding resource is projected mutating the resource, which is treated as a patch in the admission response.
+
+```go
+workload := dieappsv1.DeploymentBlank.
+	...
+serviceBinding := dieservicebindingv1beta1.ServiceBindingBlank.
+	...
+
+request := dieadmissionv1.AdmissionRequestBlank.
+	KindDie(func(d *diemetav1.GroupVersionKindDie) {
+		d.Group("apps")
+		d.Version("v1")
+		d.Kind("Deployment")
+	}).
+	ResourceDie(func(d *diemetav1.GroupVersionResourceDie) {
+		d.Group("apps")
+		d.Version("v1")
+		d.Resource("deployments")
+	}).
+	UID(requestUID).
+	Operation(admissionv1.Create).
+	Namespace(namespace).
+	Name(name)
+response := dieadmissionv1.AdmissionResponseBlank.
+	Allowed(true)
+
+wts := rtesting.AdmissionWebhookTests{
+	"project binding": {
+		GivenObjects: []client.Object{
+			serviceBinding,
+		},
+		Request: &admission.Request{
+			AdmissionRequest: request.
+				Object(workload.DieReleaseRawExtension()).
+				DieRelease(),
+		},
+		ExpectedResponse: admission.Response{
+			AdmissionResponse: response.DieRelease(),
+			Patches: []jsonpatch.Operation{
+				{
+					Operation: "add",
+					Path:      "/spec/template/spec/containers/0/env",
+					Value: []interface{}{
+						map[string]interface{}{
+							"name":  "SERVICE_BINDING_ROOT",
+							"value": "/bindings",
+						},
+					},
+				},
+				...
+			},
+		},
+	},
+}
+
+wts.Run(t, scheme, func(t *testing.T, wtc *rtesting.AdmissionWebhookTestCase, c reconcilers.Config) *admission.Webhook {
+	return controllers.AdmissionProjectorWebhook(c).Build()
+})
+```
 
 ### ExpectConfig
 
