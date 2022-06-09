@@ -92,6 +92,20 @@ type ReconcilerTestCase struct {
 // VerifyFunc is a verification function
 type VerifyFunc func(t *testing.T, result controllerruntime.Result, err error)
 
+// ReconcilerTests represents a map of reconciler test cases. The map key is the name of each test case.
+type ReconcilerTests map[string]ReconcilerTestCase
+
+// Run executes the test cases.
+func (rt ReconcilerTests) Run(t *testing.T, scheme *runtime.Scheme, factory ReconcilerFactory) {
+	t.Helper()
+	rts := ReconcilerTestSuite{}
+	for name, rtc := range rt {
+		rtc.Name = name
+		rts = append(rts, rtc)
+	}
+	rts.Run(t, scheme, factory)
+}
+
 // ReconcilerTestSuite represents a list of reconciler test cases.
 type ReconcilerTestSuite []ReconcilerTestCase
 
