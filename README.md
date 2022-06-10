@@ -488,7 +488,7 @@ There are two test suites, one for reconcilers and an optimized harness for test
 
 ### ReconcilerTests
 
-[`ReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestCase) run the full reconciler via the controller runtime Reconciler's Reconcile method. There are two ways to compose a ReconcilerTestCase either as an unordered set (using [`ReconcilerTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTests)) or an order list (using [`ReconcilerTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestSuite)). When using `ReconcilerTests` the key for each test case is used as the name for that test case.
+[`ReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestCase) run the full reconciler via the controller runtime Reconciler's Reconcile method. There are two ways to compose a ReconcilerTestCase either as an unordered set using [`ReconcilerTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTests), or an order list using [`ReconcilerTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestSuite). When using `ReconcilerTests` the key for each test case is used as the name for that test case.
 
 ```go
 testKey := ... // NamesapcedName of the resource to reconcile
@@ -550,7 +550,7 @@ For more complex reconcilers, the number of moving parts can make it difficult t
 - `GivenStashedValues` is a map of stashed value to seed, `ExpectStashedValues` are individually compared with the actual stashed value after the reconciler runs.
 - `ExpectStatusUpdates` is not available
 
-There are two ways to compose a SubReconcilerTestCase either as an unordered set (using [`SubReconcilerTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTests)) or an order list (using [`SubReconcilerTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestSuite)). When using `SubReconcilerTests` the key for each test case is used as the name for that test case.
+There are two ways to compose a SubReconcilerTestCase either as an unordered set using [`SubReconcilerTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTests), or an order list using [`SubReconcilerTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestSuite). When using `SubReconcilerTests` the key for each test case is used as the name for that test case.
 
 **Example:**
 
