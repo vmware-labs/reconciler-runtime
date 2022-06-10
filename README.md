@@ -20,8 +20,8 @@
 		- [WithConfig](#withconfig)
 		- [WithFinalizer](#withfinalizer)
 - [Testing](#testing)
-	- [ReconcilerTestSuite](#reconcilertestsuite)
-	- [SubReconcilerTestSuite](#subreconcilertestsuite)
+	- [ReconcilerTests](#reconcilertests)
+	- [SubReconcilerTests](#subreconcilertests)
 - [Utilities](#utilities)
 	- [Config](#config)
 	- [Stash](#stash)
@@ -484,9 +484,11 @@ The tests make extensive use of given and mutated resources. It is recommended t
 
 There are two test suites, one for reconcilers and an optimized harness for testing sub reconcilers.
 
-### ReconcilerTestSuite
+<a name="reconcilertestsuite" />
 
-[`ReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestCase) run the full reconciler via the controller runtime Reconciler's Reconcile method.
+### ReconcilerTests
+
+[`ReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestCase) run the full reconciler via the controller runtime Reconciler's Reconcile method. There are two ways to compose a ReconcilerTestCase either as an unordered set using [`ReconcilerTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTests), or an order list using [`ReconcilerTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestSuite). When using `ReconcilerTests` the key for each test case is used as the name for that test case.
 
 ```go
 testKey := ... // NamesapcedName of the resource to reconcile
@@ -495,42 +497,40 @@ inMemoryGateway := ... // resource to reconcile
 gatewayCreate := ... // expected to be created
 scheme := ... // scheme registered with all resource types the reconcile interacts with
 
-rts := rtesting.ReconcilerTestSuite{{
-	...
-}, {
-	Name: "creates gateway",
-	Key:  testKey,
-	GivenObjects: []client.Object{
-		inMemoryGateway,
-		inMemoryGatewayImagesConfigMap,
+rts := rtesting.ReconcilerTests{
+	"creates gateway": {
+		Key:  testKey,
+		GivenObjects: []client.Object{
+			inMemoryGateway,
+			inMemoryGatewayImagesConfigMap,
+		},
+		ExpectTracks: []client.Object{
+			rtesting.NewTrackRequest(inMemoryGatewayImagesConfigMap, inMemoryGateway, scheme),
+		},
+		ExpectEvents: []rtesting.Event{
+			rtesting.NewEvent(inMemoryGateway, scheme, corev1.EventTypeNormal, "Created",
+				`Created Gateway "%s"`, testName),
+			rtesting.NewEvent(inMemoryGateway, scheme, corev1.EventTypeNormal, "StatusUpdated",
+				`Updated status`),
+		},
+		ExpectCreates: []client.Object{
+			gatewayCreate,
+		},
+		ExpectStatusUpdates: []client.Object{
+			// example using an https://dies.dev style die to mutate the resource
+			inMemoryGateway.
+				StatusDie(func(d *diestreamingv1alpha1.InMemoryGatewayStatusDie) {
+					d.ObservedGeneration(1)
+					d.ConditionsDie(
+						// the condition will be unknown since the child resource
+						// was just created and hasn't been reconciled by its
+						// controller yet
+						inMemoryGatewayConditionGatewayReady.Unknown(),
+						inMemoryGatewayConditionReady.Unknown(),
+					)
+				}),
+		},
 	},
-	ExpectTracks: []client.Object{
-		rtesting.NewTrackRequest(inMemoryGatewayImagesConfigMap, inMemoryGateway, scheme),
-	},
-	ExpectEvents: []rtesting.Event{
-		rtesting.NewEvent(inMemoryGateway, scheme, corev1.EventTypeNormal, "Created",
-			`Created Gateway "%s"`, testName),
-		rtesting.NewEvent(inMemoryGateway, scheme, corev1.EventTypeNormal, "StatusUpdated",
-			`Updated status`),
-	},
-	ExpectCreates: []client.Object{
-		gatewayCreate,
-	},
-	ExpectStatusUpdates: []client.Object{
-		// example using an https://dies.dev style die to mutate the resource
-		inMemoryGateway.
-			StatusDie(func(d *diestreamingv1alpha1.InMemoryGatewayStatusDie) {
-				d.ObservedGeneration(1)
-				d.ConditionsDie(
-					// the condition will be unknown since the child resource
-					// was just created and hasn't been reconciled by its
-					// controller yet
-					inMemoryGatewayConditionGatewayReady.Unknown(),
-					inMemoryGatewayConditionReady.Unknown(),
-				)
-			}),
-	},
-}, {
 	...
 }}
 
@@ -540,13 +540,17 @@ rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c recon
 ```
 [full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/streaming/inmemorygateway_reconciler_test.go#L142-L169)
 
-### SubReconcilerTestSuite
+<a name="subreconcilertestsuite" />
+
+### SubReconcilerTests
 
 For more complex reconcilers, the number of moving parts can make it difficult to fully cover all aspects of the reonciler and handle corner cases and sources of error. The [`SubReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase) enables testing a single sub reconciler in isolation from the resource. While very similar to ReconcilerTestCase, these are the differences:
 
 - `Key` is replaced with `Resource` since the resource is not lookedup, but handed to the reconciler. `ExpectResource` is the mutated value of the resource after the reconciler runs.
 - `GivenStashedValues` is a map of stashed value to seed, `ExpectStashedValues` are individually compared with the actual stashed value after the reconciler runs.
 - `ExpectStatusUpdates` is not available
+
+There are two ways to compose a SubReconcilerTestCase either as an unordered set using [`SubReconcilerTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTests), or an order list using [`SubReconcilerTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestSuite). When using `SubReconcilerTests` the key for each test case is used as the name for that test case.
 
 **Example:**
 
@@ -556,17 +560,15 @@ Like with the tracking example, the processor reconciler in projectriff also loo
 processor := ...
 processorImagesConfigMap := ...
 
-rts := rtesting.SubReconcilerTestSuite{
-	{
-		Name:   "missing images configmap",
+rts := rtesting.SubReconcilerTests{
+	"missing images configmap": {
 		Resource: processor,
 		ExpectTracks: []rtesting.TrackRequest{
 			rtesting.NewTrackRequest(processorImagesConfigMap, processor, scheme),
 		},
 		ShouldErr: true,
 	},
-	{
-		Name:   "stash processor image",
+	"stash processor image": {
 		Resource: processor,
 		GivenObjects: []client.Object{
 			processorImagesConfigMap,
@@ -720,7 +722,7 @@ Deleting a resource that uses finalizers requires the controller to be running.
 
 The [AddFinalizer](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#AddFinalizer) and [ClearFinalizer](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ClearFinalizer) functions patch the reconciled resource to update its finalizers. These methods work with [CastResource](#castresource) resources and use the same client the [ResourceReconciler](#resourcereconciler) used to originally load the reconciled resource. They can be called inside [SubReconcilers](#subreconciler) that may use a different client.
 
-When an update is required, only the `.metadata.finalizers` field is patched. The reconciled resource's `.metadata.resourceVersion` is used as an optimistic concurrency lock, and is updated with the value returned from the server. Any error from the server will cause the resource reconciliation to err. When testing with the [SubReconcilerTestSuite](#subreconcilertestsuite), the resource version of the resource defaults to `"999"`, the patch bytes include the resource version and the response increments the reonciled resource's version. For a resource with the default version that patches a finalizer, the expected reconciled resource will have a resource version of `"1000"`.
+When an update is required, only the `.metadata.finalizers` field is patched. The reconciled resource's `.metadata.resourceVersion` is used as an optimistic concurrency lock, and is updated with the value returned from the server. Any error from the server will cause the resource reconciliation to err. When testing with [SubReconcilerTests](#subreconcilertests), the resource version of the resource defaults to `"999"`, the patch bytes include the resource version and the response increments the reonciled resource's version. For a resource with the default version that patches a finalizer, the expected reconciled resource will have a resource version of `"1000"`.
 
 A minimal test case for a sub reconciler that adds a finalizer may look like:
 

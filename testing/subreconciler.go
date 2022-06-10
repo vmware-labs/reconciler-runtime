@@ -94,7 +94,23 @@ type SubReconcilerTestCase struct {
 	CleanUp func(t *testing.T) error
 }
 
-// SubReconcilerTestSuite represents a list of subreconciler test cases.
+// SubReconcilerTests represents a map of reconciler test cases. The map key is the name of each
+// test case.  Test cases are executed in random order.
+type SubReconcilerTests map[string]SubReconcilerTestCase
+
+// Run executes the test cases.
+func (rt SubReconcilerTests) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
+	t.Helper()
+	rts := SubReconcilerTestSuite{}
+	for name, rtc := range rt {
+		rtc.Name = name
+		rts = append(rts, rtc)
+	}
+	rts.Run(t, scheme, factory)
+}
+
+// SubReconcilerTestSuite represents a list of subreconciler test cases. The test cases are
+// executed in order.
 type SubReconcilerTestSuite []SubReconcilerTestCase
 
 // Run executes the test case.
