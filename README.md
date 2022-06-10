@@ -491,7 +491,7 @@ There are two test suites, one for reconcilers and an optimized harness for test
 [`ReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestCase) run the full reconciler via the controller runtime Reconciler's Reconcile method. There are two ways to compose a ReconcilerTestCase either as an unordered set using [`ReconcilerTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTests), or an order list using [`ReconcilerTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestSuite). When using `ReconcilerTests` the key for each test case is used as the name for that test case.
 
 ```go
-testKey := ... // NamesapcedName of the resource to reconcile
+testRequest := ... // request for the resource to reconcile
 inMemoryGatewayImagesConfigMap := ... // ConfigMap with images
 inMemoryGateway := ... // resource to reconcile
 gatewayCreate := ... // expected to be created
@@ -499,7 +499,7 @@ scheme := ... // scheme registered with all resource types the reconcile interac
 
 rts := rtesting.ReconcilerTests{
 	"creates gateway": {
-		Key:  testKey,
+		Request:      testRequest,
 		GivenObjects: []client.Object{
 			inMemoryGateway,
 			inMemoryGatewayImagesConfigMap,
@@ -546,7 +546,7 @@ rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c recon
 
 For more complex reconcilers, the number of moving parts can make it difficult to fully cover all aspects of the reonciler and handle corner cases and sources of error. The [`SubReconcilerTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase) enables testing a single sub reconciler in isolation from the resource. While very similar to ReconcilerTestCase, these are the differences:
 
-- `Key` is replaced with `Resource` since the resource is not lookedup, but handed to the reconciler. `ExpectResource` is the mutated value of the resource after the reconciler runs.
+- `Request` is replaced with `Resource` since the resource is not lookedup, but handed to the reconciler. `ExpectResource` is the mutated value of the resource after the reconciler runs.
 - `GivenStashedValues` is a map of stashed value to seed, `ExpectStashedValues` are individually compared with the actual stashed value after the reconciler runs.
 - `ExpectStatusUpdates` is not available
 

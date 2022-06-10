@@ -29,7 +29,7 @@ type SubReconcilerTestCase struct {
 	Focus bool
 	// Skip is true if and only if this test should be skipped.
 	Skip bool
-	// Metadata contains arbitrary value that are stored with the test case
+	// Metadata contains arbitrary values that are stored with the test case
 	Metadata map[string]interface{}
 
 	// inputs

@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	controllerruntime "sigs.k8s.io/controller-runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -128,7 +129,9 @@ func TestConfig_TrackAndGet(t *testing.T) {
 func TestResourceReconciler_NoStatus(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource-no-status"
-	testKey := types.NamespacedName{Namespace: testNamespace, Name: testName}
+	testRequest := controllerruntime.Request{
+		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testName},
+	}
 
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
@@ -143,7 +146,7 @@ func TestResourceReconciler_NoStatus(t *testing.T) {
 
 	rts := rtesting.ReconcilerTests{
 		"resource exists": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -170,7 +173,9 @@ func TestResourceReconciler_NoStatus(t *testing.T) {
 func TestResourceReconciler_EmptyStatus(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource-empty-status"
-	testKey := types.NamespacedName{Namespace: testNamespace, Name: testName}
+	testRequest := controllerruntime.Request{
+		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testName},
+	}
 
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
@@ -185,7 +190,7 @@ func TestResourceReconciler_EmptyStatus(t *testing.T) {
 
 	rts := rtesting.ReconcilerTests{
 		"resource exists": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -212,7 +217,9 @@ func TestResourceReconciler_EmptyStatus(t *testing.T) {
 func TestResourceReconciler_NilableStatus(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
-	testKey := types.NamespacedName{Namespace: testNamespace, Name: testName}
+	testRequest := controllerruntime.Request{
+		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testName},
+	}
 
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
@@ -231,7 +238,7 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 
 	rts := rtesting.ReconcilerTests{
 		"nil status": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource.Status(nil),
 			},
@@ -249,7 +256,7 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 			},
 		},
 		"status conditions are initialized": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource.StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.ConditionsDie()
@@ -279,7 +286,7 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 			},
 		},
 		"reconciler mutated status": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -307,7 +314,7 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 			},
 		},
 		"status update failed": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -354,7 +361,9 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 func TestResourceReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
-	testKey := types.NamespacedName{Namespace: testNamespace, Name: testName}
+	testRequest := controllerruntime.Request{
+		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testName},
+	}
 
 	scheme := runtime.NewScheme()
 	_ = resources.AddToScheme(scheme)
@@ -374,7 +383,7 @@ func TestResourceReconciler(t *testing.T) {
 
 	rts := rtesting.ReconcilerTests{
 		"resource does not exist": {
-			Key: testKey,
+			Request: testRequest,
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
 					return &reconcilers.SyncReconciler{
@@ -387,7 +396,7 @@ func TestResourceReconciler(t *testing.T) {
 			},
 		},
 		"ignore deleted resource": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&deletedAt)
@@ -405,7 +414,7 @@ func TestResourceReconciler(t *testing.T) {
 			},
 		},
 		"error fetching resource": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -425,7 +434,7 @@ func TestResourceReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"resource is defaulted": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -443,7 +452,7 @@ func TestResourceReconciler(t *testing.T) {
 			},
 		},
 		"status conditions are initialized": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource.StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.ConditionsDie()
@@ -473,7 +482,7 @@ func TestResourceReconciler(t *testing.T) {
 			},
 		},
 		"reconciler mutated status": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -501,7 +510,7 @@ func TestResourceReconciler(t *testing.T) {
 			},
 		},
 		"sub reconciler erred": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -517,7 +526,7 @@ func TestResourceReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"status update failed": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -551,7 +560,7 @@ func TestResourceReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"context is stashable": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -569,7 +578,7 @@ func TestResourceReconciler(t *testing.T) {
 			},
 		},
 		"context has config": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -590,7 +599,7 @@ func TestResourceReconciler(t *testing.T) {
 			},
 		},
 		"context has resource type": {
-			Key: testKey,
+			Request: testRequest,
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -624,7 +633,9 @@ func TestResourceReconciler(t *testing.T) {
 func TestAggregateReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
-	key := types.NamespacedName{Namespace: testNamespace, Name: testName}
+	request := controllerruntime.Request{
+		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testName},
+	}
 
 	now := metav1.NewTime(time.Now().Truncate(time.Second))
 
@@ -645,7 +656,7 @@ func TestAggregateReconciler(t *testing.T) {
 	defaultAggregateReconciler := func(c reconcilers.Config) *reconcilers.AggregateReconciler {
 		return &reconcilers.AggregateReconciler{
 			Type:    &corev1.ConfigMap{},
-			Request: reconcile.Request{NamespacedName: key},
+			Request: request,
 
 			DesiredResource: func(ctx context.Context, resource *corev1.ConfigMap) (*corev1.ConfigMap, error) {
 				resource.Data = map[string]string{
@@ -666,7 +677,7 @@ func TestAggregateReconciler(t *testing.T) {
 
 	rts := rtesting.ReconcilerTests{
 		"resource is in sync": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven.
 					AddData("foo", "bar"),
@@ -678,7 +689,9 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"ignore other resources": {
-			Key: types.NamespacedName{Namespace: testName, Name: "not-it"},
+			Request: controllerruntime.Request{
+				NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: "not-it"},
+			},
 			Metadata: map[string]interface{}{
 				"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
 					return defaultAggregateReconciler(c)
@@ -686,7 +699,7 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"ignore terminating resources": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -700,7 +713,7 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"create resource": {
-			Key: key,
+			Request: request,
 			Metadata: map[string]interface{}{
 				"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
 					return defaultAggregateReconciler(c)
@@ -716,7 +729,7 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"update resource": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -735,7 +748,7 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"delete resource": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -757,7 +770,7 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"preserve immutable fields": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven.
 					AddData("foo", "bar").
@@ -774,7 +787,7 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"sanitize resource before logging": {
-			Key: key,
+			Request: request,
 			Metadata: map[string]interface{}{
 				"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
 					r := defaultAggregateReconciler(c)
@@ -794,7 +807,7 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"sanitize is mutation safe": {
-			Key: key,
+			Request: request,
 			Metadata: map[string]interface{}{
 				"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
 					r := defaultAggregateReconciler(c)
@@ -815,7 +828,7 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"error getting resources": {
-			Key: key,
+			Request: request,
 			WithReactors: []rtesting.ReactionFunc{
 				rtesting.InduceFailure("get", "ConfigMap"),
 			},
@@ -827,7 +840,7 @@ func TestAggregateReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"error creating resource": {
-			Key: key,
+			Request: request,
 			WithReactors: []rtesting.ReactionFunc{
 				rtesting.InduceFailure("create", "ConfigMap"),
 			},
@@ -847,7 +860,7 @@ func TestAggregateReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"error updating resource": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -870,7 +883,7 @@ func TestAggregateReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"error deleting resource": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -896,7 +909,7 @@ func TestAggregateReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"reconcile result": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven.
 					AddData("foo", "bar"),
@@ -915,7 +928,7 @@ func TestAggregateReconciler(t *testing.T) {
 			ExpectedResult: ctrl.Result{RequeueAfter: time.Hour},
 		},
 		"reconcile error": {
-			Key: key,
+			Request: request,
 			Metadata: map[string]interface{}{
 				"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
 					r := defaultAggregateReconciler(c)
@@ -930,7 +943,7 @@ func TestAggregateReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"context is stashable": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven.
 					AddData("foo", "bar"),
@@ -951,7 +964,7 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"context has config": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven.
 					AddData("foo", "bar"),
@@ -975,7 +988,7 @@ func TestAggregateReconciler(t *testing.T) {
 			},
 		},
 		"context has resource type": {
-			Key: key,
+			Request: request,
 			GivenObjects: []client.Object{
 				configMapGiven.
 					AddData("foo", "bar"),
