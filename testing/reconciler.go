@@ -33,13 +33,15 @@ type ReconcilerTestCase struct {
 	Focus bool
 	// Skip is true if and only if this test should be skipped.
 	Skip bool
-	// Metadata contains arbitrary value that are stored with the test case
+	// Metadata contains arbitrary values that are stored with the test case
 	Metadata map[string]interface{}
 
 	// inputs
 
-	// Key identifies the object to be reconciled
+	// Deprecated use Request
 	Key types.NamespacedName
+	// Request identifies the object to be reconciled
+	Request controllerruntime.Request
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
@@ -167,9 +169,11 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	}
 
 	// Run the Reconcile we're testing.
-	result, err := c.Reconcile(ctx, reconcile.Request{
-		NamespacedName: tc.Key,
-	})
+	request := tc.Request
+	if request == (controllerruntime.Request{}) {
+		request.NamespacedName = tc.Key
+	}
+	result, err := c.Reconcile(ctx, request)
 
 	if (err != nil) != tc.ShouldErr {
 		t.Errorf("Reconcile() error = %v, ShouldErr %v", err, tc.ShouldErr)
