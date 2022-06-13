@@ -74,13 +74,23 @@ type ExpectConfig struct {
 
 func (c *ExpectConfig) init() {
 	c.once.Do(func() {
-		c.client = NewFakeClient(c.Scheme, c.GivenObjects...)
+		// copy given objects to unwrap factories and prevent accidental mutations leaking between test cases
+		givenObjects := make([]client.Object, len(c.GivenObjects))
+		for i := range c.GivenObjects {
+			givenObjects[i] = c.GivenObjects[i].DeepCopyObject().(client.Object)
+		}
+		apiGivenObjects := make([]client.Object, len(c.APIGivenObjects))
+		for i := range c.APIGivenObjects {
+			apiGivenObjects[i] = c.APIGivenObjects[i].DeepCopyObject().(client.Object)
+		}
+
+		c.client = NewFakeClient(c.Scheme, givenObjects...)
 		for i := range c.WithReactors {
 			// in reverse order since we prepend
 			reactor := c.WithReactors[len(c.WithReactors)-1-i]
 			c.client.PrependReactor("*", "*", reactor)
 		}
-		c.apiReader = NewFakeClient(c.Scheme, c.APIGivenObjects...)
+		c.apiReader = NewFakeClient(c.Scheme, apiGivenObjects...)
 		c.recorder = &eventRecorder{
 			events: []Event{},
 			scheme: c.Scheme,

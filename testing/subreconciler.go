@@ -134,24 +134,11 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		tc.ExpectResource = tc.ExpectParent
 	}
 
-	// Record the given objects
-	givenObjects := make([]client.Object, 0, len(tc.GivenObjects))
-	originalGivenObjects := make([]client.Object, 0, len(tc.GivenObjects))
-	for _, f := range tc.GivenObjects {
-		object := f.DeepCopyObject()
-		givenObjects = append(givenObjects, object.DeepCopyObject().(client.Object))
-		originalGivenObjects = append(originalGivenObjects, object.DeepCopyObject().(client.Object))
-	}
-	apiGivenObjects := make([]client.Object, 0, len(tc.APIGivenObjects))
-	for _, f := range tc.APIGivenObjects {
-		apiGivenObjects = append(apiGivenObjects, f.DeepCopyObject().(client.Object))
-	}
-
 	expectConfig := &ExpectConfig{
 		Name:                    "default",
 		Scheme:                  scheme,
-		GivenObjects:            append(givenObjects, tc.Resource.DeepCopyObject().(client.Object)),
-		APIGivenObjects:         append(apiGivenObjects, tc.Resource.DeepCopyObject().(client.Object)),
+		GivenObjects:            append(tc.GivenObjects, tc.Resource),
+		APIGivenObjects:         append(tc.APIGivenObjects, tc.Resource),
 		WithReactors:            tc.WithReactors,
 		ExpectTracks:            tc.ExpectTracks,
 		ExpectEvents:            tc.ExpectEvents,
@@ -261,11 +248,6 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	expectConfig.AssertExpectations(t)
 	for _, config := range tc.AdditionalConfigs {
 		config.AssertExpectations(t)
-	}
-
-	// Validate the given objects are not mutated by reconciliation
-	if diff := cmp.Diff(originalGivenObjects, givenObjects, SafeDeployDiff, IgnoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
-		t.Errorf("Given objects mutated by test %q (-expected, +actual): %v", tc.Name, diff)
 	}
 }
 
