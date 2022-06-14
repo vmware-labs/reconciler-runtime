@@ -645,6 +645,7 @@ const configStashKey StashKey = "reconciler-runtime:config"
 const originalConfigStashKey StashKey = "reconciler-runtime:originalConfig"
 const resourceTypeStashKey StashKey = "reconciler-runtime:resourceType"
 const originalResourceTypeStashKey StashKey = "reconciler-runtime:originalResourceType"
+const additionalConfigsStashKey StashKey = "reconciler-runtime:additionalConfigs"
 
 func StashRequest(ctx context.Context, req ctrl.Request) context.Context {
 	return context.WithValue(ctx, requestStashKey, req)
@@ -750,6 +751,20 @@ func RetrieveOriginalResourceType(ctx context.Context) client.Object {
 		return resourceType
 	}
 	return nil
+}
+
+func StashAdditionalConfigs(ctx context.Context, additionalConfigs map[string]Config) context.Context {
+	return context.WithValue(ctx, additionalConfigsStashKey, additionalConfigs)
+}
+
+// RetrieveAdditionalConfigs returns the additional configs defined for this request. Uncommon
+// outside of the context of a test. An empty map is returned when no value is stashed.
+func RetrieveAdditionalConfigs(ctx context.Context) map[string]Config {
+	value := ctx.Value(additionalConfigsStashKey)
+	if additionalConfigs, ok := value.(map[string]Config); ok {
+		return additionalConfigs
+	}
+	return map[string]Config{}
 }
 
 // SubReconciler are participants in a larger reconciler request. The resource

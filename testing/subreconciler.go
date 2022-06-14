@@ -9,7 +9,6 @@ import (
 	"context"
 	"testing"
 
-	logrtesting "github.com/go-logr/logr/testing"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
@@ -71,6 +70,11 @@ type SubReconcilerTestCase struct {
 	// ExpectDeleteCollections holds the ordered list of collections expected to be deleted during reconciliation
 	ExpectDeleteCollections []DeleteCollectionRef
 
+	// AdditionalConfigs holds configs that are available to the test case and will have their
+	// expectations checked again the observed config interactions. The key in this map is set as
+	// the ExpectConfig's name.
+	AdditionalConfigs map[string]ExpectConfig
+
 	// outputs
 
 	// ShouldErr is true if and only if reconciliation is expected to return an error
@@ -130,39 +134,22 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		tc.ExpectResource = tc.ExpectParent
 	}
 
-	// Record the given objects
-	givenObjects := make([]client.Object, 0, len(tc.GivenObjects))
-	originalGivenObjects := make([]client.Object, 0, len(tc.GivenObjects))
-	for _, f := range tc.GivenObjects {
-		object := f.DeepCopyObject()
-		givenObjects = append(givenObjects, object.DeepCopyObject().(client.Object))
-		originalGivenObjects = append(originalGivenObjects, object.DeepCopyObject().(client.Object))
+	expectConfig := &ExpectConfig{
+		Name:                    "default",
+		Scheme:                  scheme,
+		GivenObjects:            append(tc.GivenObjects, tc.Resource),
+		APIGivenObjects:         append(tc.APIGivenObjects, tc.Resource),
+		WithReactors:            tc.WithReactors,
+		ExpectTracks:            tc.ExpectTracks,
+		ExpectEvents:            tc.ExpectEvents,
+		ExpectCreates:           tc.ExpectCreates,
+		ExpectUpdates:           tc.ExpectUpdates,
+		ExpectPatches:           tc.ExpectPatches,
+		ExpectDeletes:           tc.ExpectDeletes,
+		ExpectDeleteCollections: tc.ExpectDeleteCollections,
 	}
-	apiGivenObjects := make([]client.Object, 0, len(tc.APIGivenObjects))
-	for _, f := range tc.APIGivenObjects {
-		apiGivenObjects = append(apiGivenObjects, f.DeepCopyObject().(client.Object))
-	}
+	c := expectConfig.Config()
 
-	clientWrapper := NewFakeClient(scheme, append(givenObjects, tc.Resource.DeepCopyObject().(client.Object))...)
-	for i := range tc.WithReactors {
-		// in reverse order since we prepend
-		reactor := tc.WithReactors[len(tc.WithReactors)-1-i]
-		clientWrapper.PrependReactor("*", "*", reactor)
-	}
-	apiReader := NewFakeClient(scheme, append(apiGivenObjects, tc.Resource.DeepCopyObject().(client.Object))...)
-	tracker := createTracker()
-	recorder := &eventRecorder{
-		events: []Event{},
-		scheme: scheme,
-	}
-	log := logrtesting.NewTestLogger(t)
-	c := reconcilers.Config{
-		Client:    clientWrapper,
-		APIReader: apiReader,
-		Tracker:   tracker,
-		Recorder:  recorder,
-		Log:       log,
-	}
 	r := factory(t, tc, c)
 
 	if tc.CleanUp != nil {
@@ -199,6 +186,13 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	})
 	ctx = reconcilers.StashOriginalResourceType(ctx, resource.DeepCopyObject().(client.Object))
 	ctx = reconcilers.StashResourceType(ctx, resource.DeepCopyObject().(client.Object))
+
+	configs := make(map[string]reconcilers.Config, len(tc.AdditionalConfigs))
+	for k, v := range tc.AdditionalConfigs {
+		v.Name = k
+		configs[k] = v.Config()
+	}
+	ctx = reconcilers.StashAdditionalConfigs(ctx, configs)
 
 	// Run the Reconcile we're testing.
 	result, err := func(ctx context.Context, resource client.Object) (reconcile.Result, error) {
@@ -251,105 +245,9 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		}
 	}
 
-	// compare tracks
-	actualTracks := tracker.getTrackRequests()
-	for i, exp := range tc.ExpectTracks {
-		if i >= len(actualTracks) {
-			t.Errorf("Missing tracking request: %s", exp)
-			continue
-		}
-
-		if diff := cmp.Diff(exp, actualTracks[i]); diff != "" {
-			t.Errorf("Unexpected tracking request(-expected, +actual): %s", diff)
-		}
-	}
-	if actual, exp := len(actualTracks), len(tc.ExpectTracks); actual > exp {
-		for _, extra := range actualTracks[exp:] {
-			t.Errorf("Extra tracking request: %s", extra)
-		}
-	}
-
-	// compare events
-	actualEvents := recorder.events
-	for i, exp := range tc.ExpectEvents {
-		if i >= len(actualEvents) {
-			t.Errorf("Missing recorded event: %s", exp)
-			continue
-		}
-
-		if diff := cmp.Diff(exp, actualEvents[i]); diff != "" {
-			t.Errorf("Unexpected recorded event(-expected, +actual): %s", diff)
-		}
-	}
-	if actual, exp := len(actualEvents), len(tc.ExpectEvents); actual > exp {
-		for _, extra := range actualEvents[exp:] {
-			t.Errorf("Extra recorded event: %s", extra)
-		}
-	}
-
-	// compare create
-	CompareActions(t, "create", tc.ExpectCreates, clientWrapper.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
-
-	// compare update
-	CompareActions(t, "update", tc.ExpectUpdates, clientWrapper.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
-
-	// compare patches
-	for i, exp := range tc.ExpectPatches {
-		if i >= len(clientWrapper.PatchActions) {
-			t.Errorf("Missing patch: %#v", exp)
-			continue
-		}
-		actual := NewPatchRef(clientWrapper.PatchActions[i])
-
-		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected patch (-expected, +actual): %s", diff)
-		}
-	}
-	if actual, expected := len(clientWrapper.PatchActions), len(tc.ExpectPatches); actual > expected {
-		for _, extra := range clientWrapper.PatchActions[expected:] {
-			t.Errorf("Extra patch: %#v", extra)
-		}
-	}
-
-	// compare deletes
-	for i, exp := range tc.ExpectDeletes {
-		if i >= len(clientWrapper.DeleteActions) {
-			t.Errorf("Missing delete: %#v", exp)
-			continue
-		}
-		actual := NewDeleteRef(clientWrapper.DeleteActions[i])
-
-		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected delete (-expected, +actual): %s", diff)
-		}
-	}
-	if actual, expected := len(clientWrapper.DeleteActions), len(tc.ExpectDeletes); actual > expected {
-		for _, extra := range clientWrapper.DeleteActions[expected:] {
-			t.Errorf("Extra delete: %#v", extra)
-		}
-	}
-
-	// compare delete collections
-	for i, exp := range tc.ExpectDeleteCollections {
-		if i >= len(clientWrapper.DeleteCollectionActions) {
-			t.Errorf("Missing delete collection: %#v", exp)
-			continue
-		}
-		actual := NewDeleteCollectionRef(clientWrapper.DeleteCollectionActions[i])
-
-		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected delete collection (-expected, +actual): %s", diff)
-		}
-	}
-	if actual, expected := len(clientWrapper.DeleteCollectionActions), len(tc.ExpectDeleteCollections); actual > expected {
-		for _, extra := range clientWrapper.DeleteCollectionActions[expected:] {
-			t.Errorf("Extra delete collection: %#v", extra)
-		}
-	}
-
-	// Validate the given objects are not mutated by reconciliation
-	if diff := cmp.Diff(originalGivenObjects, givenObjects, SafeDeployDiff, IgnoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
-		t.Errorf("Given objects mutated by test %q (-expected, +actual): %v", tc.Name, diff)
+	expectConfig.AssertExpectations(t)
+	for _, config := range tc.AdditionalConfigs {
+		config.AssertExpectations(t)
 	}
 }
 
