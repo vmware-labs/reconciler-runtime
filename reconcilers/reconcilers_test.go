@@ -48,7 +48,6 @@ func TestConfig_TrackAndGet(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		})
 
 	configMap := diecorev1.ConfigMapBlank.
@@ -140,7 +139,6 @@ func TestResourceReconciler_NoStatus(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 			d.AddAnnotation("blah", "blah")
 		})
 
@@ -184,7 +182,6 @@ func TestResourceReconciler_EmptyStatus(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 			d.AddAnnotation("blah", "blah")
 		})
 
@@ -228,7 +225,6 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
 		StatusDie(func(d *dies.TestResourceStatusDie) {
 			d.ConditionsDie(
@@ -372,7 +368,6 @@ func TestResourceReconciler(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
 		StatusDie(func(d *dies.TestResourceStatusDie) {
 			d.ConditionsDie(
@@ -650,7 +645,6 @@ func TestAggregateReconciler(t *testing.T) {
 		})
 	configMapGiven := configMapCreate.
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		})
 
 	defaultAggregateReconciler := func(c reconcilers.Config) *reconcilers.AggregateReconciler {
@@ -1031,7 +1025,6 @@ func TestSyncReconciler(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
 		StatusDie(func(d *dies.TestResourceStatusDie) {
 			d.ConditionsDie(
@@ -1222,7 +1215,6 @@ func TestChildReconciler(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
 		StatusDie(func(d *dies.TestResourceStatusDie) {
 			d.ConditionsDie(
@@ -1245,7 +1237,6 @@ func TestChildReconciler(t *testing.T) {
 		AddData("foo", "bar")
 	configMapGiven := configMapCreate.
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		})
 
 	defaultChildReconciler := func(c reconcilers.Config) *reconcilers.ChildReconciler {
@@ -2155,7 +2146,6 @@ func TestSequence(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
 		StatusDie(func(d *dies.TestResourceStatusDie) {
 			d.ConditionsDie(
@@ -2402,7 +2392,6 @@ func TestCastResource(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		}).
 		StatusDie(func(d *dies.TestResourceStatusDie) {
 			d.ConditionsDie(
@@ -2602,7 +2591,6 @@ func TestWithConfig(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		})
 
 	rts := rtesting.SubReconcilerTests{
@@ -2663,7 +2651,6 @@ func TestWithFinalizer(t *testing.T) {
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 			d.Namespace(testNamespace)
 			d.Name(testName)
-			d.CreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
 		})
 
 	rts := rtesting.SubReconcilerTests{

@@ -150,7 +150,7 @@ func (c *ExpectConfig) AssertClientUpdateExpectations(t *testing.T) {
 	t.Helper()
 	c.init()
 
-	c.compareActions(t, "update", c.ExpectUpdates, c.client.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
+	c.compareActions(t, "update", c.ExpectUpdates, c.client.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
 }
 
 // AssertClientPatchExpectations asserts observed reconciler client patch behavior matches the expected client patch behavior
@@ -329,6 +329,10 @@ var (
 	IgnoreTypeMeta = cmp.FilterPath(func(p cmp.Path) bool {
 		path := p.String()
 		return strings.HasSuffix(path, "TypeMeta.APIVersion") || strings.HasSuffix(path, "TypeMeta.Kind")
+	}, cmp.Ignore())
+	IgnoreCreationTimestamp = cmp.FilterPath(func(p cmp.Path) bool {
+		path := p.String()
+		return strings.HasSuffix(path, "ObjectMeta.CreationTimestamp")
 	}, cmp.Ignore())
 	IgnoreResourceVersion = cmp.FilterPath(func(p cmp.Path) bool {
 		path := p.String()

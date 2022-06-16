@@ -8,6 +8,7 @@ package testing
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,7 +38,12 @@ var _ client.Client = &clientWrapper{}
 func NewFakeClient(scheme *runtime.Scheme, objs ...client.Object) *clientWrapper {
 	o := make([]runtime.Object, len(objs))
 	for i := range objs {
-		o[i] = objs[i]
+		obj := objs[i].DeepCopyObject().(client.Object)
+		// default to a non-zero creation timestamp
+		if obj.GetCreationTimestamp().Time.IsZero() {
+			obj.SetCreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
+		}
+		o[i] = obj
 	}
 	client := &clientWrapper{
 		client:                  fakeclient.NewFakeClientWithScheme(scheme, o...),
