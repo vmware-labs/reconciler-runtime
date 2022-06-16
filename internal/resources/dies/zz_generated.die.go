@@ -62,6 +62,14 @@ func (d *TestResourceDie) DieFeedPtr(r *resources.TestResource) *TestResourceDie
 	return d.DieFeed(*r)
 }
 
+// DieFeedRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceDie {
+	b, _ := json.Marshal(raw)
+	r := resources.TestResource{}
+	_ = json.Unmarshal(b, &r)
+	return d.DieFeed(r)
+}
+
 // DieRelease returns the resource managed by the die.
 func (d *TestResourceDie) DieRelease() resources.TestResource {
 	if d.mutable {
@@ -83,6 +91,15 @@ func (d *TestResourceDie) DieReleaseUnstructured() runtime.Unstructured {
 	return &unstructured.Unstructured{
 		Object: u,
 	}
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceDie) DieReleaseRawExtension() runtime.RawExtension {
+	r := d.DieReleasePtr()
+	b, _ := json.Marshal(r)
+	raw := runtime.RawExtension{}
+	_ = json.Unmarshal(b, &raw)
+	return raw
 }
 
 // DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
@@ -128,6 +145,20 @@ func (d *TestResourceDie) UnmarshalJSON(b []byte) error {
 	err := json.Unmarshal(b, r)
 	*d = *d.DieFeed(*r)
 	return err
+}
+
+// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+func (d *TestResourceDie) APIVersion(v string) *TestResourceDie {
+	return d.DieStamp(func(r *resources.TestResource) {
+		r.APIVersion = v
+	})
+}
+
+// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+func (d *TestResourceDie) Kind(v string) *TestResourceDie {
+	return d.DieStamp(func(r *resources.TestResource) {
+		r.Kind = v
+	})
 }
 
 // MetadataDie stamps the resource's ObjectMeta field with a mutable die.
@@ -206,6 +237,14 @@ func (d *TestResourceSpecDie) DieFeedPtr(r *resources.TestResourceSpec) *TestRes
 	return d.DieFeed(*r)
 }
 
+// DieFeedRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceSpecDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceSpecDie {
+	b, _ := json.Marshal(raw)
+	r := resources.TestResourceSpec{}
+	_ = json.Unmarshal(b, &r)
+	return d.DieFeed(r)
+}
+
 // DieRelease returns the resource managed by the die.
 func (d *TestResourceSpecDie) DieRelease() resources.TestResourceSpec {
 	if d.mutable {
@@ -218,6 +257,15 @@ func (d *TestResourceSpecDie) DieRelease() resources.TestResourceSpec {
 func (d *TestResourceSpecDie) DieReleasePtr() *resources.TestResourceSpec {
 	r := d.DieRelease()
 	return &r
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceSpecDie) DieReleaseRawExtension() runtime.RawExtension {
+	r := d.DieReleasePtr()
+	b, _ := json.Marshal(r)
+	raw := runtime.RawExtension{}
+	_ = json.Unmarshal(b, &raw)
+	return raw
 }
 
 // DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
@@ -297,6 +345,14 @@ func (d *TestResourceStatusDie) DieFeedPtr(r *resources.TestResourceStatus) *Tes
 	return d.DieFeed(*r)
 }
 
+// DieFeedRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceStatusDie {
+	b, _ := json.Marshal(raw)
+	r := resources.TestResourceStatus{}
+	_ = json.Unmarshal(b, &r)
+	return d.DieFeed(r)
+}
+
 // DieRelease returns the resource managed by the die.
 func (d *TestResourceStatusDie) DieRelease() resources.TestResourceStatus {
 	if d.mutable {
@@ -309,6 +365,15 @@ func (d *TestResourceStatusDie) DieRelease() resources.TestResourceStatus {
 func (d *TestResourceStatusDie) DieReleasePtr() *resources.TestResourceStatus {
 	r := d.DieRelease()
 	return &r
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	r := d.DieReleasePtr()
+	b, _ := json.Marshal(r)
+	raw := runtime.RawExtension{}
+	_ = json.Unmarshal(b, &raw)
+	return raw
 }
 
 // DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
@@ -379,6 +444,14 @@ func (d *TestResourceEmptyStatusDie) DieFeedPtr(r *resources.TestResourceEmptySt
 	return d.DieFeed(*r)
 }
 
+// DieFeedRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceEmptyStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceEmptyStatusDie {
+	b, _ := json.Marshal(raw)
+	r := resources.TestResourceEmptyStatus{}
+	_ = json.Unmarshal(b, &r)
+	return d.DieFeed(r)
+}
+
 // DieRelease returns the resource managed by the die.
 func (d *TestResourceEmptyStatusDie) DieRelease() resources.TestResourceEmptyStatus {
 	if d.mutable {
@@ -400,6 +473,15 @@ func (d *TestResourceEmptyStatusDie) DieReleaseUnstructured() runtime.Unstructur
 	return &unstructured.Unstructured{
 		Object: u,
 	}
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceEmptyStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	r := d.DieReleasePtr()
+	b, _ := json.Marshal(r)
+	raw := runtime.RawExtension{}
+	_ = json.Unmarshal(b, &raw)
+	return raw
 }
 
 // DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
@@ -445,6 +527,20 @@ func (d *TestResourceEmptyStatusDie) UnmarshalJSON(b []byte) error {
 	err := json.Unmarshal(b, r)
 	*d = *d.DieFeed(*r)
 	return err
+}
+
+// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+func (d *TestResourceEmptyStatusDie) APIVersion(v string) *TestResourceEmptyStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceEmptyStatus) {
+		r.APIVersion = v
+	})
+}
+
+// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+func (d *TestResourceEmptyStatusDie) Kind(v string) *TestResourceEmptyStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceEmptyStatus) {
+		r.Kind = v
+	})
 }
 
 // MetadataDie stamps the resource's ObjectMeta field with a mutable die.
@@ -523,6 +619,14 @@ func (d *TestResourceEmptyStatusStatusDie) DieFeedPtr(r *resources.TestResourceE
 	return d.DieFeed(*r)
 }
 
+// DieFeedRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceEmptyStatusStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceEmptyStatusStatusDie {
+	b, _ := json.Marshal(raw)
+	r := resources.TestResourceEmptyStatusStatus{}
+	_ = json.Unmarshal(b, &r)
+	return d.DieFeed(r)
+}
+
 // DieRelease returns the resource managed by the die.
 func (d *TestResourceEmptyStatusStatusDie) DieRelease() resources.TestResourceEmptyStatusStatus {
 	if d.mutable {
@@ -535,6 +639,15 @@ func (d *TestResourceEmptyStatusStatusDie) DieRelease() resources.TestResourceEm
 func (d *TestResourceEmptyStatusStatusDie) DieReleasePtr() *resources.TestResourceEmptyStatusStatus {
 	r := d.DieRelease()
 	return &r
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceEmptyStatusStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	r := d.DieReleasePtr()
+	b, _ := json.Marshal(r)
+	raw := runtime.RawExtension{}
+	_ = json.Unmarshal(b, &raw)
+	return raw
 }
 
 // DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
@@ -593,6 +706,14 @@ func (d *TestResourceNoStatusDie) DieFeedPtr(r *resources.TestResourceNoStatus) 
 	return d.DieFeed(*r)
 }
 
+// DieFeedRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceNoStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceNoStatusDie {
+	b, _ := json.Marshal(raw)
+	r := resources.TestResourceNoStatus{}
+	_ = json.Unmarshal(b, &r)
+	return d.DieFeed(r)
+}
+
 // DieRelease returns the resource managed by the die.
 func (d *TestResourceNoStatusDie) DieRelease() resources.TestResourceNoStatus {
 	if d.mutable {
@@ -614,6 +735,15 @@ func (d *TestResourceNoStatusDie) DieReleaseUnstructured() runtime.Unstructured 
 	return &unstructured.Unstructured{
 		Object: u,
 	}
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceNoStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	r := d.DieReleasePtr()
+	b, _ := json.Marshal(r)
+	raw := runtime.RawExtension{}
+	_ = json.Unmarshal(b, &raw)
+	return raw
 }
 
 // DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
@@ -659,6 +789,20 @@ func (d *TestResourceNoStatusDie) UnmarshalJSON(b []byte) error {
 	err := json.Unmarshal(b, r)
 	*d = *d.DieFeed(*r)
 	return err
+}
+
+// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+func (d *TestResourceNoStatusDie) APIVersion(v string) *TestResourceNoStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNoStatus) {
+		r.APIVersion = v
+	})
+}
+
+// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+func (d *TestResourceNoStatusDie) Kind(v string) *TestResourceNoStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNoStatus) {
+		r.Kind = v
+	})
 }
 
 // MetadataDie stamps the resource's ObjectMeta field with a mutable die.
@@ -725,6 +869,14 @@ func (d *TestResourceNilableStatusDie) DieFeedPtr(r *resources.TestResourceNilab
 	return d.DieFeed(*r)
 }
 
+// DieFeedRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceNilableStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceNilableStatusDie {
+	b, _ := json.Marshal(raw)
+	r := resources.TestResourceNilableStatus{}
+	_ = json.Unmarshal(b, &r)
+	return d.DieFeed(r)
+}
+
 // DieRelease returns the resource managed by the die.
 func (d *TestResourceNilableStatusDie) DieRelease() resources.TestResourceNilableStatus {
 	if d.mutable {
@@ -746,6 +898,15 @@ func (d *TestResourceNilableStatusDie) DieReleaseUnstructured() runtime.Unstruct
 	return &unstructured.Unstructured{
 		Object: u,
 	}
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
+func (d *TestResourceNilableStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	r := d.DieReleasePtr()
+	b, _ := json.Marshal(r)
+	raw := runtime.RawExtension{}
+	_ = json.Unmarshal(b, &raw)
+	return raw
 }
 
 // DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
@@ -791,6 +952,20 @@ func (d *TestResourceNilableStatusDie) UnmarshalJSON(b []byte) error {
 	err := json.Unmarshal(b, r)
 	*d = *d.DieFeed(*r)
 	return err
+}
+
+// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+func (d *TestResourceNilableStatusDie) APIVersion(v string) *TestResourceNilableStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNilableStatus) {
+		r.APIVersion = v
+	})
+}
+
+// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+func (d *TestResourceNilableStatusDie) Kind(v string) *TestResourceNilableStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNilableStatus) {
+		r.Kind = v
+	})
 }
 
 // MetadataDie stamps the resource's ObjectMeta field with a mutable die.
