@@ -240,7 +240,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 			expected = f.DeepCopyObject()
 		}
 		actual := reconcilers.RetrieveValue(ctx, key)
-		if diff := cmp.Diff(expected, actual, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, cmpopts.EquateEmpty()); diff != "" {
+		if diff := cmp.Diff(expected, actual, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
 			t.Errorf("Unexpected stash value %q (-expected, +actual): %s", key, diff)
 		}
 	}

@@ -324,19 +324,26 @@ func (c *ExpectConfig) compareActions(t *testing.T, actionName string, expectedA
 
 var (
 	IgnoreLastTransitionTime = cmp.FilterPath(func(p cmp.Path) bool {
-		return strings.HasSuffix(p.String(), "LastTransitionTime")
+		return strings.HasSuffix(p.String(), "LastTransitionTime") ||
+			strings.HasSuffix(p.String(), `(map[string]interface {})["lastTransitionTime"]`)
 	}, cmp.Ignore())
 	IgnoreTypeMeta = cmp.FilterPath(func(p cmp.Path) bool {
-		path := p.String()
-		return strings.HasSuffix(path, "TypeMeta.APIVersion") || strings.HasSuffix(path, "TypeMeta.Kind")
+		return strings.HasSuffix(p.String(), "TypeMeta.APIVersion") ||
+			strings.HasSuffix(p.GoString(), `(*unstructured.Unstructured).Object["apiVersion"]`) ||
+			strings.HasSuffix(p.GoString(), `{*unstructured.Unstructured}.Object["apiVersion"]`) ||
+			strings.HasSuffix(p.String(), "TypeMeta.Kind") ||
+			strings.HasSuffix(p.GoString(), `(*unstructured.Unstructured).Object["kind"]`) ||
+			strings.HasSuffix(p.GoString(), `{*unstructured.Unstructured}.Object["kind"]`)
 	}, cmp.Ignore())
 	IgnoreCreationTimestamp = cmp.FilterPath(func(p cmp.Path) bool {
-		path := p.String()
-		return strings.HasSuffix(path, "ObjectMeta.CreationTimestamp")
+		return strings.HasSuffix(p.String(), "ObjectMeta.CreationTimestamp") ||
+			strings.HasSuffix(p.GoString(), `(*unstructured.Unstructured).Object["metadata"].(map[string]interface {})["creationTimestamp"]`) ||
+			strings.HasSuffix(p.GoString(), `{*unstructured.Unstructured}.Object["metadata"].(map[string]interface {})["creationTimestamp"]`)
 	}, cmp.Ignore())
 	IgnoreResourceVersion = cmp.FilterPath(func(p cmp.Path) bool {
-		path := p.String()
-		return strings.HasSuffix(path, "ObjectMeta.ResourceVersion")
+		return strings.HasSuffix(p.String(), "ObjectMeta.ResourceVersion") ||
+			strings.HasSuffix(p.GoString(), `(*unstructured.Unstructured).Object["metadata"].(map[string]interface {})["resourceVersion"]`) ||
+			strings.HasSuffix(p.GoString(), `{*unstructured.Unstructured}.Object["metadata"].(map[string]interface {})["resourceVersion"]`)
 	}, cmp.Ignore())
 
 	statusSubresourceOnly = cmp.FilterPath(func(p cmp.Path) bool {
