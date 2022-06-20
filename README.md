@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/vmware-labs/reconciler-runtime)](https://goreportcard.com/report/github.com/vmware-labs/reconciler-runtime)
 [![codecov](https://codecov.io/gh/vmware-labs/reconciler-runtime/branch/main/graph/badge.svg)](https://codecov.io/gh/vmware-labs/reconciler-runtime)
 
-`reconciler-runtime` is an opinionated framework for authoring and testing Kubernetes reconcilers using [`controller-runtime`](https://github.com/kubernetes-sigs/controller-runtime) project. `controller-runtime` provides infrastructure for creating and operating controllers, but provides little support for the business logic of implementing a reconciler within the controller. The [`Reconciler` interface](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/reconcile#Reconciler) provided by `controller-runtime` is the handoff point with `reconciler-runtime`.
+`reconciler-runtime` is an opinionated framework for authoring and testing Kubernetes reconcilers using [`controller-runtime`](https://github.com/kubernetes-sigs/controller-runtime) project. `controller-runtime` provides infrastructure for creating and operating controllers, but provides little support for the business logic of implementing a reconciler within the controller. The [`Reconciler` interface](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/reconcile#Reconciler) provided by `controller-runtime` is the primary handoff point with `reconciler-runtime`.
 
 <!-- ToC managed by https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one -->
 - [Reconcilers](#reconcilers)
@@ -32,6 +32,7 @@
 	- [Status](#status)
 	- [Finalizers](#finalizers)
 	- [ResourceManager](#resourcemanager)
+- [Breaking Changes](#breaking-changes)
 - [Contributing](#contributing)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
@@ -174,6 +175,7 @@ func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReco
 	}
 }
 ```
+[full source](https://github.com/scothis/servicebinding-runtime/blob/8ae0b1fb8b7a37856fa18171bc34e3462c35348b/controllers/webhook_controller.go#L171-L221)
 
 **Recommended RBAC:**
 
@@ -380,6 +382,9 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler {
 		Reconciler: reconcilers.Sequence{
 			&reconcilers.CastResource{
 				Type: &duckv1alpha1.ImageRef{},
+				// Reconciler that now operates on the ImageRef type. This SubReconciler is likely
+				// shared between multiple ResourceReconcilers that operate on different types,
+				// otherwise it would be easier to work directly with the Function type directly.
 				Reconciler: &reconcilers.SyncReconciler{
 					Sync: func(ctx context.Context, resource *duckv1alpha1.ImageRef) error {
 						// do something with the duckv1alpha1.ImageRef instead of a buildv1alpha1.Function
@@ -528,6 +533,7 @@ func AdmissionProjectorWebhook(c reconcilers.Config) *reconcilers.AdmissionWebho
 	}
 }
 ```
+[full source](https://github.com/scothis/servicebinding-runtime/blob/8ae0b1fb8b7a37856fa18171bc34e3462c35348b/controllers/webhook_controller.go#L113-L166)
 
 The webhook adapter can be registered with the controller manager at a path, in this case `/interceptor`. There MutatingWebhookConfiguration resource that intercepts 
 
@@ -654,7 +660,7 @@ rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c re
 
 ### AdmissionWebhookTests
 
-[`AdmissionWebhookTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#AdmissionWebhookTestCase) runs the full webhook handler via the controller runtime webhook handler's Handle method. There are two ways to compose a AdmissionWebhookTestCase either as an unordered set using [`AdmissionWebhookTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#AdmissionWebhookTests), or an order list using [`AdmissionWebhookTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#AdmissionWebhookTestSuite). When using `AdmissionWebhookTestSuite` the key for each test case is used as the name for that test case.
+[`AdmissionWebhookTestCase`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#AdmissionWebhookTestCase) runs the full webhook handler via the controller runtime [webhook handler's](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/webhook/admission#Handler) Handle method. There are two ways to compose a AdmissionWebhookTestCase either as an unordered set using [`AdmissionWebhookTests`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#AdmissionWebhookTests), or an order list using [`AdmissionWebhookTestSuite`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#AdmissionWebhookTestSuite). When using `AdmissionWebhookTestSuite` the key for each test case is used as the name for that test case.
 
 **Example**
 
@@ -717,6 +723,7 @@ wts.Run(t, scheme, func(t *testing.T, wtc *rtesting.AdmissionWebhookTestCase, c 
 	return controllers.AdmissionProjectorWebhook(c).Build()
 })
 ```
+[full source](https://github.com/scothis/servicebinding-runtime/blob/8ae0b1fb8b7a37856fa18171bc34e3462c35348b/controllers/webhook_controller_test.go#L177-L490)
 
 ### ExpectConfig
 
@@ -726,11 +733,21 @@ The [`ExpectConfig`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtim
 
 ### Config
 
-The [`Config`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config) is a single object that contains the key APIs needed by a reconciler. The config object is provided to the reconciler when initialized and is preconfigured for the reconciler. To setup a Config for a test and make assertions that the expected behavior matches the observed behavior, use [ExpectConfig](#expectconfig)
+The [`Config`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config) is a single object that contains the common remote APIs needed by a reconciler. The config object includes:
+- [`Client`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config.Client) as the primary interaction with the Kubernetes API Server. Gets and Lists are read from informers when available.
+- [`APIReader`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config.APIReader) read-only Kubernetes API Server client that bypasses informers.
+- [`Recorder`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config.Recorder) record Kubernetes events for a resource.
+- [`Tracker`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config.Tracker) track relationships between resource, and later lookup resources tracking a specific resource.
+
+Root reconcilers like [ResourceReconciler](#resourcereconciler) and [AdmissionWebhookAdapter](#admissionwebhookadapter) accept a Config to use that is then passed to [SubReconciler](#subreconciler) via the context, and retrieved using [`RetrieveConfigOrDie`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveConfigOrDie). The active config may be modified at runtime using [WithConfig](#withconfig).
+
+To setup a Config for a test and make assertions that the expected behavior matches the observed behavior, use [ExpectConfig](#expectconfig).
 
 ### Stash
 
 The stash allows passing arbitrary state between sub reconcilers within the scope of a single reconciler request. Values are stored on the context by [`StashValue`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#StashValue) and accessed via [`RetrieveValue`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveValue).
+
+For testing, given stashed values can be defined in a [SubReconcilerTests](#subreconcilertests) with [`GivenStashedValues`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase.GivenStashedValues). Newly stashed or mutated values expectations are defined with [`ExpectStashedValues`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase.ExpectStashedValues).
 
 **Example:**
 
@@ -742,7 +759,7 @@ func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
 		Name: "StashExample",
 		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
 			value := Example{} // something we want to expose to a sub reconciler later in this chain
-			reconcilers.StashValue(ctx, exampleStashKey, *value)
+			reconcilers.StashValue(ctx, exampleStashKey, value)
 			return nil
 		},
 	}
@@ -769,13 +786,13 @@ The [`Tracker`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/tra
 
 It's common to work with a resource that is also tracked. The [Config.TrackAndGet](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#Config.TrackAndGet) method uses the same signature as client.Get, but additionally tracks the resource.
 
-In the [Setup](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime@v0.4.0/reconcilers#SyncReconciler) method, a watch is created that will notify the handler every time a resource of that kind is mutated. The [EnqueueTracked](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#EnqueueTracked) helper returns a list of resources that are tracking the given resource, those resources are enqueued for the reconciler.
+In the [Setup](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#SyncReconciler) method, a watch is created that will notify the handler every time a resource of that kind is mutated. The [EnqueueTracked](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#EnqueueTracked) helper returns a list of resources that are tracking the given resource, those resources are enqueued for the reconciler.
 
 The tracker will automatically expire a track request if not periodically renewed. By default, the TTL is 2x the resync internal. This ensures all tracked resources will naturally have the tracking relationship refreshed as part of the normal reconciliation resource. There is no need to manually untrack a resource.
 
 **Example:**
 
-The stream gateways in projectriff fetch the image references they use to run from a ConfigMap, when the values change, we want to detect and rollout the updated images.
+The stream gateways in projectriff fetch the image references they use to run from a ConfigMap. When the ConfigMap changes, we want to detect and rollout the updated images.
 
 ```go
 func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string) reconcilers.SubReconciler {
@@ -799,8 +816,8 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 
 		Setup: func(ctx context.Context, mgr reconcilers.Manager, bldr *reconcilers.Builder) error {
 			// enqueue the tracking resource for reconciliation from changes to
-			// tracked ConfigMaps. Internally `EnqueueTracked` sets up an 
-			// Informer to watch to changes of the target resource. When the
+			// tracked ConfigMaps. Internally `EnqueueTracked` handels informer 
+			// events to watch for changes of the target resource. When the
 			// informer emits an event, the tracking resources are looked up
 			// from the tracker and enqueded for reconciliation.
 			bldr.Watches(&source.Kind{Type: &corev1.ConfigMap{}}, reconcilers.EnqueueTracked(ctx, &corev1.ConfigMap{}))
@@ -890,7 +907,7 @@ A minimal test case for a sub reconciler that adds a finalizer may look like:
 
 ### ResourceManager
 
-The [`ResourceManager`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ResourceManager) provides a means to mange a single resource by sychronizing the current and desired state. The resource will be created if it does not exist, deleted if no longer desired and updated when not semantically equivlent. This utility is used by the [ChildReconciler](#childreconciler) and [AggregateReconciler](#aggregatereconciler).
+The [`ResourceManager`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ResourceManager) provides a means to mange a single resource by sychronizing the current and desired state. The resource will be created if it does not exist, deleted if no longer desired and updated when not semantically equivlent. The same resource manager should be reused to manage multiple resource and must be reused when managing the same resource over time in order to take full effect. This utility is used by the [ChildReconciler](#childreconciler) and [AggregateReconciler](#aggregatereconciler).
 
 The `Manage(ctx context.Context, resource, actual, desired client.Object) (client.Object, error)` method take three objects and returns another object:
 - `resource` is the reconciled resource, events, tracks and finalizer are against this object. May be an object of any underlaying type.
@@ -903,6 +920,14 @@ Internally, a mutations made to the resoruce at admission time (like defaults ap
 If configured, a [finalizer](#finalizers) can be managed on the resource which will be added before create/udpate and removed after sucessful delete.
 
 If requested, the managed resource will be tracked for the resource.
+
+## Breaking Changes
+
+Known breaking changes are captured in the [release notes](https://github.com/vmware-labs/reconciler-runtime/releases), it is strongly recomened to review the release notes before upgrading to a new version of reconciler-runtime. When possible, breaking changes are first marked as deprecations before full removal in a later release. Patch releases will be issued to fix significant bugs and unintentional breaking changes.
+
+We strive to release reconciler-runtime against the latest Kuberentes and controller-runtime releases. Upstream breaking changes in either dependency may also force changes in reconciler-runtime without a deprecation period.
+
+reconciler-runtime is rapidly evolving. While we strive for API compatability between releases, functionality that is better handled using a different API may be removed. Release version numbers follow semver.
 
 ## Contributing
 
