@@ -7,6 +7,8 @@
 
 `reconciler-runtime` is an opinionated framework for authoring and testing Kubernetes reconcilers using [`controller-runtime`](https://github.com/kubernetes-sigs/controller-runtime) project. `controller-runtime` provides infrastructure for creating and operating controllers, but provides little support for the business logic of implementing a reconciler within the controller. The [`Reconciler` interface](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/reconcile#Reconciler) provided by `controller-runtime` is the primary handoff point with `reconciler-runtime`.
 
+Within an existing Kubebuilder or controller-runtime project, reconciler-runtime may be adopted incrementally without disrupting existing controllers. A common approach for adopting reconciler-runtime to use the [testing](#testing) support to test existing reconcilers in a project. If there is a use case reconciler-runtime does not handle well, you may drop down to the controller-runtime APIs directly, or use any other library that is compatible with controller-runtime.
+
 <!-- ToC managed by https://marketplace.visualstudio.com/items?itemName=yzhang.markdown-all-in-one -->
 - [Reconcilers](#reconcilers)
 	- [ResourceReconciler](#resourcereconciler)
