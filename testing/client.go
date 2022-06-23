@@ -241,12 +241,26 @@ func (w *clientWrapper) DeleteAllOf(ctx context.Context, obj client.Object, opts
 	for _, opt := range opts {
 		opt.ApplyToDeleteAllOf(deleteopts)
 	}
+	labels := ""
+	if s := deleteopts.LabelSelector; s != nil && !s.Empty() {
+		labels = s.String()
+	}
+	fields := ""
+	if s := deleteopts.FieldSelector; s != nil && !s.Empty() {
+		fields = s.String()
+	}
 
 	// capture action
-	w.DeleteCollectionActions = append(w.DeleteCollectionActions, clientgotesting.NewDeleteCollectionAction(gvr, deleteopts.Namespace, metav1.ListOptions{}))
+	w.DeleteCollectionActions = append(w.DeleteCollectionActions, clientgotesting.NewDeleteCollectionAction(gvr, deleteopts.Namespace, metav1.ListOptions{
+		LabelSelector: labels,
+		FieldSelector: fields,
+	}))
 
 	// call reactor chain
-	err = w.react(clientgotesting.NewDeleteCollectionAction(gvr, deleteopts.Namespace, metav1.ListOptions{}))
+	err = w.react(clientgotesting.NewDeleteCollectionAction(gvr, deleteopts.Namespace, metav1.ListOptions{
+		LabelSelector: labels,
+		FieldSelector: fields,
+	}))
 	if err != nil {
 		return err
 	}

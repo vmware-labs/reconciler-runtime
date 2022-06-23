@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package testing
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -65,11 +66,12 @@ type ExpectConfig struct {
 	// ExpectStatusPatches builds the ordered list of objects whose status is patched during reconciliation
 	ExpectStatusPatches []PatchRef
 
-	once      sync.Once
-	client    *clientWrapper
-	apiReader *clientWrapper
-	recorder  *eventRecorder
-	tracker   *mockTracker
+	once           sync.Once
+	client         *clientWrapper
+	apiReader      *clientWrapper
+	recorder       *eventRecorder
+	tracker        *mockTracker
+	observedErrors []string
 }
 
 func (c *ExpectConfig) init() {
@@ -96,6 +98,7 @@ func (c *ExpectConfig) init() {
 			scheme: c.Scheme,
 		}
 		c.tracker = createTracker()
+		c.observedErrors = []string{}
 	})
 }
 
@@ -113,9 +116,18 @@ func (c *ExpectConfig) Config() reconcilers.Config {
 	}
 }
 
+func (c *ExpectConfig) errorf(t *testing.T, message string, args ...interface{}) {
+	if t != nil {
+		t.Errorf(message, args...)
+	}
+	c.observedErrors = append(c.observedErrors, fmt.Sprintf(message, args...))
+}
+
 // AssertExpectations asserts all observed reconciler behavior matches the expected behavior
 func (c *ExpectConfig) AssertExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	c.AssertClientExpectations(t)
@@ -125,7 +137,9 @@ func (c *ExpectConfig) AssertExpectations(t *testing.T) {
 
 // AssertClientExpectations asserts observed reconciler client behavior matches the expected client behavior
 func (c *ExpectConfig) AssertClientExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	c.AssertClientCreateExpectations(t)
@@ -139,7 +153,9 @@ func (c *ExpectConfig) AssertClientExpectations(t *testing.T) {
 
 // AssertClientCreateExpectations asserts observed reconciler client create behavior matches the expected client create behavior
 func (c *ExpectConfig) AssertClientCreateExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	c.compareActions(t, "create", c.ExpectCreates, c.client.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
@@ -147,7 +163,9 @@ func (c *ExpectConfig) AssertClientCreateExpectations(t *testing.T) {
 
 // AssertClientUpdateExpectations asserts observed reconciler client update behavior matches the expected client update behavior
 func (c *ExpectConfig) AssertClientUpdateExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	c.compareActions(t, "update", c.ExpectUpdates, c.client.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
@@ -155,76 +173,84 @@ func (c *ExpectConfig) AssertClientUpdateExpectations(t *testing.T) {
 
 // AssertClientPatchExpectations asserts observed reconciler client patch behavior matches the expected client patch behavior
 func (c *ExpectConfig) AssertClientPatchExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	for i, exp := range c.ExpectPatches {
 		if i >= len(c.client.PatchActions) {
-			t.Errorf("Missing patch for config %q: %#v", c.Name, exp)
+			c.errorf(t, "Missing patch for config %q: %#v", c.Name, exp)
 			continue
 		}
 		actual := NewPatchRef(c.client.PatchActions[i])
 
 		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected patch for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "Unexpected patch for config %q (-expected, +actual): %s", c.Name, diff)
 		}
 	}
 	if actual, expected := len(c.client.PatchActions), len(c.ExpectPatches); actual > expected {
 		for _, extra := range c.client.PatchActions[expected:] {
-			t.Errorf("Extra patch for config %q: %#v", c.Name, extra)
+			c.errorf(t, "Extra patch for config %q: %#v", c.Name, extra)
 		}
 	}
 }
 
 // AssertClientDeleteExpectations asserts observed reconciler client delete behavior matches the expected client delete behavior
 func (c *ExpectConfig) AssertClientDeleteExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	for i, exp := range c.ExpectDeletes {
 		if i >= len(c.client.DeleteActions) {
-			t.Errorf("Missing delete for config %q: %#v", c.Name, exp)
+			c.errorf(t, "Missing delete for config %q: %#v", c.Name, exp)
 			continue
 		}
 		actual := NewDeleteRef(c.client.DeleteActions[i])
 
 		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected delete for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "Unexpected delete for config %q (-expected, +actual): %s", c.Name, diff)
 		}
 	}
 	if actual, expected := len(c.client.DeleteActions), len(c.ExpectDeletes); actual > expected {
 		for _, extra := range c.client.DeleteActions[expected:] {
-			t.Errorf("Extra delete for config %q: %#v", c.Name, extra)
+			c.errorf(t, "Extra delete for config %q: %#v", c.Name, extra)
 		}
 	}
 }
 
 // AssertClientDeleteCollectionExpectations asserts observed reconciler client delete collection behavior matches the expected client delete collection behavior
 func (c *ExpectConfig) AssertClientDeleteCollectionExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	for i, exp := range c.ExpectDeleteCollections {
 		if i >= len(c.client.DeleteCollectionActions) {
-			t.Errorf("Missing delete collection for config %q: %#v", c.Name, exp)
+			c.errorf(t, "Missing delete collection for config %q: %#v", c.Name, exp)
 			continue
 		}
 		actual := NewDeleteCollectionRef(c.client.DeleteCollectionActions[i])
 
-		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected delete collection for config %q (-expected, +actual): %s", c.Name, diff)
+		if diff := cmp.Diff(exp, actual, NormalizeLabelSelector, NormalizeFieldSelector); diff != "" {
+			c.errorf(t, "Unexpected delete collection for config %q (-expected, +actual): %s", c.Name, diff)
 		}
 	}
 	if actual, expected := len(c.client.DeleteCollectionActions), len(c.ExpectDeleteCollections); actual > expected {
 		for _, extra := range c.client.DeleteCollectionActions[expected:] {
-			t.Errorf("Extra delete collection for config %q: %#v", c.Name, extra)
+			c.errorf(t, "Extra delete collection for config %q: %#v", c.Name, extra)
 		}
 	}
 }
 
 // AssertClientStatusUpdateExpectations asserts observed reconciler client status update behavior matches the expected client status update behavior
 func (c *ExpectConfig) AssertClientStatusUpdateExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	c.compareActions(t, "status update", c.ExpectStatusUpdates, c.client.StatusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, SafeDeployDiff, cmpopts.EquateEmpty())
@@ -232,92 +258,99 @@ func (c *ExpectConfig) AssertClientStatusUpdateExpectations(t *testing.T) {
 
 // AssertClientStatusPatchExpectations asserts observed reconciler client status patch behavior matches the expected client status patch behavior
 func (c *ExpectConfig) AssertClientStatusPatchExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	for i, exp := range c.ExpectStatusPatches {
 		if i >= len(c.client.StatusPatchActions) {
-			t.Errorf("Missing status patch for config %q: %#v", c.Name, exp)
+			c.errorf(t, "Missing status patch for config %q: %#v", c.Name, exp)
 			continue
 		}
 		actual := NewPatchRef(c.client.StatusPatchActions[i])
 
 		if diff := cmp.Diff(exp, actual); diff != "" {
-			t.Errorf("Unexpected status patch for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "Unexpected status patch for config %q (-expected, +actual): %s", c.Name, diff)
 		}
 	}
 	if actual, expected := len(c.client.StatusPatchActions), len(c.ExpectStatusPatches); actual > expected {
 		for _, extra := range c.client.StatusPatchActions[expected:] {
-			t.Errorf("Extra status patch for config %q: %#v", c.Name, extra)
+			c.errorf(t, "Extra status patch for config %q: %#v", c.Name, extra)
 		}
 	}
 }
 
 // AssertRecorderExpectations asserts observed event recorder behavior matches the expected event recorder behavior
 func (c *ExpectConfig) AssertRecorderExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	actualEvents := c.recorder.events
 	for i, exp := range c.ExpectEvents {
 		if i >= len(actualEvents) {
-			t.Errorf("Missing recorded event for config %q: %s", c.Name, exp)
+			c.errorf(t, "Missing recorded event for config %q: %s", c.Name, exp)
 			continue
 		}
 
 		if diff := cmp.Diff(exp, actualEvents[i]); diff != "" {
-			t.Errorf("Unexpected recorded event for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "Unexpected recorded event for config %q (-expected, +actual): %s", c.Name, diff)
 		}
 	}
 	if actual, exp := len(actualEvents), len(c.ExpectEvents); actual > exp {
 		for _, extra := range actualEvents[exp:] {
-			t.Errorf("Extra recorded event for config %q: %s", c.Name, extra)
+			c.errorf(t, "Extra recorded event for config %q: %s", c.Name, extra)
 		}
 	}
 }
 
 // AssertTrackerExpectations asserts observed tracker behavior matches the expected tracker behavior
 func (c *ExpectConfig) AssertTrackerExpectations(t *testing.T) {
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	actualTracks := c.tracker.getTrackRequests()
 	for i, exp := range c.ExpectTracks {
 		if i >= len(actualTracks) {
-			t.Errorf("Missing tracking request for config %q: %s", c.Name, exp)
+			c.errorf(t, "Missing tracking request for config %q: %s", c.Name, exp)
 			continue
 		}
 
 		if diff := cmp.Diff(exp, actualTracks[i]); diff != "" {
-			t.Errorf("Unexpected tracking request for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "Unexpected tracking request for config %q (-expected, +actual): %s", c.Name, diff)
 		}
 	}
 	if actual, exp := len(actualTracks), len(c.ExpectTracks); actual > exp {
 		for _, extra := range actualTracks[exp:] {
-			t.Errorf("Extra tracking request for config %q: %s", c.Name, extra)
+			c.errorf(t, "Extra tracking request for config %q: %s", c.Name, extra)
 		}
 	}
 }
 
 func (c *ExpectConfig) compareActions(t *testing.T, actionName string, expectedActionFactories []client.Object, actualActions []objectAction, diffOptions ...cmp.Option) {
-	// TODO(scothis) this could be a really good place to play with generics
-	t.Helper()
+	if t != nil {
+		t.Helper()
+	}
 	c.init()
 
 	for i, exp := range expectedActionFactories {
 		if i >= len(actualActions) {
-			t.Errorf("Missing %s: %#v", actionName, exp.DeepCopyObject())
+			c.errorf(t, "Missing %s for config %q: %#v", actionName, c.Name, exp.DeepCopyObject())
 			continue
 		}
 		actual := actualActions[i].GetObject()
 
 		if diff := cmp.Diff(exp.DeepCopyObject(), actual, diffOptions...); diff != "" {
-			t.Errorf("Unexpected %s for config %q (-expected, +actual): %s", actionName, c.Name, diff)
+			c.errorf(t, "Unexpected %s for config %q (-expected, +actual): %s", actionName, c.Name, diff)
 		}
 	}
 	if actual, expected := len(actualActions), len(expectedActionFactories); actual > expected {
 		for _, extra := range actualActions[expected:] {
-			t.Errorf("Extra %s for config %q: %#v", actionName, c.Name, extra)
+			c.errorf(t, "Extra %s for config %q: %#v", actionName, c.Name, extra)
 		}
 	}
 }
@@ -352,6 +385,19 @@ var (
 	}, cmp.Ignore())
 
 	SafeDeployDiff = cmpopts.IgnoreUnexported(resource.Quantity{})
+
+	NormalizeLabelSelector = cmp.Transformer("labels.Selector", func(s labels.Selector) *string {
+		if s == nil || s.Empty() {
+			return nil
+		}
+		return StringPtr(s.String())
+	})
+	NormalizeFieldSelector = cmp.Transformer("fields.Selector", func(s fields.Selector) *string {
+		if s == nil || s.Empty() {
+			return nil
+		}
+		return StringPtr(s.String())
+	})
 )
 
 type PatchRef struct {
