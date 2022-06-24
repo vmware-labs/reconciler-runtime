@@ -12,6 +12,7 @@ import (
 	controllerruntime "sigs.k8s.io/controller-runtime"
 )
 
+// Deprecated
 func AssertErrorEqual(expected error) VerifyFunc {
 	return func(t *testing.T, result controllerruntime.Result, err error) {
 		if err != expected {
@@ -20,6 +21,7 @@ func AssertErrorEqual(expected error) VerifyFunc {
 	}
 }
 
+// Deprecated
 func AssertErrorMessagef(message string, a ...interface{}) VerifyFunc {
 	return func(t *testing.T, result controllerruntime.Result, err error) {
 		expected := fmt.Sprintf(message, a...)
