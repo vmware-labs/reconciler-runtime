@@ -432,7 +432,7 @@ type AggregateReconciler struct {
 	//     func(current, desired client.Object)
 	MergeBeforeUpdate interface{}
 
-	// SemanticEquals compares two resources returning true if there is a
+	// Deprecated SemanticEquals compares two resources returning true if there is a
 	// meaningful difference that should trigger an update.
 	//
 	// Expected function signature:
@@ -473,7 +473,6 @@ func (r *AggregateReconciler) init() {
 
 			HarmonizeImmutableFields: r.HarmonizeImmutableFields,
 			MergeBeforeUpdate:        r.MergeBeforeUpdate,
-			SemanticEquals:           r.SemanticEquals,
 			Sanitize:                 r.Sanitize,
 		}
 	})
@@ -994,7 +993,6 @@ var (
 // - DesiredChild
 // - if child is desired:
 //    - HarmonizeImmutableFields (optional)
-//    - SemanticEquals
 //    - MergeBeforeUpdate
 // - ReflectChildStatusOnParent
 //
@@ -1076,7 +1074,7 @@ type ChildReconciler struct {
 	//     func(current, desired client.Object)
 	MergeBeforeUpdate interface{}
 
-	// SemanticEquals compares two child resources returning true if there is a
+	// Deprecated SemanticEquals compares two child resources returning true if there is a
 	// meaningful difference that should trigger an update.
 	//
 	// Expected function signature:
@@ -1248,7 +1246,6 @@ func (r *ChildReconciler) Reconcile(ctx context.Context, resource client.Object)
 			TrackDesired:             r.SkipOwnerReference,
 			HarmonizeImmutableFields: r.HarmonizeImmutableFields,
 			MergeBeforeUpdate:        r.MergeBeforeUpdate,
-			SemanticEquals:           r.SemanticEquals,
 			Sanitize:                 r.Sanitize,
 		}
 	})
@@ -1746,7 +1743,7 @@ type ResourceManager struct {
 	//     func(current, desired client.Object)
 	MergeBeforeUpdate interface{}
 
-	// SemanticEquals compares two resources returning true if there is a
+	// Deprecated SemanticEquals compares two resources returning true if there is a
 	// meaningful difference that should trigger an update.
 	//
 	// Expected function signature:
@@ -1806,20 +1803,6 @@ func (r *ResourceManager) validate(ctx context.Context) error {
 			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
 			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) {
 			return fmt.Errorf("ResourceManager %q must implement MergeBeforeUpdate: func(%s, %s), found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
-		}
-	}
-
-	// validate SemanticEquals function signature:
-	//     func(a1, a2 client.Object) bool
-	if r.SemanticEquals == nil {
-		return fmt.Errorf("ResourceManager %q must define SemanticEquals", r.Name)
-	} else {
-		fn := reflect.TypeOf(r.SemanticEquals)
-		if fn.NumIn() != 2 || fn.NumOut() != 1 ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) ||
-			fn.Out(0).Kind() != reflect.Bool {
-			return fmt.Errorf("ResourceManager %q must implement SemanticEquals: func(%s, %s) bool, found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
 		}
 	}
 
@@ -1912,14 +1895,13 @@ func (r *ResourceManager) Manage(ctx context.Context, resource, actual, desired 
 		}
 	}
 
-	if r.semanticEquals(desiredPatched, actual) {
-		// resource is unchanged
-		return actual, nil
-	}
-
 	// update resource with desired changes
 	current := actual.DeepCopyObject().(client.Object)
 	r.mergeBeforeUpdate(current, desiredPatched)
+	if equality.Semantic.DeepEqual(current, actual) {
+		// resource is unchanged
+		return actual, nil
+	}
 	log.Info("updating resource", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
 	if r.TrackDesired {
 		if err := c.Tracker.TrackChild(ctx, resource, current, c.Scheme()); err != nil {
@@ -1932,32 +1914,22 @@ func (r *ResourceManager) Manage(ctx context.Context, resource, actual, desired 
 			"Failed to update %s %q: %v", typeName(current), current.GetName(), err)
 		return nil, err
 	}
-	if r.semanticEquals(desired, current) {
-		r.mutationCache.Delete(current.GetUID())
+
+	// capture admission mutation patch
+	base := current.DeepCopyObject().(client.Object)
+	r.mergeBeforeUpdate(base, desired)
+	patch, err := NewPatch(base, current)
+	if err != nil {
+		log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base))
 	} else {
-		base := current.DeepCopyObject().(client.Object)
-		r.mergeBeforeUpdate(base, desired)
-		patch, err := NewPatch(base, current)
-		if err != nil {
-			log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base))
-		} else {
-			r.mutationCache.Set(current.GetUID(), patch, 1*time.Hour)
-		}
+		r.mutationCache.Set(current.GetUID(), patch, 1*time.Hour)
 	}
+
 	log.Info("updated resource")
 	pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Updated",
 		"Updated %s %q", typeName(current), current.GetName())
 
 	return current, nil
-}
-
-func (r *ResourceManager) semanticEquals(a1, a2 client.Object) bool {
-	fn := reflect.ValueOf(r.SemanticEquals)
-	out := fn.Call([]reflect.Value{
-		reflect.ValueOf(a1),
-		reflect.ValueOf(a2),
-	})
-	return out[0].Bool()
 }
 
 func (r *ResourceManager) harmonizeImmutableFields(current, desired client.Object) {
