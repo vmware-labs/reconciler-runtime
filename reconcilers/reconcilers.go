@@ -432,11 +432,8 @@ type AggregateReconciler struct {
 	//     func(current, desired client.Object)
 	MergeBeforeUpdate interface{}
 
-	// Deprecated SemanticEquals compares two resources returning true if there is a
-	// meaningful difference that should trigger an update.
-	//
-	// Expected function signature:
-	//     func(a1, a2 client.Object) bool
+	// Deprecated SemanticEquals is no longer used, the field can be removed. Equality is
+	// now determined based on the resource mutated by MergeBeforeUpdate
 	SemanticEquals interface{}
 
 	// Sanitize is called with an object before logging the value. Any value may
@@ -1074,11 +1071,8 @@ type ChildReconciler struct {
 	//     func(current, desired client.Object)
 	MergeBeforeUpdate interface{}
 
-	// Deprecated SemanticEquals compares two child resources returning true if there is a
-	// meaningful difference that should trigger an update.
-	//
-	// Expected function signature:
-	//     func(a1, a2 client.Object) bool
+	// Deprecated SemanticEquals is no longer used, the field can be removed. Equality is
+	// now determined based on the resource mutated by MergeBeforeUpdate
 	SemanticEquals interface{}
 
 	// ListOptions allows custom options to be use when listing potential child resources. Each
@@ -1743,11 +1737,8 @@ type ResourceManager struct {
 	//     func(current, desired client.Object)
 	MergeBeforeUpdate interface{}
 
-	// Deprecated SemanticEquals compares two resources returning true if there is a
-	// meaningful difference that should trigger an update.
-	//
-	// Expected function signature:
-	//     func(a1, a2 client.Object) bool
+	// Deprecated SemanticEquals is no longer used, the field can be removed. Equality is
+	// now determined based on the resource mutated by MergeBeforeUpdate
 	SemanticEquals interface{}
 
 	// Sanitize is called with an object before logging the value. Any value may
@@ -1900,6 +1891,7 @@ func (r *ResourceManager) Manage(ctx context.Context, resource, actual, desired 
 	r.mergeBeforeUpdate(current, desiredPatched)
 	if equality.Semantic.DeepEqual(current, actual) {
 		// resource is unchanged
+		log.Info("resource is in sync, no update required")
 		return actual, nil
 	}
 	log.Info("updating resource", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
