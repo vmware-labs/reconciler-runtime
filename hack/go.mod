@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	dies.dev/diegen v0.5.0
-	sigs.k8s.io/controller-tools v0.9.0
+	sigs.k8s.io/controller-tools v0.9.1
 )
 
 require (
