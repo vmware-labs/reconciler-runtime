@@ -22,7 +22,6 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -658,9 +657,6 @@ func TestAggregateReconciler(t *testing.T) {
 				}
 				return resource, nil
 			},
-			SemanticEquals: func(a1, a2 *corev1.ConfigMap) bool {
-				return equality.Semantic.DeepEqual(a1.Data, a2.Data)
-			},
 			MergeBeforeUpdate: func(current, desired *corev1.ConfigMap) {
 				current.Data = desired.Data
 			},
@@ -1275,9 +1271,6 @@ func TestChildReconciler(t *testing.T) {
 				}
 				parent.Status.Fields = reconcilers.MergeMaps(child.Data)
 				parent.Status.MarkReady()
-			},
-			SemanticEquals: func(r1, r2 *corev1.ConfigMap) bool {
-				return equality.Semantic.DeepEqual(r1.Data, r2.Data)
 			},
 		}
 	}

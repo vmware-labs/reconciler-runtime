@@ -127,14 +127,13 @@ The aggregate reconciler is responsible for:
 The implementor is responsible for:
 - specifying the type, namespace and name of the aggregate resource
 - defining the desired state
-- indicating if two resources are semantically equal
 - merging the actual resource with the desired state (often as simple as copying the spec and labels)
 
 **Example:**
 
 Aggregate reconcilers resemble a simplified child reconciler with many of the same methods combined directly into a parent reconciler. The `Reconcile` method is used to collect reference data and the `DesiredResource` method defines the desired state. Unlike with a child reconciler, the desired resource may be a direct mutation of the argument.
 
-In the example, we are controlling and existing `ValidatingWebhookConfiguration` named `my-trigger` (defined by `Request`). Based on other state in the cluster, the Reconcile method delegates to `DeriveWebhookRules()` to stash the rules for the webhook. Those rules are retrieved in the `DesiredResource` method, augmenting the `ValidatingWebhookConfiguration`. The `SemanticEquals` detects when the desired webhook config has changed in a meaningful way from the actual resource and needs to be updated,  and `MergeBeforeUpdate` is responsible for merging the desired state into the actual resource, which is then updated on the api server.
+In the example, we are controlling and existing `ValidatingWebhookConfiguration` named `my-trigger` (defined by `Request`). Based on other state in the cluster, the Reconcile method delegates to `DeriveWebhookRules()` to stash the rules for the webhook. Those rules are retrieved in the `DesiredResource` method, augmenting the `ValidatingWebhookConfiguration`. The `MergeBeforeUpdate` function is responsible for merging the desired state into the actual resource, when there is a significant change, the resource is updated on the api server.
 
 The resulting `ValidatingWebhookConfiguration` will have the current desired rules defined by this reconciler, combined with existing state like the location of the webhook server, and other policies.
 
@@ -162,9 +161,6 @@ func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReco
 			rules := RetrieveWebhookRules(ctx)
 			resource.Webhooks[0].Rules = rules
 			return resource, nil
-		},
-		SemanticEquals: func(a1, a2 *admissionregistrationv1.ValidatingWebhookConfiguration) bool {
-			return equality.Semantic.DeepEqual(a1.Webhooks[0].Rules, a2.Webhooks[0].Rules)
 		},
 		MergeBeforeUpdate: func(current, desired *admissionregistrationv1.ValidatingWebhookConfiguration) {
 			current.Webhooks[0].Rules = desired.Webhooks[0].Rules
@@ -253,7 +249,6 @@ The ChildReconciler is responsible for:
 
 The implementor is responsible for:
 - defining the desired resource
-- indicating if two resources are semantically equal
 - merging the actual resource with the desired state (often as simple as copying the spec and labels)
 - updating the parent's status from the child
 - defining the status subresource [according to the contract](#status) 
@@ -298,12 +293,6 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 			}
 
 			return child, nil
-		},
-		SemanticEquals: func(r1, r2 *kpackbuildv1alpha1.Image) bool {
-			// if the two resources are semantically equal, then we don't need
-			// to update the server
-			return equality.Semantic.DeepEqual(r1.Spec, r2.Spec) &&
-				equality.Semantic.DeepEqual(r1.Labels, r2.Labels)
 		},
 		MergeBeforeUpdate: func(actual, desired *kpackbuildv1alpha1.Image) {
 			// mutate actual resource with desired state
