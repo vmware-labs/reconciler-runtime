@@ -594,7 +594,7 @@ rts := rtesting.ReconcilerTests{
 	...
 }}
 
-rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
 	return streaming.InMemoryGatewayReconciler(c, testSystemNamespace)
 })
 ```
@@ -642,7 +642,7 @@ rts := rtesting.SubReconcilerTests{
 	},
 }
 
-rts.Test(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
 	return streaming.ProcessorSyncProcessorImages(c, testSystemNamespace)
 })
 ```
