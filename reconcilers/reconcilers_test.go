@@ -519,6 +519,43 @@ func TestResourceReconciler(t *testing.T) {
 			},
 			ShouldErr: true,
 		},
+		"sub reconciler halted": {
+			Request: testRequest,
+			GivenObjects: []client.Object{
+				resource,
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+					return reconcilers.Sequence{
+						&reconcilers.SyncReconciler{
+							Sync: func(ctx context.Context, resource *resources.TestResource) error {
+								resource.Status.Fields = map[string]string{
+									"want": "this to run",
+								}
+								return reconcilers.HaltSubReconcilers
+							},
+						},
+						&reconcilers.SyncReconciler{
+							Sync: func(ctx context.Context, resource *resources.TestResource) error {
+								resource.Status.Fields = map[string]string{
+									"don't want": "this to run",
+								}
+								return fmt.Errorf("reconciler error")
+							},
+						},
+					}
+				},
+			},
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated",
+					`Updated status`),
+			},
+			ExpectStatusUpdates: []client.Object{
+				resource.StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("want", "this to run")
+				}),
+			},
+		},
 		"status update failed": {
 			Request: testRequest,
 			GivenObjects: []client.Object{
@@ -931,6 +968,35 @@ func TestAggregateReconciler(t *testing.T) {
 				},
 			},
 			ShouldErr: true,
+		},
+		"reconcile halted": {
+			Request: request,
+			Metadata: map[string]interface{}{
+				"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+					r := defaultAggregateReconciler(c)
+					r.Reconciler = reconcilers.Sequence{
+						&reconcilers.SyncReconciler{
+							Sync: func(ctx context.Context, resource client.Object) error {
+								return reconcilers.HaltSubReconcilers
+							},
+						},
+						&reconcilers.SyncReconciler{
+							Sync: func(ctx context.Context, resource client.Object) error {
+								return fmt.Errorf("test error")
+							},
+						},
+					}
+					return r
+				},
+			},
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(configMapGiven, scheme, corev1.EventTypeNormal, "Created",
+					`Created ConfigMap %q`, testName),
+			},
+			ExpectCreates: []client.Object{
+				configMapCreate.
+					AddData("foo", "bar"),
+			},
 		},
 		"context is stashable": {
 			Request: request,

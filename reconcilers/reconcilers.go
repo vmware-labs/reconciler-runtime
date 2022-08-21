@@ -122,6 +122,9 @@ type ResourceReconciler struct {
 
 	// Reconciler is called for each reconciler request with the resource being reconciled.
 	// Typically, Reconciler is a Sequence of multiple SubReconcilers.
+	//
+	// When HaltSubReconcilers is returned as an error, execution continues as if no error was
+	// returned.
 	Reconciler SubReconciler
 
 	Config Config
@@ -276,7 +279,7 @@ func (r *ResourceReconciler) reconcile(ctx context.Context, resource client.Obje
 	}
 
 	result, err := r.Reconciler.Reconcile(ctx, resource)
-	if err != nil {
+	if err != nil && !errors.Is(err, HaltSubReconcilers) {
 		return ctrl.Result{}, err
 	}
 
@@ -401,6 +404,9 @@ type AggregateReconciler struct {
 
 	// Reconciler is called for each reconciler request with the resource being reconciled.
 	// Typically, Reconciler is a Sequence of multiple SubReconcilers.
+	//
+	// When HaltSubReconcilers is returned as an error, execution continues as if no error was
+	// returned.
 	//
 	// +optional
 	Reconciler SubReconciler
@@ -592,7 +598,7 @@ func (r *AggregateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	result, err := r.Reconciler.Reconcile(ctx, resource)
-	if err != nil {
+	if err != nil && !errors.Is(err, HaltSubReconcilers) {
 		return result, err
 	}
 
@@ -764,8 +770,7 @@ func RetrieveAdditionalConfigs(ctx context.Context) map[string]Config {
 }
 
 // SubReconciler are participants in a larger reconciler request. The resource
-// being reconciled is passed directly to the sub reconciler. The resource's
-// status can be mutated to reflect the current state.
+// being reconciled is passed directly to the sub reconciler.
 type SubReconciler interface {
 	SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error
 	Reconcile(ctx context.Context, resource client.Object) (ctrl.Result, error)
@@ -778,6 +783,15 @@ var (
 	_ SubReconciler = (*CastResource)(nil)
 	_ SubReconciler = (*WithConfig)(nil)
 	_ SubReconciler = (*WithFinalizer)(nil)
+)
+
+var (
+	// HaltSubReconcilers is an error that instructs SubReconcilers to stop processing the request,
+	// while the root reconciler proceeds as if there was no error. HaltSubReconcilers may be
+	// wrapped by other errors.
+	//
+	// See documentation for the specific SubReconciler caller to see how they handle this case.
+	HaltSubReconcilers = errors.New("stop processing SubReconcilers, without returning an error")
 )
 
 // SyncReconciler is a sub reconciler for custom reconciliation logic. No
@@ -981,17 +995,16 @@ var (
 
 // ChildReconciler is a sub reconciler that manages a single child resource for a reconciled
 // resource. The reconciler will ensure that exactly one child will match the desired state by:
-// - creating a child if none exists
-// - updating an existing child
-// - removing an unneeded child
-// - removing extra children
+//   - creating a child if none exists
+//   - updating an existing child
+//   - removing an unneeded child
+//   - removing extra children
 //
 // The flow for each reconciliation request is:
-// - DesiredChild
-// - if child is desired:
-//    - HarmonizeImmutableFields (optional)
-//    - MergeBeforeUpdate
-// - ReflectChildStatusOnParent
+//   - DesiredChild
+//   - if child is desired, HarmonizeImmutableFields (optional)
+//   - if child is desired, MergeBeforeUpdate
+//   - ReflectChildStatusOnParent
 //
 // During setup, the child resource type is registered to watch for changes.
 type ChildReconciler struct {
@@ -1047,7 +1060,7 @@ type ChildReconciler struct {
 
 	// ReflectChildStatusOnParent updates the reconciled resource's status with values from the
 	// child. Select types of error are passed, including:
-	// - apierrs.IsConflict
+	//   - apierrs.IsConflict
 	//
 	// Expected function signature:
 	//     func(parent, child client.Object, err error)
