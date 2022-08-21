@@ -330,6 +330,40 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 				},
 			},
 		},
+		"context can be augmented in Prepare and accessed in Cleanup": {
+			Request: &admission.Request{
+				AdmissionRequest: request.
+					Object(resource.DieReleaseRawExtension()).
+					DieRelease(),
+			},
+			ExpectedResponse: admission.Response{
+				AdmissionResponse: response.DieRelease(),
+			},
+			Prepare: func(t *testing.T, ctx context.Context, tc *rtesting.AdmissionWebhookTestCase) (context.Context, error) {
+				key := "test-key"
+				value := "test-value"
+				ctx = context.WithValue(ctx, key, value)
+
+				tc.Metadata["SubReconciler"] = func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+					return &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, resource *resources.TestResource) error {
+							if v := ctx.Value(key); v != value {
+								t.Errorf("expected %s to be in context", key)
+							}
+							return nil
+						},
+					}
+				}
+				tc.CleanUp = func(t *testing.T, ctx context.Context, tc *rtesting.AdmissionWebhookTestCase) error {
+					if v := ctx.Value(key); v != value {
+						t.Errorf("expected %s to be in context", key)
+					}
+					return nil
+				}
+
+				return ctx, nil
+			},
+		},
 	}
 
 	wts.Run(t, scheme, func(t *testing.T, wtc *rtesting.AdmissionWebhookTestCase, c reconcilers.Config) *admission.Webhook {
