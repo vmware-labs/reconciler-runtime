@@ -44,6 +44,8 @@ type ExpectConfig struct {
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
+	// GivenTracks provide a set of tracked resources to seed the tracker with
+	GivenTracks []TrackRequest
 
 	// side effects
 
@@ -97,7 +99,7 @@ func (c *ExpectConfig) init() {
 			events: []Event{},
 			scheme: c.Scheme,
 		}
-		c.tracker = createTracker()
+		c.tracker = createTracker(c.GivenTracks)
 		c.observedErrors = []string{}
 	})
 }

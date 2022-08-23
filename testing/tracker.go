@@ -54,8 +54,14 @@ func NewTrackRequest(t, b client.Object, scheme *runtime.Scheme) TrackRequest {
 
 const maxDuration = time.Duration(1<<63 - 1)
 
-func createTracker() *mockTracker {
-	return &mockTracker{Tracker: tracker.New(maxDuration), reqs: []TrackRequest{}}
+func createTracker(given []TrackRequest) *mockTracker {
+	t := &mockTracker{Tracker: tracker.New(maxDuration)}
+	for _, g := range given {
+		t.Track(context.TODO(), g.Tracked, g.Tracker)
+	}
+	// reset tracked requests
+	t.reqs = []TrackRequest{}
+	return t
 }
 
 type mockTracker struct {
