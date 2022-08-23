@@ -76,8 +76,7 @@ func New(lease time.Duration) Tracker {
 }
 
 type impl struct {
-	log logr.Logger
-	m   sync.Mutex
+	m sync.Mutex
 
 	// mapping maps from an object reference to the set of
 	// keys for objects watching it.

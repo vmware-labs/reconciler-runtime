@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/vmware-labs/reconciler-runtime/internal/resources"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	corev1 "k8s.io/api/core/v1"
@@ -160,6 +161,23 @@ func TestExpectConfig(t *testing.T) {
 			failedAssertions: []string{},
 		},
 
+		"given track": {
+			config: ExpectConfig{
+				GivenTracks: []TrackRequest{
+					NewTrackRequest(r2, r1, scheme),
+				},
+			},
+			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {
+				actual := c.Tracker.Lookup(ctx, NewTrackRequest(r2, r1, scheme).Tracked)
+				expected := []types.NamespacedName{
+					{Namespace: r1.Namespace, Name: r1.Name},
+				}
+				if diff := cmp.Diff(expected, actual); diff != "" {
+					t.Errorf("unexpected value (-expected, +actual): %s", diff)
+				}
+			},
+			failedAssertions: []string{},
+		},
 		"expected track": {
 			config: ExpectConfig{
 				ExpectTracks: []TrackRequest{

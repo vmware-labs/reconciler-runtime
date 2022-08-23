@@ -45,6 +45,8 @@ type AdmissionWebhookTestCase struct {
 	GivenObjects []client.Object
 	// APIGivenObjects contains objects that are only available via an API reader instead of the normal cache
 	APIGivenObjects []client.Object
+	// GivenTracks provide a set of tracked resources to seed the tracker with
+	GivenTracks []TrackRequest
 
 	// side effects
 
@@ -145,6 +147,7 @@ func (tc *AdmissionWebhookTestCase) Run(t *testing.T, scheme *runtime.Scheme, fa
 		GivenObjects:            tc.GivenObjects,
 		APIGivenObjects:         tc.APIGivenObjects,
 		WithReactors:            tc.WithReactors,
+		GivenTracks:             tc.GivenTracks,
 		ExpectTracks:            tc.ExpectTracks,
 		ExpectEvents:            tc.ExpectEvents,
 		ExpectCreates:           tc.ExpectCreates,
