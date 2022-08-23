@@ -650,6 +650,36 @@ func TestResourceReconciler(t *testing.T) {
 				},
 			},
 		},
+		"context can be augmented in Prepare and accessed in Cleanup": {
+			Request: testRequest,
+			GivenObjects: []client.Object{
+				resource,
+			},
+			Prepare: func(t *testing.T, ctx context.Context, tc *rtesting.ReconcilerTestCase) (context.Context, error) {
+				key := "test-key"
+				value := "test-value"
+				ctx = context.WithValue(ctx, key, value)
+
+				tc.Metadata["SubReconciler"] = func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+					return &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, resource *resources.TestResource) error {
+							if v := ctx.Value(key); v != value {
+								t.Errorf("expected %s to be in context", key)
+							}
+							return nil
+						},
+					}
+				}
+				tc.CleanUp = func(t *testing.T, ctx context.Context, tc *rtesting.ReconcilerTestCase) error {
+					if v := ctx.Value(key); v != value {
+						t.Errorf("expected %s to be in context", key)
+					}
+					return nil
+				}
+
+				return ctx, nil
+			},
+		},
 	}
 
 	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
@@ -1067,6 +1097,39 @@ func TestAggregateReconciler(t *testing.T) {
 				},
 			},
 		},
+		"context can be augmented in Prepare and accessed in Cleanup": {
+			Request: request,
+			GivenObjects: []client.Object{
+				configMapGiven.
+					AddData("foo", "bar"),
+			},
+			Prepare: func(t *testing.T, ctx context.Context, tc *rtesting.ReconcilerTestCase) (context.Context, error) {
+				key := "test-key"
+				value := "test-value"
+				ctx = context.WithValue(ctx, key, value)
+
+				tc.Metadata["Reconciler"] = func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+					r := defaultAggregateReconciler(c)
+					r.Reconciler = &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
+							if v := ctx.Value(key); v != value {
+								t.Errorf("expected %s to be in context", key)
+							}
+							return nil
+						},
+					}
+					return r
+				}
+				tc.CleanUp = func(t *testing.T, ctx context.Context, tc *rtesting.ReconcilerTestCase) error {
+					if v := ctx.Value(key); v != value {
+						t.Errorf("expected %s to be in context", key)
+					}
+					return nil
+				}
+
+				return ctx, nil
+			},
+		},
 	}
 
 	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
@@ -1254,6 +1317,33 @@ func TestSyncReconciler(t *testing.T) {
 				},
 			},
 			ShouldErr: true,
+		},
+		"context can be augmented in Prepare and accessed in Cleanup": {
+			Resource: resource,
+			Prepare: func(t *testing.T, ctx context.Context, tc *rtesting.SubReconcilerTestCase) (context.Context, error) {
+				key := "test-key"
+				value := "test-value"
+				ctx = context.WithValue(ctx, key, value)
+
+				tc.Metadata["SubReconciler"] = func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+					return &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, resource *resources.TestResource) error {
+							if v := ctx.Value(key); v != value {
+								t.Errorf("expected %s to be in context", key)
+							}
+							return nil
+						},
+					}
+				}
+				tc.CleanUp = func(t *testing.T, ctx context.Context, tc *rtesting.SubReconcilerTestCase) error {
+					if v := ctx.Value(key); v != value {
+						t.Errorf("expected %s to be in context", key)
+					}
+					return nil
+				}
+
+				return ctx, nil
+			},
 		},
 	}
 

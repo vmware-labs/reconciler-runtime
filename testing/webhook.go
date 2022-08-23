@@ -78,12 +78,13 @@ type AdmissionWebhookTestCase struct {
 	// lifecycle
 
 	// Prepare is called before the reconciler is executed. It is intended to prepare the broader
-	// environment before the specific test case is executed. For example, setting mock expectations.
-	Prepare func(t *testing.T, c reconcilers.Config, wtc *AdmissionWebhookTestCase) error
+	// environment before the specific test case is executed. For example, setting mock
+	// expectations, or adding values to the context.
+	Prepare func(t *testing.T, ctx context.Context, tc *AdmissionWebhookTestCase) (context.Context, error)
 	// CleanUp is called after the test case is finished and all defined assertions complete.
-	// It is indended to clean up any state created in the Prepare step or during the test
+	// It is intended to clean up any state created in the Prepare step or during the test
 	// execution, or to make assertions for mocks.
-	CleanUp func(t *testing.T, wtc *AdmissionWebhookTestCase) error
+	CleanUp func(t *testing.T, ctx context.Context, tc *AdmissionWebhookTestCase) error
 }
 
 // AdmissionWebhookTests represents a map of reconciler test cases. The map key is the name of each
@@ -112,6 +113,32 @@ func (tc *AdmissionWebhookTestCase) Run(t *testing.T, scheme *runtime.Scheme, fa
 		t.SkipNow()
 	}
 
+	ctx := reconcilers.WithStash(context.Background())
+	ctx = logr.NewContext(ctx, logrtesting.NewTestLogger(t))
+	if deadline, ok := t.Deadline(); ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, deadline)
+		defer cancel()
+	}
+
+	if tc.Metadata == nil {
+		tc.Metadata = map[string]interface{}{}
+	}
+
+	if tc.Prepare != nil {
+		var err error
+		if ctx, err = tc.Prepare(t, ctx, tc); err != nil {
+			t.Errorf("error during prepare: %s", err)
+		}
+	}
+	if tc.CleanUp != nil {
+		defer func() {
+			if err := tc.CleanUp(t, ctx, tc); err != nil {
+				t.Fatalf("error during clean up: %s", err)
+			}
+		}()
+	}
+
 	expectConfig := &ExpectConfig{
 		Name:                    "default",
 		Scheme:                  scheme,
@@ -131,19 +158,6 @@ func (tc *AdmissionWebhookTestCase) Run(t *testing.T, scheme *runtime.Scheme, fa
 
 	c := expectConfig.Config()
 	r := factory(t, tc, c)
-
-	if tc.CleanUp != nil {
-		defer func() {
-			if err := tc.CleanUp(t, tc); err != nil {
-				t.Errorf("error during clean up: %s", err)
-			}
-		}()
-	}
-	if tc.Prepare != nil {
-		if err := tc.Prepare(t, c, tc); err != nil {
-			t.Errorf("error during prepare: %s", err)
-		}
-	}
 
 	// Run the Reconcile we're testing.
 	response := func() admission.Response {
@@ -168,8 +182,6 @@ func (tc *AdmissionWebhookTestCase) Run(t *testing.T, scheme *runtime.Scheme, fa
 			t.Fatal("Request field is required")
 		}
 
-		ctx := context.Background()
-		ctx = logr.NewContext(ctx, logrtesting.NewTestLogger(t))
 		if r.WithContextFunc != nil {
 			ctx = r.WithContextFunc(ctx, httpRequest)
 		}

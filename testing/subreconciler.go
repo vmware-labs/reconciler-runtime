@@ -9,6 +9,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/go-logr/logr"
+	logrtesting "github.com/go-logr/logr/testing"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
@@ -90,12 +92,13 @@ type SubReconcilerTestCase struct {
 	// lifecycle
 
 	// Prepare is called before the reconciler is executed. It is intended to prepare the broader
-	// environment before the specific test case is executed. For example, setting mock expectations.
-	Prepare func(t *testing.T) error
+	// environment before the specific test case is executed. For example, setting mock
+	// expectations, or adding values to the context,
+	Prepare func(t *testing.T, ctx context.Context, tc *SubReconcilerTestCase) (context.Context, error)
 	// CleanUp is called after the test case is finished and all defined assertions complete.
-	// It is indended to clean up any state created in the Prepare step or during the test
+	// It is intended to clean up any state created in the Prepare step or during the test
 	// execution, or to make assertions for mocks.
-	CleanUp func(t *testing.T) error
+	CleanUp func(t *testing.T, ctx context.Context, tc *SubReconcilerTestCase) error
 }
 
 // SubReconcilerTests represents a map of reconciler test cases. The map key is the name of each
@@ -122,6 +125,32 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	t.Helper()
 	if tc.Skip {
 		t.SkipNow()
+	}
+
+	ctx := reconcilers.WithStash(context.Background())
+	ctx = logr.NewContext(ctx, logrtesting.NewTestLogger(t))
+	if deadline, ok := t.Deadline(); ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, deadline)
+		defer cancel()
+	}
+
+	if tc.Metadata == nil {
+		tc.Metadata = map[string]interface{}{}
+	}
+
+	if tc.Prepare != nil {
+		var err error
+		if ctx, err = tc.Prepare(t, ctx, tc); err != nil {
+			t.Fatalf("error during prepare: %s", err)
+		}
+	}
+	if tc.CleanUp != nil {
+		defer func() {
+			if err := tc.CleanUp(t, ctx, tc); err != nil {
+				t.Errorf("error during clean up: %s", err)
+			}
+		}()
 	}
 
 	// TODO remove deprecation shim
@@ -152,20 +181,6 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 
 	r := factory(t, tc, c)
 
-	if tc.CleanUp != nil {
-		defer func() {
-			if err := tc.CleanUp(t); err != nil {
-				t.Errorf("error during clean up: %s", err)
-			}
-		}()
-	}
-	if tc.Prepare != nil {
-		if err := tc.Prepare(t); err != nil {
-			t.Errorf("error during prepare: %s", err)
-		}
-	}
-
-	ctx := reconcilers.WithStash(context.Background())
 	for k, v := range tc.GivenStashedValues {
 		if f, ok := v.(runtime.Object); ok {
 			v = f.DeepCopyObject()
