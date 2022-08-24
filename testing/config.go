@@ -360,7 +360,7 @@ func (c *ExpectConfig) compareActions(t *testing.T, actionName string, expectedA
 var (
 	IgnoreLastTransitionTime = cmp.FilterPath(func(p cmp.Path) bool {
 		return strings.HasSuffix(p.String(), "LastTransitionTime") ||
-			strings.HasSuffix(p.String(), `(map[string]interface {})["lastTransitionTime"]`)
+			strings.HasSuffix(p.GoString(), `(map[string]interface {})["lastTransitionTime"]`)
 	}, cmp.Ignore())
 	IgnoreTypeMeta = cmp.FilterPath(func(p cmp.Path) bool {
 		return strings.HasSuffix(p.String(), "TypeMeta.APIVersion") ||
