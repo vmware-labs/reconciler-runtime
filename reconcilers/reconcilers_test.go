@@ -353,6 +353,88 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 	})
 }
 
+func TestResourceReconciler_Unstructured(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+	testRequest := controllerruntime.Request{
+		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testName},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = resources.AddToScheme(scheme)
+
+	resource := dies.TestResourceBlank.
+		APIVersion(resources.GroupVersion.Identifier()).
+		Kind("TestResource").
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.Generation(1)
+		}).
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionUnknown).Reason("Initializing"),
+			)
+		})
+
+	rts := rtesting.ReconcilerTests{
+		"in sync status": {
+			Request: testRequest,
+			GivenObjects: []client.Object{
+				resource,
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+					return &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, resource *unstructured.Unstructured) error {
+							return nil
+						},
+					}
+				},
+			},
+		},
+		"status update": {
+			Request: testRequest,
+			GivenObjects: []client.Object{
+				resource,
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
+					return &reconcilers.SyncReconciler{
+						Sync: func(ctx context.Context, resource *unstructured.Unstructured) error {
+							resource.Object["status"].(map[string]interface{})["fields"] = map[string]interface{}{
+								"Reconciler": "ran",
+							}
+							return nil
+						},
+					}
+				},
+			},
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated", `Updated status`),
+			},
+			ExpectStatusUpdates: []client.Object{
+				resource.StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("Reconciler", "ran")
+				}).DieReleaseUnstructured().(client.Object),
+			},
+		},
+	}
+
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+		return &reconcilers.ResourceReconciler{
+			Type: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": resources.GroupVersion.Identifier(),
+					"kind":       "TestResource",
+				},
+			},
+			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
+			Config:     c,
+		}
+	})
+}
+
 func TestResourceReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
