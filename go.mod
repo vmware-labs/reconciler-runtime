@@ -3,7 +3,7 @@ module github.com/vmware-labs/reconciler-runtime
 go 1.19
 
 require (
-	dies.dev v0.6.0
+	dies.dev v0.6.1
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/go-logr/logr v1.2.3
 	github.com/google/go-cmp v0.5.8

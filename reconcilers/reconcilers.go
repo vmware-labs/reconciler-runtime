@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -249,25 +250,24 @@ func (r *ResourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	r.initializeConditions(resource)
 	result, err := r.reconcile(ctx, resource)
 
-	if r.hasStatus(originalResource) {
-		// restore last transition time for unchanged conditions
-		r.syncLastTransitionTime(r.conditions(resource), r.conditions(originalResource))
+	// attempt to restore last transition time for unchanged conditions
+	r.syncLastTransitionTime(r.conditions(resource), r.conditions(originalResource))
 
-		// check if status has changed before updating
-		resourceStatus, originalResourceStatus := r.status(resource), r.status(originalResource)
-		if !equality.Semantic.DeepEqual(resourceStatus, originalResourceStatus) && resource.GetDeletionTimestamp() == nil {
-			// update status
-			log.Info("updating status", "diff", cmp.Diff(originalResourceStatus, resourceStatus))
-			if updateErr := c.Status().Update(ctx, resource); updateErr != nil {
-				log.Error(updateErr, "unable to update status")
-				c.Recorder.Eventf(resource, corev1.EventTypeWarning, "StatusUpdateFailed",
-					"Failed to update status: %v", updateErr)
-				return ctrl.Result{}, updateErr
-			}
-			c.Recorder.Eventf(resource, corev1.EventTypeNormal, "StatusUpdated",
-				"Updated status")
+	// check if status has changed before updating
+	resourceStatus, originalResourceStatus := r.status(resource), r.status(originalResource)
+	if !equality.Semantic.DeepEqual(resourceStatus, originalResourceStatus) && resource.GetDeletionTimestamp() == nil {
+		// update status
+		log.Info("updating status", "diff", cmp.Diff(originalResourceStatus, resourceStatus))
+		if updateErr := c.Status().Update(ctx, resource); updateErr != nil {
+			log.Error(updateErr, "unable to update status")
+			c.Recorder.Eventf(resource, corev1.EventTypeWarning, "StatusUpdateFailed",
+				"Failed to update status: %v", updateErr)
+			return ctrl.Result{}, updateErr
 		}
+		c.Recorder.Eventf(resource, corev1.EventTypeNormal, "StatusUpdated",
+			"Updated status")
 	}
+
 	// return original reconcile result
 	return result, err
 }
@@ -308,7 +308,11 @@ func (r *ResourceReconciler) conditions(obj client.Object) []metav1.Condition {
 	if status == nil {
 		return nil
 	}
-	statusValue := reflect.ValueOf(status).Elem()
+	statusValue := reflect.ValueOf(status)
+	if statusValue.Type().Kind() == reflect.Map {
+		return nil
+	}
+	statusValue = statusValue.Elem()
 	conditionsValue := statusValue.FieldByName("Conditions")
 	if !conditionsValue.IsValid() || conditionsValue.IsZero() {
 		return nil
@@ -326,7 +330,11 @@ func (r *ResourceReconciler) copyGeneration(obj client.Object) {
 	if status == nil {
 		return
 	}
-	statusValue := reflect.ValueOf(status).Elem()
+	statusValue := reflect.ValueOf(status)
+	if statusValue.Type().Kind() == reflect.Map {
+		return
+	}
+	statusValue = statusValue.Elem()
 	if !statusValue.IsValid() {
 		return
 	}
@@ -346,6 +354,9 @@ func (r *ResourceReconciler) hasStatus(obj client.Object) bool {
 func (r *ResourceReconciler) status(obj client.Object) interface{} {
 	if obj == nil {
 		return nil
+	}
+	if u, ok := obj.(*unstructured.Unstructured); ok {
+		return u.UnstructuredContent()["status"]
 	}
 	statusValue := reflect.ValueOf(obj).Elem().FieldByName("Status")
 	if statusValue.Kind() == reflect.Ptr {

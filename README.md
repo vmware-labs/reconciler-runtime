@@ -51,9 +51,9 @@ The resource reconciler is responsible for:
 - fetching the resource being reconciled
 - creating a stash to pass state between sub reconcilers
 - passing the resource to each sub reconciler in turn
-- initialize conditions on the status by calling status.InitializeConditions() if defined
-- normalizing the .status.conditions[].lastTransitionTime for status conditions that are metav1.Condition (the previous timestamp is preserved if the condition is otherwise unchanged)
-- reflects the observed generation on the status
+- initialize conditions on the status by calling status.InitializeConditions() if defined (not available for Unstructured resources)
+- normalizing the .status.conditions[].lastTransitionTime for status conditions that are metav1.Condition (the previous timestamp is preserved if the condition is otherwise unchanged) (not available for Unstructured resources)
+- reflects the observed generation on the status (not available for Unstructured resources)
 - updates the resource status if it was modified
 - logging the reconcilers activities
 - records events for mutations and errors
