@@ -3,7 +3,7 @@ module github.com/vmware-labs/reconciler-runtime/hack
 go 1.19
 
 require (
-	dies.dev/diegen v0.6.1
+	dies.dev/diegen v0.6.2
 	sigs.k8s.io/controller-tools v0.9.2
 )
 
