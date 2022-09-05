@@ -76,14 +76,14 @@ func (c Config) WithCluster(cluster cluster.Cluster) Config {
 // TrackAndGet tracks the resources for changes and returns the current value. The track is
 // registered even when the resource does not exists so that its creation can be tracked.
 //
-// Equivlent to calling both `c.Tracker.Track(...)` and `c.Client.Get(...)`
-func (c Config) TrackAndGet(ctx context.Context, key types.NamespacedName, obj client.Object) error {
+// Equivalent to calling both `c.Tracker.Track(...)` and `c.Client.Get(...)`
+func (c Config) TrackAndGet(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
 	c.Tracker.Track(
 		ctx,
 		tracker.NewKey(gvk(obj, c.Scheme()), key),
 		RetrieveRequest(ctx).NamespacedName,
 	)
-	return c.Get(ctx, key, obj)
+	return c.Get(ctx, key, obj, opts...)
 }
 
 // NewConfig creates a Config for a specific API type. Typically passed into a
