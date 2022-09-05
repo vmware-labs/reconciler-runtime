@@ -117,7 +117,7 @@ func (w *clientWrapper) RESTMapper() meta.RESTMapper {
 	return w.client.RESTMapper()
 }
 
-func (w *clientWrapper) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+func (w *clientWrapper) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	gvr, namespace, name, err := w.objmeta(obj)
 	if err != nil {
 		return err
@@ -129,7 +129,7 @@ func (w *clientWrapper) Get(ctx context.Context, key client.ObjectKey, obj clien
 		return err
 	}
 
-	return w.client.Get(ctx, key, obj)
+	return w.client.Get(ctx, key, obj, opts...)
 }
 
 func (w *clientWrapper) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
@@ -324,10 +324,11 @@ func (w *statusWriterWrapper) Patch(ctx context.Context, obj client.Object, patc
 
 // InduceFailure is used in conjunction with reconciler test's WithReactors field.
 // Tests that want to induce a failure in a testcase of a reconciler test would add:
-//   WithReactors: []rtesting.ReactionFunc{
-//      // Makes calls to create stream return an error.
-//      rtesting.InduceFailure("create", "Stream"),
-//   },
+//
+//	WithReactors: []rtesting.ReactionFunc{
+//	   // Makes calls to create stream return an error.
+//	   rtesting.InduceFailure("create", "Stream"),
+//	},
 func InduceFailure(verb, kind string, o ...InduceFailureOpts) ReactionFunc {
 	var opts *InduceFailureOpts
 	switch len(o) {
