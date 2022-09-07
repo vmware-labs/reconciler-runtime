@@ -39,7 +39,7 @@ const (
 	ConditionSucceeded = "Succeeded"
 )
 
-// Conditions is the interface for a Resource that implements the getter and
+// ConditionsAccessor is the interface for a Resource that implements the getter and
 // setter for accessing a Condition collection.
 type ConditionsAccessor interface {
 	GetConditions() []metav1.Condition
@@ -226,7 +226,7 @@ func (r conditionsImpl) isTerminal(t string) bool {
 	return t == r.happyType
 }
 
-// RemoveCondition removes the non terminal condition that matches the ConditionType
+// ClearCondition removes the non terminal condition that matches the ConditionType
 // Not implemented for terminal conditions
 func (r conditionsImpl) ClearCondition(t string) error {
 	var conditions []metav1.Condition
