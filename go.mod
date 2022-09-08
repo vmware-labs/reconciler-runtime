@@ -6,7 +6,7 @@ require (
 	dies.dev v0.6.2
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/go-logr/logr v1.2.3
-	github.com/google/go-cmp v0.5.8
+	github.com/google/go-cmp v0.5.9
 	golang.org/x/net v0.0.0-20220822230855-b0a4917ee28c
 	gomodules.xyz/jsonpatch/v2 v2.2.0
 	gomodules.xyz/jsonpatch/v3 v3.0.1
