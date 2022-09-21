@@ -359,31 +359,39 @@ func (c *ExpectConfig) compareActions(t *testing.T, actionName string, expectedA
 
 var (
 	IgnoreLastTransitionTime = cmp.FilterPath(func(p cmp.Path) bool {
-		return strings.HasSuffix(p.String(), "LastTransitionTime") ||
-			strings.HasSuffix(p.GoString(), `(map[string]interface {})["lastTransitionTime"]`)
+		str := p.String()
+		gostr := p.GoString()
+		return strings.HasSuffix(str, "LastTransitionTime") ||
+			strings.HasSuffix(gostr, `["lastTransitionTime"]`)
 	}, cmp.Ignore())
 	IgnoreTypeMeta = cmp.FilterPath(func(p cmp.Path) bool {
-		return strings.HasSuffix(p.String(), "TypeMeta.APIVersion") ||
-			strings.HasSuffix(p.GoString(), `(*unstructured.Unstructured).Object["apiVersion"]`) ||
-			strings.HasSuffix(p.GoString(), `{*unstructured.Unstructured}.Object["apiVersion"]`) ||
-			strings.HasSuffix(p.String(), "TypeMeta.Kind") ||
-			strings.HasSuffix(p.GoString(), `(*unstructured.Unstructured).Object["kind"]`) ||
-			strings.HasSuffix(p.GoString(), `{*unstructured.Unstructured}.Object["kind"]`)
+		str := p.String()
+		// only ignore for typed resources, compare TypeMeta values for unstructured
+		return strings.HasSuffix(str, "TypeMeta.APIVersion") ||
+			strings.HasSuffix(str, "TypeMeta.Kind")
 	}, cmp.Ignore())
 	IgnoreCreationTimestamp = cmp.FilterPath(func(p cmp.Path) bool {
-		return strings.HasSuffix(p.String(), "ObjectMeta.CreationTimestamp") ||
-			strings.HasSuffix(p.GoString(), `(*unstructured.Unstructured).Object["metadata"].(map[string]interface {})["creationTimestamp"]`) ||
-			strings.HasSuffix(p.GoString(), `{*unstructured.Unstructured}.Object["metadata"].(map[string]interface {})["creationTimestamp"]`)
+		str := p.String()
+		gostr := p.GoString()
+		return strings.HasSuffix(str, "ObjectMeta.CreationTimestamp") ||
+			strings.HasSuffix(gostr, `(*unstructured.Unstructured).Object["metadata"].(map[string]any)["creationTimestamp"]`) ||
+			strings.HasSuffix(gostr, `{*unstructured.Unstructured}.Object["metadata"].(map[string]any)["creationTimestamp"]`) ||
+			strings.HasSuffix(gostr, `(*unstructured.Unstructured).Object["metadata"].(map[string]interface {})["creationTimestamp"]`) ||
+			strings.HasSuffix(gostr, `{*unstructured.Unstructured}.Object["metadata"].(map[string]interface {})["creationTimestamp"]`)
 	}, cmp.Ignore())
 	IgnoreResourceVersion = cmp.FilterPath(func(p cmp.Path) bool {
-		return strings.HasSuffix(p.String(), "ObjectMeta.ResourceVersion") ||
-			strings.HasSuffix(p.GoString(), `(*unstructured.Unstructured).Object["metadata"].(map[string]interface {})["resourceVersion"]`) ||
-			strings.HasSuffix(p.GoString(), `{*unstructured.Unstructured}.Object["metadata"].(map[string]interface {})["resourceVersion"]`)
+		str := p.String()
+		gostr := p.GoString()
+		return strings.HasSuffix(str, "ObjectMeta.ResourceVersion") ||
+			strings.HasSuffix(gostr, `(*unstructured.Unstructured).Object["metadata"].(map[string]any)["resourceVersion"]`) ||
+			strings.HasSuffix(gostr, `{*unstructured.Unstructured}.Object["metadata"].(map[string]any)["resourceVersion"]`) ||
+			strings.HasSuffix(gostr, `(*unstructured.Unstructured).Object["metadata"].(map[string]interface {})["resourceVersion"]`) ||
+			strings.HasSuffix(gostr, `{*unstructured.Unstructured}.Object["metadata"].(map[string]interface {})["resourceVersion"]`)
 	}, cmp.Ignore())
 
 	statusSubresourceOnly = cmp.FilterPath(func(p cmp.Path) bool {
-		q := p.String()
-		return q != "" && !strings.HasPrefix(q, "Status")
+		str := p.String()
+		return str != "" && !strings.HasPrefix(str, "Status")
 	}, cmp.Ignore())
 
 	SafeDeployDiff = cmpopts.IgnoreUnexported(resource.Quantity{})

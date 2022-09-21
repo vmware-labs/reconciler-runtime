@@ -9,9 +9,12 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	diemetav1 "dies.dev/apis/meta/v1"
 	"github.com/google/go-cmp/cmp"
 	"github.com/vmware-labs/reconciler-runtime/internal/resources"
+	"github.com/vmware-labs/reconciler-runtime/internal/resources/dies"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -641,6 +644,217 @@ func TestExpectConfig(t *testing.T) {
 				if !strings.HasPrefix(actual, expected) {
 					t.Errorf("unexpected config assertions: expected prefix %q, actual %q", expected, actual)
 				}
+			}
+		})
+	}
+}
+
+func TestIgnoreLastTransitionTime(t *testing.T) {
+	a := diemetav1.ConditionBlank.
+		Type("Ready").
+		Status(metav1.ConditionTrue).
+		Reason("AllGood").
+		LastTransitionTime(metav1.Date(2000, 01, 01, 0, 0, 0, 0, time.UTC))
+	b := a.LastTransitionTime(metav1.Date(2022, 10, 10, 0, 0, 0, 0, time.UTC))
+
+	objA := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace("default")
+			d.Name("my-resource")
+			d.CreationTimestamp(metav1.Date(2000, 01, 01, 0, 0, 0, 0, time.UTC))
+		}).
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(a)
+		})
+	objB := objA.
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(b)
+		})
+
+	tests := map[string]struct {
+		a       interface{}
+		b       interface{}
+		hasDiff bool
+	}{
+		"nil": {
+			a: nil,
+			b: nil,
+		},
+		"metav1 condition": {
+			a: a.DieRelease(),
+			b: b.DieRelease(),
+		},
+		"object": {
+			a: objA.DieReleasePtr(),
+			b: objB.DieReleasePtr(),
+		},
+		"unstructured": {
+			a: objA.DieReleaseUnstructured(),
+			b: objB.DieReleaseUnstructured(),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			diff := cmp.Diff(tc.a, tc.b, IgnoreLastTransitionTime)
+			actual := diff != ""
+			expected := tc.hasDiff
+			if actual != expected {
+				t.Errorf("unexpected diff: %s", diff)
+			}
+		})
+	}
+}
+
+func TestIgnoreTypeMeta(t *testing.T) {
+	a := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace("default")
+			d.Name("my-resource")
+			d.CreationTimestamp(metav1.Date(2000, 01, 01, 0, 0, 0, 0, time.UTC))
+		}).
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.
+					Type("Ready").
+					Status(metav1.ConditionTrue).
+					Reason("AllGood").
+					LastTransitionTime(metav1.Date(2000, 01, 01, 0, 0, 0, 0, time.UTC)),
+			)
+		})
+	b := a.
+		APIVersion(resources.GroupVersion.String()).
+		Kind("TestResource")
+
+	tests := map[string]struct {
+		a       interface{}
+		b       interface{}
+		hasDiff bool
+	}{
+		"nil": {
+			a: nil,
+			b: nil,
+		},
+		"object": {
+			a: a.DieReleasePtr(),
+			b: b.DieReleasePtr(),
+		},
+		"unstructured": {
+			a:       a.DieReleaseUnstructured(),
+			b:       b.DieReleaseUnstructured(),
+			hasDiff: true,
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			diff := cmp.Diff(tc.a, tc.b, IgnoreTypeMeta)
+			actual := diff != ""
+			expected := tc.hasDiff
+			if actual != expected {
+				t.Errorf("unexpected diff: %s", diff)
+			}
+		})
+	}
+}
+
+func TestIgnoreCreationTimestamp(t *testing.T) {
+	a := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace("default")
+			d.Name("my-resource")
+			d.CreationTimestamp(metav1.Date(2000, 01, 01, 0, 0, 0, 0, time.UTC))
+		}).
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.
+					Type("Ready").
+					Status(metav1.ConditionTrue).
+					Reason("AllGood").
+					LastTransitionTime(metav1.Date(2000, 01, 01, 0, 0, 0, 0, time.UTC)),
+			)
+		})
+	b := a.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+		d.CreationTimestamp(metav1.Date(2022, 10, 10, 0, 0, 0, 0, time.UTC))
+	})
+
+	tests := map[string]struct {
+		a       interface{}
+		b       interface{}
+		hasDiff bool
+	}{
+		"nil": {
+			a: nil,
+			b: nil,
+		},
+		"object": {
+			a: a.DieReleasePtr(),
+			b: b.DieReleasePtr(),
+		},
+		"unstructured": {
+			a: a.DieReleaseUnstructured(),
+			b: b.DieReleaseUnstructured(),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			diff := cmp.Diff(tc.a, tc.b, IgnoreCreationTimestamp)
+			actual := diff != ""
+			expected := tc.hasDiff
+			if actual != expected {
+				t.Errorf("unexpected diff: %s", diff)
+			}
+		})
+	}
+}
+
+func TestIgnoreResourceVersion(t *testing.T) {
+	a := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace("default")
+			d.Name("my-resource")
+			d.ResourceVersion("999")
+		}).
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.
+					Type("Ready").
+					Status(metav1.ConditionTrue).
+					Reason("AllGood").
+					LastTransitionTime(metav1.Date(2000, 01, 01, 0, 0, 0, 0, time.UTC)),
+			)
+		})
+	b := a.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+		d.ResourceVersion("1000")
+	})
+
+	tests := map[string]struct {
+		a       interface{}
+		b       interface{}
+		hasDiff bool
+	}{
+		"nil": {
+			a: nil,
+			b: nil,
+		},
+		"object": {
+			a: a.DieReleasePtr(),
+			b: b.DieReleasePtr(),
+		},
+		"unstructured": {
+			a: a.DieReleaseUnstructured(),
+			b: b.DieReleaseUnstructured(),
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			diff := cmp.Diff(tc.a, tc.b, IgnoreResourceVersion)
+			actual := diff != ""
+			expected := tc.hasDiff
+			if actual != expected {
+				t.Errorf("unexpected diff: %s", diff)
 			}
 		})
 	}
