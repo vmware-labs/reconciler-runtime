@@ -781,6 +781,8 @@ In the [Setup](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reco
 
 The tracker will automatically expire a track request if not periodically renewed. By default, the TTL is 2x the resync internal. This ensures all tracked resources will naturally have the tracking relationship refreshed as part of the normal reconciliation resource. There is no need to manually untrack a resource.
 
+The tracked resource and its tracker are managed by reference and do not need concrete resources. Tracking of a resource can start before it exists. Once the tracked resource is created, the tracker resource will be enqueued for reconciliation.
+
 **Example:**
 
 The stream gateways in projectriff fetch the image references they use to run from a ConfigMap. When the ConfigMap changes, we want to detect and rollout the updated images.
