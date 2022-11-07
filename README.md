@@ -738,7 +738,7 @@ To setup a Config for a test and make assertions that the expected behavior matc
 
 The stash allows passing arbitrary state between sub reconcilers within the scope of a single reconciler request. Values are stored on the context by [`StashValue`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#StashValue) and accessed via [`RetrieveValue`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveValue).
 
-For testing, given stashed values can be defined in a [SubReconcilerTests](#subreconcilertests) with [`GivenStashedValues`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase.GivenStashedValues). Newly stashed or mutated values expectations are defined with [`ExpectStashedValues`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase.ExpectStashedValues).
+For testing, given stashed values can be defined in a [SubReconcilerTests](#subreconcilertests) with [`GivenStashedValues`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase.GivenStashedValues). Newly stashed or mutated values expectations are defined with [`ExpectStashedValues`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase.ExpectStashedValues). An optional, custom function for asserting stashed values can be provided via [`VerifyStashedValue`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#SubReconcilerTestCase.VerifyStashedValue).
 
 **Example:**
 

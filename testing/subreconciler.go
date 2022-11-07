@@ -59,6 +59,8 @@ type SubReconcilerTestCase struct {
 	ExpectResource client.Object
 	// ExpectStashedValues ensures each value is stashed. Values in the stash that are not expected are ignored. Factories are resolved to their object.
 	ExpectStashedValues map[reconcilers.StashKey]interface{}
+	// VerifyStashedValue is an optional, custom verification function for stashed values
+	VerifyStashedValue VerifyStashedValueFunc
 	// ExpectTracks holds the ordered list of Track calls expected during reconciliation
 	ExpectTracks []TrackRequest
 	// ExpectEvents holds the ordered list of events recorded during the reconciliation
@@ -139,6 +141,15 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 
 	if tc.Metadata == nil {
 		tc.Metadata = map[string]interface{}{}
+	}
+
+	// Set func for verifying stashed values
+	if tc.VerifyStashedValue == nil {
+		tc.VerifyStashedValue = func(t *testing.T, key reconcilers.StashKey, expected, actual interface{}) {
+			if diff := cmp.Diff(expected, actual, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("Unexpected stash value %q (-expected, +actual): %s", key, diff)
+			}
+		}
 	}
 
 	if tc.Prepare != nil {
@@ -258,9 +269,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 			expected = f.DeepCopyObject()
 		}
 		actual := reconcilers.RetrieveValue(ctx, key)
-		if diff := cmp.Diff(expected, actual, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty()); diff != "" {
-			t.Errorf("Unexpected stash value %q (-expected, +actual): %s", key, diff)
-		}
+		tc.VerifyStashedValue(t, key, expected, actual)
 	}
 
 	expectConfig.AssertExpectations(t)

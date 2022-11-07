@@ -95,8 +95,11 @@ type ReconcilerTestCase struct {
 	CleanUp func(t *testing.T, ctx context.Context, tc *ReconcilerTestCase) error
 }
 
-// VerifyFunc is a verification function
+// VerifyFunc is a verification function for a reconciler's result
 type VerifyFunc func(t *testing.T, result controllerruntime.Result, err error)
+
+// VerifyStashedValueFunc is a verification function for the entries in the stash
+type VerifyStashedValueFunc func(t *testing.T, key reconcilers.StashKey, expected, actual interface{})
 
 // ReconcilerTests represents a map of reconciler test cases. The map key is the name of each test
 // case. Test cases are executed in random order.
