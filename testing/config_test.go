@@ -582,7 +582,7 @@ func TestExpectConfig(t *testing.T) {
 		"expected status patch": {
 			config: ExpectConfig{
 				ExpectStatusPatches: []PatchRef{
-					{Group: "testing.reconciler.runtime", Kind: "TestResource", Namespace: ns, Name: "resource-1", PatchType: types.MergePatchType, Patch: []byte(`{"status":{"fields":{"foo":"bar"}}}`)},
+					{Group: "testing.reconciler.runtime", Kind: "TestResource", Namespace: ns, Name: "resource-1", SubResource: "status", PatchType: types.MergePatchType, Patch: []byte(`{"status":{"fields":{"foo":"bar"}}}`)},
 				},
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {
@@ -593,7 +593,7 @@ func TestExpectConfig(t *testing.T) {
 		"unexpected status patch": {
 			config: ExpectConfig{
 				ExpectStatusPatches: []PatchRef{
-					{Group: "testing.reconciler.runtime", Kind: "TestResource", Namespace: ns, Name: "resource-1", PatchType: types.MergePatchType, Patch: []byte(`{}`)},
+					{Group: "testing.reconciler.runtime", Kind: "TestResource", Namespace: ns, Name: "resource-1", SubResource: "status", PatchType: types.MergePatchType, Patch: []byte(`{}`)},
 				},
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {
@@ -617,7 +617,7 @@ func TestExpectConfig(t *testing.T) {
 		"missing status patch": {
 			config: ExpectConfig{
 				ExpectStatusPatches: []PatchRef{
-					{Group: "testing.reconciler.runtime", Kind: "TestResource", Namespace: ns, Name: "resource-1", PatchType: types.MergePatchType, Patch: []byte(`{"status":{"fields":{"foo":"bar"}}}`)},
+					{Group: "testing.reconciler.runtime", Kind: "TestResource", Namespace: ns, Name: "resource-1", SubResource: "status", PatchType: types.MergePatchType, Patch: []byte(`{"status":{"fields":{"foo":"bar"}}}`)},
 				},
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},

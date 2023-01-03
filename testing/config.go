@@ -411,22 +411,24 @@ var (
 )
 
 type PatchRef struct {
-	Group     string
-	Kind      string
-	Namespace string
-	Name      string
-	PatchType types.PatchType
-	Patch     []byte
+	Group       string
+	Kind        string
+	Namespace   string
+	Name        string
+	SubResource string
+	PatchType   types.PatchType
+	Patch       []byte
 }
 
 func NewPatchRef(action PatchAction) PatchRef {
 	return PatchRef{
-		Group:     action.GetResource().Group,
-		Kind:      action.GetResource().Resource,
-		Namespace: action.GetNamespace(),
-		Name:      action.GetName(),
-		PatchType: action.GetPatchType(),
-		Patch:     action.GetPatch(),
+		Group:       action.GetResource().Group,
+		Kind:        action.GetResource().Resource,
+		Namespace:   action.GetNamespace(),
+		Name:        action.GetName(),
+		SubResource: action.GetSubresource(),
+		PatchType:   action.GetPatchType(),
+		Patch:       action.GetPatch(),
 	}
 }
 
