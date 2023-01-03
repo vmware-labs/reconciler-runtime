@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -41,6 +42,8 @@ type SubReconcilerTestCase struct {
 	Resource client.Object
 	// GivenStashedValues adds these items to the stash passed into the reconciler. Factories are resolved to their object.
 	GivenStashedValues map[reconcilers.StashKey]interface{}
+	// WithClientBuilder allows a test to modify the fake client initialization.
+	WithClientBuilder func(*fake.ClientBuilder) *fake.ClientBuilder
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
@@ -181,6 +184,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		Scheme:                  scheme,
 		GivenObjects:            append(tc.GivenObjects, tc.Resource),
 		APIGivenObjects:         append(tc.APIGivenObjects, tc.Resource),
+		WithClientBuilder:       tc.WithClientBuilder,
 		WithReactors:            tc.WithReactors,
 		GivenTracks:             tc.GivenTracks,
 		ExpectTracks:            tc.ExpectTracks,

@@ -17,6 +17,7 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -38,6 +39,8 @@ type AdmissionWebhookTestCase struct {
 	Request *admission.Request
 	// HTTPRequest is the http request used to create the admission request object. If not defined, a minimal request is provided.
 	HTTPRequest *http.Request
+	// WithClientBuilder allows a test to modify the fake client initialization.
+	WithClientBuilder func(*fake.ClientBuilder) *fake.ClientBuilder
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
@@ -146,6 +149,7 @@ func (tc *AdmissionWebhookTestCase) Run(t *testing.T, scheme *runtime.Scheme, fa
 		Scheme:                  scheme,
 		GivenObjects:            tc.GivenObjects,
 		APIGivenObjects:         tc.APIGivenObjects,
+		WithClientBuilder:       tc.WithClientBuilder,
 		WithReactors:            tc.WithReactors,
 		GivenTracks:             tc.GivenTracks,
 		ExpectTracks:            tc.ExpectTracks,

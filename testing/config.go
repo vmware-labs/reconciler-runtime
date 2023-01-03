@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 // ExpectConfig encompasses the creation of a config object using given state, captures observed
@@ -41,6 +42,8 @@ type ExpectConfig struct {
 	GivenObjects []client.Object
 	// APIGivenObjects contains objects that are only available via an API reader instead of the normal cache
 	APIGivenObjects []client.Object
+	// WithClientBuilder allows a test to modify the fake client initialization.
+	WithClientBuilder func(*fake.ClientBuilder) *fake.ClientBuilder
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
@@ -88,13 +91,13 @@ func (c *ExpectConfig) init() {
 			apiGivenObjects[i] = c.APIGivenObjects[i].DeepCopyObject().(client.Object)
 		}
 
-		c.client = NewFakeClient(c.Scheme, givenObjects...)
+		c.client = c.createClient(givenObjects)
 		for i := range c.WithReactors {
 			// in reverse order since we prepend
 			reactor := c.WithReactors[len(c.WithReactors)-1-i]
 			c.client.PrependReactor("*", "*", reactor)
 		}
-		c.apiReader = NewFakeClient(c.Scheme, apiGivenObjects...)
+		c.apiReader = c.createClient(apiGivenObjects)
 		c.recorder = &eventRecorder{
 			events: []Event{},
 			scheme: c.Scheme,
@@ -102,6 +105,18 @@ func (c *ExpectConfig) init() {
 		c.tracker = createTracker(c.GivenTracks)
 		c.observedErrors = []string{}
 	})
+}
+
+func (c *ExpectConfig) createClient(objs []client.Object) *clientWrapper {
+	builder := fake.NewClientBuilder()
+
+	builder.WithScheme(c.Scheme)
+	builder.WithObjects(prepareObjects(objs)...)
+	if c.WithClientBuilder != nil {
+		builder = c.WithClientBuilder(builder)
+	}
+
+	return NewFakeClientWrapper(builder.Build())
 }
 
 // Config returns the Config object. This method should only be called once. Subsequent calls are

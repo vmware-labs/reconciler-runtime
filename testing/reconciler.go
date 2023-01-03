@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -41,6 +42,8 @@ type ReconcilerTestCase struct {
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
+	// WithClientBuilder allows a test to modify the fake client initialization.
+	WithClientBuilder func(*fake.ClientBuilder) *fake.ClientBuilder
 	// GivenObjects build the kubernetes objects which are present at the onset of reconciliation
 	GivenObjects []client.Object
 	// APIGivenObjects contains objects that are only available via an API reader instead of the normal cache
@@ -157,6 +160,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 		Scheme:                  scheme,
 		GivenObjects:            tc.GivenObjects,
 		APIGivenObjects:         tc.APIGivenObjects,
+		WithClientBuilder:       tc.WithClientBuilder,
 		WithReactors:            tc.WithReactors,
 		GivenTracks:             tc.GivenTracks,
 		ExpectTracks:            tc.ExpectTracks,
