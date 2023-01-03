@@ -27,6 +27,7 @@ type clientWrapper struct {
 	PatchActions            []PatchAction
 	DeleteActions           []DeleteAction
 	DeleteCollectionActions []DeleteCollectionAction
+	StatusCreateActions     []objectAction
 	StatusUpdateActions     []objectAction
 	StatusPatchActions      []PatchAction
 	genCount                int
@@ -268,21 +269,59 @@ func (w *clientWrapper) DeleteAllOf(ctx context.Context, obj client.Object, opts
 	return w.client.DeleteAllOf(ctx, obj, opts...)
 }
 
-func (w *clientWrapper) Status() client.StatusWriter {
-	return &statusWriterWrapper{
-		statusWriter:  w.client.Status(),
-		clientWrapper: w,
+func (w *clientWrapper) SubResource(subResource string) client.SubResourceClient {
+	return &subResourceClientWrapper{
+		subResourceWriter: w.client.SubResource(subResource),
+		clientWrapper:     w,
 	}
 }
 
-type statusWriterWrapper struct {
-	statusWriter  client.StatusWriter
-	clientWrapper *clientWrapper
+func (w *clientWrapper) Status() client.SubResourceWriter {
+	return w.SubResource("status")
 }
 
-var _ client.StatusWriter = &statusWriterWrapper{}
+type subResourceClientWrapper struct {
+	subResourceWriter client.SubResourceWriter
+	subResourceReader client.SubResourceReader
+	clientWrapper     *clientWrapper
+}
 
-func (w *statusWriterWrapper) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+var _ client.SubResourceClient = &subResourceClientWrapper{}
+
+func (w *subResourceClientWrapper) Get(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceGetOption) error {
+	gvr, namespace, name, err := w.clientWrapper.objmeta(obj)
+	if err != nil {
+		return err
+	}
+
+	// call reactor chain
+	err = w.clientWrapper.react(clientgotesting.NewGetSubresourceAction(gvr, namespace, name, subResource.GetName()))
+	if err != nil {
+		return err
+	}
+
+	return w.clientWrapper.SubResource(subResource.GetName()).Get(ctx, obj, subResource, opts...)
+}
+
+func (w *subResourceClientWrapper) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
+	gvr, namespace, _, err := w.clientWrapper.objmeta(obj)
+	if err != nil {
+		return err
+	}
+
+	// capture action
+	w.clientWrapper.StatusCreateActions = append(w.clientWrapper.StatusCreateActions, clientgotesting.NewCreateSubresourceAction(gvr, obj.GetName(), "status", namespace, obj.DeepCopyObject()))
+
+	// call reactor chain
+	err = w.clientWrapper.react(clientgotesting.NewCreateSubresourceAction(gvr, obj.GetName(), "status", namespace, obj))
+	if err != nil {
+		return err
+	}
+
+	return w.subResourceWriter.Create(ctx, obj, subResource, opts...)
+}
+
+func (w *subResourceClientWrapper) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
 	gvr, namespace, _, err := w.clientWrapper.objmeta(obj)
 	if err != nil {
 		return err
@@ -297,10 +336,10 @@ func (w *statusWriterWrapper) Update(ctx context.Context, obj client.Object, opt
 		return err
 	}
 
-	return w.statusWriter.Update(ctx, obj, opts...)
+	return w.subResourceWriter.Update(ctx, obj, opts...)
 }
 
-func (w *statusWriterWrapper) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (w *subResourceClientWrapper) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 	gvr, _, _, err := w.clientWrapper.objmeta(obj)
 	if err != nil {
 		return err
@@ -319,7 +358,7 @@ func (w *statusWriterWrapper) Patch(ctx context.Context, obj client.Object, patc
 		return err
 	}
 
-	return w.statusWriter.Patch(ctx, obj, patch, opts...)
+	return w.subResourceWriter.Patch(ctx, obj, patch, opts...)
 }
 
 // InduceFailure is used in conjunction with reconciler test's WithReactors field.
