@@ -35,18 +35,18 @@ type clientWrapper struct {
 
 var _ client.Client = &clientWrapper{}
 
+// Deprecated NewFakeClient use NewFakeClientWrapper
 func NewFakeClient(scheme *runtime.Scheme, objs ...client.Object) *clientWrapper {
-	o := make([]runtime.Object, len(objs))
-	for i := range objs {
-		obj := objs[i].DeepCopyObject().(client.Object)
-		// default to a non-zero creation timestamp
-		if obj.GetCreationTimestamp().Time.IsZero() {
-			obj.SetCreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
-		}
-		o[i] = obj
-	}
-	client := &clientWrapper{
-		client:                  fakeclient.NewFakeClientWithScheme(scheme, o...),
+	builder := fakeclient.NewClientBuilder()
+	builder = builder.WithScheme(scheme)
+	builder = builder.WithObjects(prepareObjects(objs)...)
+
+	return NewFakeClientWrapper(builder.Build())
+}
+
+func NewFakeClientWrapper(client client.Client) *clientWrapper {
+	c := &clientWrapper{
+		client:                  client,
 		CreateActions:           []objectAction{},
 		UpdateActions:           []objectAction{},
 		PatchActions:            []PatchAction{},
@@ -58,22 +58,35 @@ func NewFakeClient(scheme *runtime.Scheme, objs ...client.Object) *clientWrapper
 		reactionChain:           []Reactor{},
 	}
 	// generate names on create
-	client.AddReactor("create", "*", func(action Action) (bool, runtime.Object, error) {
+	c.AddReactor("create", "*", func(action Action) (bool, runtime.Object, error) {
 		if createAction, ok := action.(CreateAction); ok && action.GetSubresource() == "" {
 			obj := createAction.GetObject()
 			if accessor, ok := obj.(metav1.ObjectMetaAccessor); ok {
 				objmeta := accessor.GetObjectMeta()
 				if objmeta.GetName() == "" && objmeta.GetGenerateName() != "" {
-					client.genCount++
+					c.genCount++
 					// mutate the existing obj
-					objmeta.SetName(fmt.Sprintf("%s%03d", objmeta.GetGenerateName(), client.genCount))
+					objmeta.SetName(fmt.Sprintf("%s%03d", objmeta.GetGenerateName(), c.genCount))
 				}
 			}
 		}
 		// never handle the action
 		return false, nil, nil
 	})
-	return client
+	return c
+}
+
+func prepareObjects(objs []client.Object) []client.Object {
+	o := make([]client.Object, len(objs))
+	for i := range objs {
+		obj := objs[i].DeepCopyObject().(client.Object)
+		// default to a non-zero creation timestamp
+		if obj.GetCreationTimestamp().Time.IsZero() {
+			obj.SetCreationTimestamp(metav1.NewTime(time.UnixMilli(1000)))
+		}
+		o[i] = obj
+	}
+	return o
 }
 
 func (w *clientWrapper) AddReactor(verb, kind string, reaction ReactionFunc) {
