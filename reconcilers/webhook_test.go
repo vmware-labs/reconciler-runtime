@@ -77,8 +77,8 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 				AdmissionResponse: response.DieRelease(),
 			},
 			Metadata: map[string]interface{}{
-				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
-					return &reconcilers.SyncReconciler{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
 						Sync: func(ctx context.Context, resource *resources.TestResource) error {
 							return nil
 						},
@@ -105,8 +105,8 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 				},
 			},
 			Metadata: map[string]interface{}{
-				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
-					return &reconcilers.SyncReconciler{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
 						Sync: func(ctx context.Context, resource *resources.TestResource) error {
 							resource.Spec.Fields = map[string]string{
 								"hello": "world",
@@ -133,8 +133,8 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 					DieRelease(),
 			},
 			Metadata: map[string]interface{}{
-				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
-					return &reconcilers.SyncReconciler{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
 						Sync: func(ctx context.Context, resource *resources.TestResource) error {
 							return fmt.Errorf("reconcile error")
 						},
@@ -160,8 +160,8 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 					DieRelease(),
 			},
 			Metadata: map[string]interface{}{
-				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
-					return &reconcilers.SyncReconciler{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
 						Sync: func(ctx context.Context, resource *resources.TestResource) error {
 							return nil
 						},
@@ -186,8 +186,8 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 				AdmissionResponse: response.DieRelease(),
 			},
 			Metadata: map[string]interface{}{
-				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
-					return &reconcilers.SyncReconciler{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
 						Sync: func(ctx context.Context, resource *resources.TestResource) error {
 							if resource.Spec.Fields["hello"] != "world" {
 								t.Errorf("expected field %q to have value %q", "hello", "world")
@@ -234,8 +234,8 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 				},
 			},
 			Metadata: map[string]interface{}{
-				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
-					return &reconcilers.SyncReconciler{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
 						Sync: func(ctx context.Context, resource *resources.TestResource) error {
 							c := reconcilers.RetrieveConfigOrDie(ctx)
 							cm := &corev1.ConfigMap{}
@@ -259,8 +259,8 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 				AdmissionResponse: response.DieRelease(),
 			},
 			Metadata: map[string]interface{}{
-				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
-					return &reconcilers.SyncReconciler{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
 						Sync: func(ctx context.Context, _ *resources.TestResource) error {
 							actualRequest := reconcilers.RetrieveAdmissionRequest(ctx)
 							expectedRequest := admission.Request{
@@ -305,9 +305,9 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 				AdmissionResponse: response.DieRelease(),
 			},
 			Metadata: map[string]interface{}{
-				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
-					return reconcilers.Sequence{
-						&reconcilers.SyncReconciler{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return reconcilers.Sequence[*resources.TestResource]{
+						&reconcilers.SyncReconciler[*resources.TestResource]{
 							Sync: func(ctx context.Context, _ *resources.TestResource) error {
 								// StashValue will panic if context is not setup for stashing
 								reconcilers.StashValue(ctx, reconcilers.StashKey("greeting"), "hello")
@@ -315,7 +315,7 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 								return nil
 							},
 						},
-						&reconcilers.SyncReconciler{
+						&reconcilers.SyncReconciler[*resources.TestResource]{
 							Sync: func(ctx context.Context, _ *resources.TestResource) error {
 								// StashValue will panic if context is not setup for stashing
 								greeting := reconcilers.RetrieveValue(ctx, reconcilers.StashKey("greeting"))
@@ -344,8 +344,8 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 				value := "test-value"
 				ctx = context.WithValue(ctx, key, value)
 
-				tc.Metadata["SubReconciler"] = func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler {
-					return &reconcilers.SyncReconciler{
+				tc.Metadata["SubReconciler"] = func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
 						Sync: func(ctx context.Context, resource *resources.TestResource) error {
 							if v := ctx.Value(key); v != value {
 								t.Errorf("expected %s to be in context", key)
@@ -367,9 +367,9 @@ func TestAdmissionWebhookAdapter(t *testing.T) {
 	}
 
 	wts.Run(t, scheme, func(t *testing.T, wtc *rtesting.AdmissionWebhookTestCase, c reconcilers.Config) *admission.Webhook {
-		return (&reconcilers.AdmissionWebhookAdapter{
+		return (&reconcilers.AdmissionWebhookAdapter[*resources.TestResource]{
 			Type:       &resources.TestResource{},
-			Reconciler: wtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler)(t, c),
+			Reconciler: wtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource])(t, c),
 			Config:     c,
 		}).Build()
 	})

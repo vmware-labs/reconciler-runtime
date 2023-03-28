@@ -11,7 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
@@ -19,8 +18,8 @@ import (
 func EnqueueTracked(ctx context.Context, by client.Object) handler.EventHandler {
 	c := RetrieveConfigOrDie(ctx)
 	return handler.EnqueueRequestsFromMapFunc(
-		func(a client.Object) []reconcile.Request {
-			var requests []reconcile.Request
+		func(a client.Object) []Request {
+			var requests []Request
 
 			gvks, _, err := c.Scheme().ObjectKinds(by)
 			if err != nil {
@@ -32,7 +31,7 @@ func EnqueueTracked(ctx context.Context, by client.Object) handler.EventHandler 
 				types.NamespacedName{Namespace: a.GetNamespace(), Name: a.GetName()},
 			)
 			for _, item := range c.Tracker.Lookup(ctx, key) {
-				requests = append(requests, reconcile.Request{NamespacedName: item})
+				requests = append(requests, Request{NamespacedName: item})
 			}
 
 			return requests

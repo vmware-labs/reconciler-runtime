@@ -17,7 +17,6 @@ import (
 	clientgotesting "k8s.io/client-go/testing"
 	ref "k8s.io/client-go/tools/reference"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	fakeclient "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 type clientWrapper struct {
@@ -34,15 +33,6 @@ type clientWrapper struct {
 }
 
 var _ client.Client = &clientWrapper{}
-
-// Deprecated NewFakeClient use NewFakeClientWrapper
-func NewFakeClient(scheme *runtime.Scheme, objs ...client.Object) *clientWrapper {
-	builder := fakeclient.NewClientBuilder()
-	builder = builder.WithScheme(scheme)
-	builder = builder.WithObjects(prepareObjects(objs)...)
-
-	return NewFakeClientWrapper(builder.Build())
-}
 
 func NewFakeClientWrapper(client client.Client) *clientWrapper {
 	c := &clientWrapper{

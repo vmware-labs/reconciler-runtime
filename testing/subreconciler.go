@@ -16,14 +16,12 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // SubReconcilerTestCase holds a single testcase of a sub reconciler test.
-type SubReconcilerTestCase struct {
+type SubReconcilerTestCase[Type client.Object] struct {
 	// Name is a descriptive name for this test suitable as a first argument to t.Run()
 	Name string
 	// Focus is true if and only if only this and any other focused tests are to be executed.
@@ -36,8 +34,6 @@ type SubReconcilerTestCase struct {
 
 	// inputs
 
-	// Deprecated use Resource
-	Parent client.Object
 	// Resource is the initial object passed to the sub reconciler
 	Resource client.Object
 	// GivenStashedValues adds these items to the stash passed into the reconciler. Factories are resolved to their object.
@@ -56,8 +52,6 @@ type SubReconcilerTestCase struct {
 
 	// side effects
 
-	// Deprecated use ExpectResource
-	ExpectParent client.Object
 	// ExpectResource is the expected reconciled resource as mutated after the sub reconciler, or nil if no modification
 	ExpectResource client.Object
 	// ExpectStashedValues ensures each value is stashed. Values in the stash that are not expected are ignored. Factories are resolved to their object.
@@ -92,7 +86,7 @@ type SubReconcilerTestCase struct {
 	// used to indicate the reconciler is misconfigured.
 	ShouldPanic bool
 	// ExpectedResult is compared to the result returned from the reconciler if there was no error
-	ExpectedResult controllerruntime.Result
+	ExpectedResult reconcilers.Result
 	// Verify provides the reconciliation Result and error for custom assertions
 	Verify VerifyFunc
 
@@ -101,21 +95,21 @@ type SubReconcilerTestCase struct {
 	// Prepare is called before the reconciler is executed. It is intended to prepare the broader
 	// environment before the specific test case is executed. For example, setting mock
 	// expectations, or adding values to the context,
-	Prepare func(t *testing.T, ctx context.Context, tc *SubReconcilerTestCase) (context.Context, error)
+	Prepare func(t *testing.T, ctx context.Context, tc *SubReconcilerTestCase[Type]) (context.Context, error)
 	// CleanUp is called after the test case is finished and all defined assertions complete.
 	// It is intended to clean up any state created in the Prepare step or during the test
 	// execution, or to make assertions for mocks.
-	CleanUp func(t *testing.T, ctx context.Context, tc *SubReconcilerTestCase) error
+	CleanUp func(t *testing.T, ctx context.Context, tc *SubReconcilerTestCase[Type]) error
 }
 
 // SubReconcilerTests represents a map of reconciler test cases. The map key is the name of each
 // test case.  Test cases are executed in random order.
-type SubReconcilerTests map[string]SubReconcilerTestCase
+type SubReconcilerTests[Type client.Object] map[string]SubReconcilerTestCase[Type]
 
 // Run executes the test cases.
-func (rt SubReconcilerTests) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
+func (rt SubReconcilerTests[T]) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory[T]) {
 	t.Helper()
-	rts := SubReconcilerTestSuite{}
+	rts := SubReconcilerTestSuite[T]{}
 	for name, rtc := range rt {
 		rtc.Name = name
 		rts = append(rts, rtc)
@@ -125,10 +119,10 @@ func (rt SubReconcilerTests) Run(t *testing.T, scheme *runtime.Scheme, factory S
 
 // SubReconcilerTestSuite represents a list of subreconciler test cases. The test cases are
 // executed in order.
-type SubReconcilerTestSuite []SubReconcilerTestCase
+type SubReconcilerTestSuite[Type client.Object] []SubReconcilerTestCase[Type]
 
 // Run executes the test case.
-func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
+func (tc *SubReconcilerTestCase[T]) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory[T]) {
 	t.Helper()
 	if tc.Skip {
 		t.SkipNow()
@@ -169,16 +163,6 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 		}()
 	}
 
-	// TODO remove deprecation shim
-	if tc.Resource == nil && tc.Parent != nil {
-		t.Log("Parent field is deprecated for SubReconcilerTestCase, use Resource instead")
-		tc.Resource = tc.Parent
-	}
-	if tc.ExpectResource == nil && tc.ExpectParent != nil {
-		t.Log("ExpectParent field is deprecated for SubReconcilerTestCase, use ExpectResource instead")
-		tc.ExpectResource = tc.ExpectParent
-	}
-
 	expectConfig := &ExpectConfig{
 		Name:                    "default",
 		Scheme:                  scheme,
@@ -209,12 +193,12 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	ctx = reconcilers.StashConfig(ctx, c)
 	ctx = reconcilers.StashOriginalConfig(ctx, c)
 
-	resource := tc.Resource.DeepCopyObject().(client.Object)
+	resource := tc.Resource.DeepCopyObject().(T)
 	if resource.GetResourceVersion() == "" {
 		// this value is also set by the test client when resource are added as givens
 		resource.SetResourceVersion("999")
 	}
-	ctx = reconcilers.StashRequest(ctx, reconcile.Request{
+	ctx = reconcilers.StashRequest(ctx, reconcilers.Request{
 		NamespacedName: types.NamespacedName{Namespace: resource.GetNamespace(), Name: resource.GetName()},
 	})
 	ctx = reconcilers.StashOriginalResourceType(ctx, resource.DeepCopyObject().(client.Object))
@@ -228,7 +212,7 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 	ctx = reconcilers.StashAdditionalConfigs(ctx, configs)
 
 	// Run the Reconcile we're testing.
-	result, err := func(ctx context.Context, resource client.Object) (reconcile.Result, error) {
+	result, err := func(ctx context.Context, resource T) (reconcilers.Result, error) {
 		if tc.ShouldPanic {
 			defer func() {
 				if r := recover(); r == nil {
@@ -283,9 +267,9 @@ func (tc *SubReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, facto
 }
 
 // Run executes the subreconciler test suite.
-func (ts SubReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory) {
+func (ts SubReconcilerTestSuite[T]) Run(t *testing.T, scheme *runtime.Scheme, factory SubReconcilerFactory[T]) {
 	t.Helper()
-	focused := SubReconcilerTestSuite{}
+	focused := SubReconcilerTestSuite[T]{}
 	for _, test := range ts {
 		if test.Focus {
 			focused = append(focused, test)
@@ -310,4 +294,4 @@ func (ts SubReconcilerTestSuite) Run(t *testing.T, scheme *runtime.Scheme, facto
 // SubReconcilerFactory returns a Reconciler.Interface to perform reconciliation of a test case,
 // ActionRecorderList/EventList to capture k8s actions/events produced during reconciliation
 // and FakeStatsReporter to capture stats.
-type SubReconcilerFactory func(t *testing.T, rtc *SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler
+type SubReconcilerFactory[Type client.Object] func(t *testing.T, rtc *SubReconcilerTestCase[Type], c reconcilers.Config) reconcilers.SubReconciler[Type]
