@@ -515,20 +515,6 @@ func TestCastResource_validate(t *testing.T) {
 			name:     "valid",
 			resource: &corev1.ConfigMap{},
 			reconciler: &CastResource[*corev1.ConfigMap, *corev1.Secret]{
-				Type: &corev1.Secret{},
-				Reconciler: &SyncReconciler[*corev1.Secret]{
-					Sync: func(ctx context.Context, resource *corev1.Secret) error {
-						return nil
-					},
-				},
-			},
-		},
-		{
-			name:     "missing type",
-			resource: &corev1.ConfigMap{},
-			reconciler: &CastResource[*corev1.ConfigMap, *corev1.Secret]{
-				Name: "missing type",
-				Type: nil,
 				Reconciler: &SyncReconciler[*corev1.Secret]{
 					Sync: func(ctx context.Context, resource *corev1.Secret) error {
 						return nil
@@ -541,7 +527,6 @@ func TestCastResource_validate(t *testing.T) {
 			resource: &corev1.ConfigMap{},
 			reconciler: &CastResource[*corev1.ConfigMap, *corev1.Secret]{
 				Name:       "missing reconciler",
-				Type:       &corev1.Secret{},
 				Reconciler: nil,
 			},
 			shouldErr: `CastResource "missing reconciler" must define Reconciler`,

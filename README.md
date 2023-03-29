@@ -357,6 +357,8 @@ Higher order reconcilers are SubReconcilers that do not perform work directly, b
 
 A [`CastResource`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#CastResource) (formerly CastParent) casts the ResourceReconciler's type by projecting the resource data onto a new struct. Casting the reconciled resource is useful to create cross cutting reconcilers that can operate on common portion of multiple  resource kinds, commonly referred to as a duck type.
 
+The `CastResource` can also be used to bridge a `SubReconciler` for a specific struct to a generic SubReconciler that can process any object by using `client.Object` as the CastType generic type. In this case, the resource is passed through without coercion.
+
 **Example:**
 
 ```go

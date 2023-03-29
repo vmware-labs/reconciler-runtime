@@ -2605,7 +2605,6 @@ func TestCastResource(t *testing.T) {
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *appsv1.Deployment]{
-						Type: &appsv1.Deployment{},
 						Reconciler: &reconcilers.SyncReconciler[*appsv1.Deployment]{
 							Sync: func(ctx context.Context, resource *appsv1.Deployment) error {
 								reconcilers.RetrieveConfigOrDie(ctx).
@@ -2634,7 +2633,6 @@ func TestCastResource(t *testing.T) {
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *appsv1.Deployment]{
-						Type: &appsv1.Deployment{},
 						Reconciler: &reconcilers.SyncReconciler[*appsv1.Deployment]{
 							Sync: func(ctx context.Context, resource *appsv1.Deployment) error {
 								// mutation that exists on the original resource and will be reflected
@@ -2653,7 +2651,6 @@ func TestCastResource(t *testing.T) {
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *appsv1.Deployment]{
-						Type: &appsv1.Deployment{},
 						Reconciler: &reconcilers.SyncReconciler[*appsv1.Deployment]{
 							SyncWithResult: func(ctx context.Context, resource *appsv1.Deployment) (reconcilers.Result, error) {
 								return reconcilers.Result{Requeue: true}, nil
@@ -2669,7 +2666,6 @@ func TestCastResource(t *testing.T) {
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *appsv1.Deployment]{
-						Type: &appsv1.Deployment{},
 						Reconciler: &reconcilers.SyncReconciler[*appsv1.Deployment]{
 							Sync: func(ctx context.Context, resource *appsv1.Deployment) error {
 								return fmt.Errorf("subreconciler error")
@@ -2688,7 +2684,6 @@ func TestCastResource(t *testing.T) {
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *resources.TestResource]{
-						Type: &resources.TestResource{},
 						Reconciler: &reconcilers.SyncReconciler[*resources.TestResource]{
 							Sync: func(ctx context.Context, resource *resources.TestResource) error {
 								c.Recorder.Event(resource, corev1.EventTypeNormal, "Test", resource.Name)
@@ -2708,7 +2703,6 @@ func TestCastResource(t *testing.T) {
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *resources.TestResource]{
-						Type: &resources.TestResource{},
 						Reconciler: &reconcilers.SyncReconciler[*resources.TestResource]{
 							Sync: func(ctx context.Context, resource *resources.TestResource) error {
 								c.Recorder.Event(resource, corev1.EventTypeNormal, "Test", resource.Name)
