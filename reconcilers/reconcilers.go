@@ -1298,17 +1298,20 @@ func (r *CastResource[T, CT]) init() {
 func (r *CastResource[T, CT]) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
 	r.init()
 
-	var nilCT CT
-	emptyCT := newEmpty(nilCT).(CT)
+	if !r.noop {
+		var nilCT CT
+		emptyCT := newEmpty(nilCT).(CT)
 
-	log := logr.FromContextOrDiscard(ctx).
-		WithName(r.Name).
-		WithValues("castResourceType", typeName(emptyCT))
-	ctx = logr.NewContext(ctx, log)
+		log := logr.FromContextOrDiscard(ctx).
+			WithName(r.Name).
+			WithValues("castResourceType", typeName(emptyCT))
+		ctx = logr.NewContext(ctx, log)
 
-	if err := r.validate(ctx); err != nil {
-		return err
+		if err := r.validate(ctx); err != nil {
+			return err
+		}
 	}
+
 	return r.Reconciler.SetupWithManager(ctx, mgr, bldr)
 }
 
