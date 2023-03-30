@@ -538,20 +538,6 @@ func (r *AggregateReconciler[T]) validate(ctx context.Context) error {
 		return fmt.Errorf("AggregateReconciler %q must define Reconciler and/or DesiredResource", r.Name)
 	}
 
-	// validate DesiredResource function signature:
-	//     nil
-	//     func(ctx context.Context, resource client.Object) (client.Object, error)
-	if r.DesiredResource != nil {
-		fn := reflect.TypeOf(r.DesiredResource)
-		if fn.NumIn() != 2 || fn.NumOut() != 2 ||
-			!reflect.TypeOf((*context.Context)(nil)).Elem().AssignableTo(fn.In(0)) ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.In(1)) ||
-			!reflect.TypeOf(r.Type).AssignableTo(fn.Out(0)) ||
-			!reflect.TypeOf((*error)(nil)).Elem().AssignableTo(fn.Out(1)) {
-			return fmt.Errorf("AggregateReconciler %q must implement DesiredResource: nil | func(context.Context, %s) (%s, error), found: %s", r.Name, reflect.TypeOf(r.Type), reflect.TypeOf(r.Type), fn)
-		}
-	}
-
 	return nil
 }
 
@@ -1223,12 +1209,7 @@ func (r *ChildReconciler[T, CT, CLT]) listOptions(ctx context.Context, resource 
 			client.InNamespace(resource.GetNamespace()),
 		}
 	}
-	fn := reflect.ValueOf(r.ListOptions)
-	out := fn.Call([]reflect.Value{
-		reflect.ValueOf(ctx),
-		reflect.ValueOf(resource),
-	})
-	return out[0].Interface().([]client.ListOption)
+	return r.ListOptions(ctx, resource)
 }
 
 func (r *ChildReconciler[T, CT, CLT]) ourChild(resource T, obj CT) bool {
@@ -1239,16 +1220,7 @@ func (r *ChildReconciler[T, CT, CLT]) ourChild(resource T, obj CT) bool {
 	if r.OurChild == nil {
 		return true
 	}
-	fn := reflect.ValueOf(r.OurChild)
-	out := fn.Call([]reflect.Value{
-		reflect.ValueOf(resource),
-		reflect.ValueOf(obj),
-	})
-	keep := true
-	if out[0].Kind() == reflect.Bool {
-		keep = out[0].Bool()
-	}
-	return keep
+	return r.OurChild(resource, obj)
 }
 
 // Sequence is a collection of SubReconcilers called in order. If a
@@ -1765,16 +1737,7 @@ func (r *ResourceManager[T]) sanitize(resource T) interface{} {
 
 	// avoid accidental mutations in Sanitize method
 	resource = resource.DeepCopyObject().(T)
-
-	fn := reflect.ValueOf(r.Sanitize)
-	out := fn.Call([]reflect.Value{
-		reflect.ValueOf(resource),
-	})
-	var sanitized interface{}
-	if !out[0].IsNil() {
-		sanitized = out[0].Interface()
-	}
-	return sanitized
+	return r.Sanitize(resource)
 }
 
 func typeName(i interface{}) string {
