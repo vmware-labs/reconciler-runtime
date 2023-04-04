@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/vmware-labs/reconciler-runtime/internal"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
 
@@ -126,7 +127,7 @@ type ResourceReconciler[Type client.Object] struct {
 
 func (r *ResourceReconciler[T]) init() {
 	r.lazyInit.Do(func() {
-		if isNil(r.Type) {
+		if internal.IsNil(r.Type) {
 			var nilT T
 			r.Type = newEmpty(nilT).(T)
 		}
@@ -460,7 +461,7 @@ type AggregateReconciler[Type client.Object] struct {
 
 func (r *AggregateReconciler[T]) init() {
 	r.lazyInit.Do(func() {
-		if isNil(r.Type) {
+		if internal.IsNil(r.Type) {
 			var nilT T
 			r.Type = newEmpty(nilT).(T)
 		}
@@ -1018,11 +1019,11 @@ type ChildReconciler[Type, ChildType client.Object, ChildListType client.ObjectL
 
 func (r *ChildReconciler[T, CT, CLT]) init() {
 	r.lazyInit.Do(func() {
-		if isNil(r.ChildType) {
+		if internal.IsNil(r.ChildType) {
 			var nilCT CT
 			r.ChildType = newEmpty(nilCT).(CT)
 		}
-		if isNil(r.ChildListType) {
+		if internal.IsNil(r.ChildListType) {
 			var nilCLT CLT
 			r.ChildListType = newEmpty(nilCLT).(CLT)
 		}
@@ -1164,7 +1165,7 @@ func (r *ChildReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource T)
 		}
 		return nilCT, err
 	}
-	if !isNil(desired) {
+	if !internal.IsNil(desired) {
 		if !r.SkipOwnerReference {
 			if err := ctrl.SetControllerReference(resource, desired, c.Scheme()); err != nil {
 				return nilCT, err
@@ -1590,7 +1591,7 @@ type ResourceManager[Type client.Object] struct {
 
 func (r *ResourceManager[T]) init() {
 	r.lazyInit.Do(func() {
-		if isNil(r.Type) {
+		if internal.IsNil(r.Type) {
 			var nilT T
 			r.Type = newEmpty(nilT).(T)
 		}
@@ -1627,7 +1628,7 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 	pc := RetrieveOriginalConfigOrDie(ctx)
 	c := RetrieveConfigOrDie(ctx)
 
-	if (isNil(actual) || actual.GetCreationTimestamp().Time.IsZero()) && isNil(desired) {
+	if (internal.IsNil(actual) || actual.GetCreationTimestamp().Time.IsZero()) && internal.IsNil(desired) {
 		if err := ClearFinalizer(ctx, resource, r.Finalizer); err != nil {
 			return nilT, err
 		}
@@ -1635,7 +1636,7 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 	}
 
 	// delete resource if no longer needed
-	if isNil(desired) {
+	if internal.IsNil(desired) {
 		if !actual.GetCreationTimestamp().Time.IsZero() && actual.GetDeletionTimestamp() == nil {
 			log.Info("deleting unwanted resource", "resource", namespaceName(actual))
 			if err := c.Delete(ctx, actual); err != nil {
@@ -1734,7 +1735,7 @@ func (r *ResourceManager[T]) sanitize(resource T) interface{} {
 	if r.Sanitize == nil {
 		return resource
 	}
-	if isNil(resource) {
+	if internal.IsNil(resource) {
 		return nil
 	}
 
@@ -1878,25 +1879,4 @@ func replaceWithEmpty(x interface{}) {
 func newEmpty(x interface{}) interface{} {
 	t := reflect.TypeOf(x).Elem()
 	return reflect.New(t).Interface()
-}
-
-// isNil returns true if the value is nilable and nil
-func isNil(val interface{}) bool {
-	v := reflect.ValueOf(val)
-	switch v.Kind() {
-	case reflect.Chan:
-		return v.IsNil()
-	case reflect.Func:
-		return v.IsNil()
-	case reflect.Interface:
-		return v.IsNil()
-	case reflect.Map:
-		return v.IsNil()
-	case reflect.Ptr:
-		return v.IsNil()
-	case reflect.Slice:
-		return v.IsNil()
-	default:
-		return false
-	}
 }

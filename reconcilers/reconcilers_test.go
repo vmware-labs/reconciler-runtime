@@ -56,7 +56,7 @@ func TestConfig_TrackAndGet(t *testing.T) {
 
 	rts := rtesting.SubReconcilerTests[*resources.TestResource]{
 		"track and get": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMap,
 			},
@@ -65,7 +65,7 @@ func TestConfig_TrackAndGet(t *testing.T) {
 			},
 		},
 		"track with not found get": {
-			Resource:  resource,
+			Resource:  resource.DieReleasePtr(),
 			ShouldErr: true,
 			ExpectTracks: []rtesting.TrackRequest{
 				rtesting.NewTrackRequest(configMap, resource, scheme),
@@ -1234,7 +1234,7 @@ func TestSyncReconciler(t *testing.T) {
 
 	rts := rtesting.SubReconcilerTests[*resources.TestResource]{
 		"sync success": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -1246,7 +1246,7 @@ func TestSyncReconciler(t *testing.T) {
 			},
 		},
 		"sync error": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -1259,7 +1259,7 @@ func TestSyncReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"missing sync method": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -1270,7 +1270,7 @@ func TestSyncReconciler(t *testing.T) {
 			ShouldPanic: true,
 		},
 		"should not finalize non-deleted resources": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -1290,7 +1290,8 @@ func TestSyncReconciler(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -1310,7 +1311,8 @@ func TestSyncReconciler(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -1330,7 +1332,8 @@ func TestSyncReconciler(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -1350,7 +1353,8 @@ func TestSyncReconciler(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -1365,7 +1369,8 @@ func TestSyncReconciler(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -1381,7 +1386,7 @@ func TestSyncReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"context can be augmented in Prepare and accessed in Cleanup": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Prepare: func(t *testing.T, ctx context.Context, tc *rtesting.SubReconcilerTestCase[*resources.TestResource]) (context.Context, error) {
 				key := "test-key"
 				value := "test-value"
@@ -1492,7 +1497,7 @@ func TestChildReconciler(t *testing.T) {
 
 	rts := rtesting.SubReconcilerTests[*resources.TestResource]{
 		"preserve no child": {
-			Resource: resourceReady,
+			Resource: resourceReady.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return defaultChildReconciler(c)
@@ -1506,7 +1511,8 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -1523,7 +1529,8 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -1546,7 +1553,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return defaultChildReconciler(c)
@@ -1562,7 +1570,8 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectCreates: []client.Object{
 				configMapCreate,
 			},
@@ -1571,7 +1580,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					r := defaultChildReconciler(c)
@@ -1600,7 +1610,8 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectCreates: []client.Object{
 				configMapCreate.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -1626,7 +1637,8 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -1647,7 +1659,8 @@ func TestChildReconciler(t *testing.T) {
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
 					d.AddField("new", "field")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectUpdates: []client.Object{
 				configMapGiven.
 					AddData("new", "field"),
@@ -1664,7 +1677,8 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -1698,7 +1712,8 @@ func TestChildReconciler(t *testing.T) {
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
 					d.AddField("new", "field")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectUpdates: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -1715,7 +1730,8 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -1752,7 +1768,8 @@ func TestChildReconciler(t *testing.T) {
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
 					d.AddField("new", "field")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectUpdates: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -1772,7 +1789,7 @@ func TestChildReconciler(t *testing.T) {
 			},
 		},
 		"delete child": {
-			Resource: resourceReady,
+			Resource: resourceReady.DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -1793,7 +1810,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resourceReady.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.Finalizers(testFinalizer, "some.other.finalizer")
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -1818,7 +1836,7 @@ func TestChildReconciler(t *testing.T) {
 			},
 		},
 		"ignore extraneous children": {
-			Resource: resourceReady,
+			Resource: resourceReady.DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -1836,7 +1854,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -1858,7 +1877,8 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectEvents: []rtesting.Event{
 				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Deleted",
 					`Deleted ConfigMap %q`, "extra-child-1"),
@@ -1880,7 +1900,8 @@ func TestChildReconciler(t *testing.T) {
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
 					d.Finalizers(testFinalizer)
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -1909,7 +1930,8 @@ func TestChildReconciler(t *testing.T) {
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
 					d.Finalizers(testFinalizer)
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					r := defaultChildReconciler(c)
@@ -1928,7 +1950,8 @@ func TestChildReconciler(t *testing.T) {
 					d.DeletionTimestamp(&now)
 					d.Finalizers()
 					d.ResourceVersion("1000")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectPatches: []rtesting.PatchRef{
 				{
 					Group:     "testing.reconciler.runtime",
@@ -1945,7 +1968,8 @@ func TestChildReconciler(t *testing.T) {
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
 					d.Finalizers(testFinalizer)
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -1967,7 +1991,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resourceReady.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			WithReactors: []rtesting.ReactionFunc{
 				rtesting.InduceFailure("create", "ConfigMap", rtesting.InduceFailureOpts{
 					Error: apierrs.NewAlreadyExists(schema.GroupResource{}, testName),
@@ -1987,7 +2012,8 @@ func TestChildReconciler(t *testing.T) {
 						diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionFalse).
 							Reason("NameConflict").Message(`"test-resource" already exists`),
 					)
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectEvents: []rtesting.Event{
 				rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "CreationFailed",
 					"Failed to create ConfigMap %q:  %q already exists", testName, testName),
@@ -2000,7 +2026,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resourceReady.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			APIGivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -2031,7 +2058,8 @@ func TestChildReconciler(t *testing.T) {
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
 					d.AddField("immutable", "field")
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven.
 					AddData("immutable", "field"),
@@ -2047,14 +2075,15 @@ func TestChildReconciler(t *testing.T) {
 			},
 		},
 		"status only reconcile": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
 			ExpectResource: resourceReady.
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					r := defaultChildReconciler(c)
@@ -2069,7 +2098,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					r := defaultChildReconciler(c)
@@ -2089,7 +2119,8 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectCreates: []client.Object{
 				configMapCreate,
 			},
@@ -2098,7 +2129,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					r := defaultChildReconciler(c)
@@ -2119,13 +2151,14 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectCreates: []client.Object{
 				configMapCreate,
 			},
 		},
 		"error listing children": {
-			Resource: resourceReady,
+			Resource: resourceReady.DieReleasePtr(),
 			WithReactors: []rtesting.ReactionFunc{
 				rtesting.InduceFailure("list", "ConfigMapList"),
 			},
@@ -2140,7 +2173,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			WithReactors: []rtesting.ReactionFunc{
 				rtesting.InduceFailure("create", "ConfigMap"),
 			},
@@ -2162,7 +2196,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					r := defaultChildReconciler(c)
@@ -2195,7 +2230,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resourceReady.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.Finalizers(testFinalizer)
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					r := defaultChildReconciler(c)
@@ -2232,7 +2268,8 @@ func TestChildReconciler(t *testing.T) {
 				}).
 				StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -2255,7 +2292,7 @@ func TestChildReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"error deleting child": {
-			Resource: resourceReady,
+			Resource: resourceReady.DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven,
 			},
@@ -2280,7 +2317,8 @@ func TestChildReconciler(t *testing.T) {
 			Resource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.AddField("foo", "bar")
-				}),
+				}).
+				DieReleasePtr(),
 			GivenObjects: []client.Object{
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
@@ -2309,7 +2347,7 @@ func TestChildReconciler(t *testing.T) {
 			ShouldErr: true,
 		},
 		"error creating desired child": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					r := defaultChildReconciler(c)
@@ -2348,7 +2386,7 @@ func TestSequence(t *testing.T) {
 
 	rts := rtesting.SubReconcilerTests[*resources.TestResource]{
 		"sub reconciler erred": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2363,7 +2401,7 @@ func TestSequence(t *testing.T) {
 			ShouldErr: true,
 		},
 		"preserves result, Requeue": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -2376,7 +2414,7 @@ func TestSequence(t *testing.T) {
 			ExpectedResult: reconcilers.Result{Requeue: true},
 		},
 		"preserves result, RequeueAfter": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2391,7 +2429,7 @@ func TestSequence(t *testing.T) {
 			ExpectedResult: reconcilers.Result{RequeueAfter: 1 * time.Minute},
 		},
 		"ignores result on err": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2407,7 +2445,7 @@ func TestSequence(t *testing.T) {
 			ShouldErr:      true,
 		},
 		"Requeue + empty => Requeue": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2427,7 +2465,7 @@ func TestSequence(t *testing.T) {
 			ExpectedResult: reconcilers.Result{Requeue: true},
 		},
 		"empty + Requeue => Requeue": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2447,7 +2485,7 @@ func TestSequence(t *testing.T) {
 			ExpectedResult: reconcilers.Result{Requeue: true},
 		},
 		"RequeueAfter + empty => RequeueAfter": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2467,7 +2505,7 @@ func TestSequence(t *testing.T) {
 			ExpectedResult: reconcilers.Result{RequeueAfter: 1 * time.Minute},
 		},
 		"empty + RequeueAfter => RequeueAfter": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2487,7 +2525,7 @@ func TestSequence(t *testing.T) {
 			ExpectedResult: reconcilers.Result{RequeueAfter: 1 * time.Minute},
 		},
 		"RequeueAfter + Requeue => RequeueAfter": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2507,7 +2545,7 @@ func TestSequence(t *testing.T) {
 			ExpectedResult: reconcilers.Result{RequeueAfter: 1 * time.Minute},
 		},
 		"Requeue + RequeueAfter => RequeueAfter": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2527,7 +2565,7 @@ func TestSequence(t *testing.T) {
 			ExpectedResult: reconcilers.Result{RequeueAfter: 1 * time.Minute},
 		},
 		"RequeueAfter(1m) + RequeueAfter(2m) => RequeueAfter(1m)": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2547,7 +2585,7 @@ func TestSequence(t *testing.T) {
 			ExpectedResult: reconcilers.Result{RequeueAfter: 1 * time.Minute},
 		},
 		"RequeueAfter(2m) + RequeueAfter(1m) => RequeueAfter(1m)": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return reconcilers.Sequence[*resources.TestResource]{
@@ -2601,7 +2639,8 @@ func TestCastResource(t *testing.T) {
 							d.ContainerDie("test-container", func(d *diecorev1.ContainerDie) {})
 						})
 					})
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *appsv1.Deployment]{
@@ -2621,7 +2660,7 @@ func TestCastResource(t *testing.T) {
 			},
 		},
 		"cast mutation": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			ExpectResource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.TemplateDie(func(d *diecorev1.PodTemplateSpecDie) {
@@ -2629,7 +2668,8 @@ func TestCastResource(t *testing.T) {
 							d.Name("mutation")
 						})
 					})
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *appsv1.Deployment]{
@@ -2647,7 +2687,7 @@ func TestCastResource(t *testing.T) {
 			},
 		},
 		"return subreconciler result": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *appsv1.Deployment]{
@@ -2662,7 +2702,7 @@ func TestCastResource(t *testing.T) {
 			ExpectedResult: reconcilers.Result{Requeue: true},
 		},
 		"return subreconciler err": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *appsv1.Deployment]{
@@ -2680,7 +2720,8 @@ func TestCastResource(t *testing.T) {
 			Resource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.ErrOnMarshal(true)
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *resources.TestResource]{
@@ -2699,7 +2740,8 @@ func TestCastResource(t *testing.T) {
 			Resource: resource.
 				SpecDie(func(d *dies.TestResourceSpecDie) {
 					d.ErrOnUnmarshal(true)
-				}),
+				}).
+				DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *resources.TestResource]{
@@ -2736,7 +2778,7 @@ func TestWithConfig(t *testing.T) {
 
 	rts := rtesting.SubReconcilerTests[*resources.TestResource]{
 		"with config": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, oc reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					c := reconcilers.Config{
@@ -2799,18 +2841,20 @@ func TestWithFinalizer(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.Finalizers(testFinalizer)
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectEvents: []rtesting.Event{
 				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Sync", ""),
 			},
 		},
 		"add finalizer": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			ExpectResource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.Finalizers(testFinalizer)
 					d.ResourceVersion("1000")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectEvents: []rtesting.Event{
 				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
 					`Patched finalizer %q`, testFinalizer),
@@ -2828,7 +2872,7 @@ func TestWithFinalizer(t *testing.T) {
 			},
 		},
 		"error adding finalizer": {
-			Resource: resource,
+			Resource: resource.DieReleasePtr(),
 			WithReactors: []rtesting.ReactionFunc{
 				rtesting.InduceFailure("patch", "TestResource"),
 			},
@@ -2853,12 +2897,14 @@ func TestWithFinalizer(t *testing.T) {
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(now)
 					d.Finalizers(testFinalizer)
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectResource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(now)
 					d.ResourceVersion("1000")
-				}),
+				}).
+				DieReleasePtr(),
 			ExpectEvents: []rtesting.Event{
 				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Finalize", ""),
 				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "FinalizerPatched",
@@ -2880,7 +2926,8 @@ func TestWithFinalizer(t *testing.T) {
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(now)
 					d.Finalizers(testFinalizer)
-				}),
+				}).
+				DieReleasePtr(),
 			WithReactors: []rtesting.ReactionFunc{
 				rtesting.InduceFailure("patch", "TestResource"),
 			},
@@ -2906,7 +2953,8 @@ func TestWithFinalizer(t *testing.T) {
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(now)
 					d.Finalizers(testFinalizer)
-				}),
+				}).
+				DieReleasePtr(),
 			ShouldErr: true,
 			ExpectEvents: []rtesting.Event{
 				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Finalize", ""),

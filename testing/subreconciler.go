@@ -13,6 +13,7 @@ import (
 	logrtesting "github.com/go-logr/logr/testing"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/vmware-labs/reconciler-runtime/internal"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,7 +36,7 @@ type SubReconcilerTestCase[Type client.Object] struct {
 	// inputs
 
 	// Resource is the initial object passed to the sub reconciler
-	Resource client.Object
+	Resource Type
 	// GivenStashedValues adds these items to the stash passed into the reconciler. Factories are resolved to their object.
 	GivenStashedValues map[reconcilers.StashKey]interface{}
 	// WithClientBuilder allows a test to modify the fake client initialization.
@@ -53,7 +54,7 @@ type SubReconcilerTestCase[Type client.Object] struct {
 	// side effects
 
 	// ExpectResource is the expected reconciled resource as mutated after the sub reconciler, or nil if no modification
-	ExpectResource client.Object
+	ExpectResource Type
 	// ExpectStashedValues ensures each value is stashed. Values in the stash that are not expected are ignored. Factories are resolved to their object.
 	ExpectStashedValues map[reconcilers.StashKey]interface{}
 	// VerifyStashedValue is an optional, custom verification function for stashed values
@@ -240,7 +241,7 @@ func (tc *SubReconcilerTestCase[T]) Run(t *testing.T, scheme *runtime.Scheme, fa
 
 	// compare resource
 	expectedResource := tc.Resource.DeepCopyObject().(client.Object)
-	if tc.ExpectResource != nil {
+	if !internal.IsNil(tc.ExpectResource) {
 		expectedResource = tc.ExpectResource.DeepCopyObject().(client.Object)
 	}
 	if expectedResource.GetResourceVersion() == "" {

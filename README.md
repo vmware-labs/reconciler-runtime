@@ -866,7 +866,7 @@ A minimal test case for a sub reconciler that adds a finalizer may look like:
 	...
 	{
 		Name: "add 'test.finalizer' finalizer",
-		Resource: resourceDie,
+		Resource: resourceDie.DieReleasePtr(),
 		ExpectEvents: []rtesting.Event{
 			rtesting.NewEvent(resourceDie, scheme, corev1.EventTypeNormal, "FinalizerPatched",
 				`Patched finalizer %q`, "test.finalizer"),

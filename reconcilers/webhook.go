@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/vmware-labs/reconciler-runtime/internal"
 	"gomodules.xyz/jsonpatch/v3"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -66,7 +67,7 @@ type AdmissionWebhookAdapter[Type client.Object] struct {
 
 func (r *AdmissionWebhookAdapter[T]) init() {
 	r.lazyInit.Do(func() {
-		if isNil(r.Type) {
+		if internal.IsNil(r.Type) {
 			var nilT T
 			r.Type = newEmpty(nilT).(T)
 		}
