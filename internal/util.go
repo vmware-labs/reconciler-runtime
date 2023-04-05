@@ -7,23 +7,30 @@ package internal
 
 import "reflect"
 
-// IsNil returns true if the value is nilable and nil
+// IsNil returns true if the value is nil, false if the value is not nilable or not nil
 func IsNil(val interface{}) bool {
-	// return val == nil
+	if !IsNilable(val) {
+		return false
+	}
+	return reflect.ValueOf(val).IsNil()
+}
+
+// IsNilable returns true if the value can be nil
+func IsNilable(val interface{}) bool {
 	v := reflect.ValueOf(val)
 	switch v.Kind() {
 	case reflect.Chan:
-		return v.IsNil()
+		return true
 	case reflect.Func:
-		return v.IsNil()
+		return true
 	case reflect.Interface:
-		return v.IsNil()
+		return true
 	case reflect.Map:
-		return v.IsNil()
+		return true
 	case reflect.Ptr:
-		return v.IsNil()
+		return true
 	case reflect.Slice:
-		return v.IsNil()
+		return true
 	default:
 		return false
 	}

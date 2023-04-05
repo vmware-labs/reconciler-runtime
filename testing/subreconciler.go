@@ -202,8 +202,8 @@ func (tc *SubReconcilerTestCase[T]) Run(t *testing.T, scheme *runtime.Scheme, fa
 	ctx = reconcilers.StashRequest(ctx, reconcilers.Request{
 		NamespacedName: types.NamespacedName{Namespace: resource.GetNamespace(), Name: resource.GetName()},
 	})
-	ctx = reconcilers.StashOriginalResourceType(ctx, resource.DeepCopyObject().(client.Object))
-	ctx = reconcilers.StashResourceType(ctx, resource.DeepCopyObject().(client.Object))
+	ctx = reconcilers.StashOriginalResourceType(ctx, resource.DeepCopyObject().(T))
+	ctx = reconcilers.StashResourceType(ctx, resource.DeepCopyObject().(T))
 
 	configs := make(map[string]reconcilers.Config, len(tc.AdditionalConfigs))
 	for k, v := range tc.AdditionalConfigs {
@@ -240,9 +240,9 @@ func (tc *SubReconcilerTestCase[T]) Run(t *testing.T, scheme *runtime.Scheme, fa
 	}
 
 	// compare resource
-	expectedResource := tc.Resource.DeepCopyObject().(client.Object)
-	if !internal.IsNil(tc.ExpectResource) {
-		expectedResource = tc.ExpectResource.DeepCopyObject().(client.Object)
+	expectedResource := tc.Resource.DeepCopyObject().(T)
+	if internal.IsNilable(tc.ExpectResource) && !internal.IsNil(tc.ExpectResource) {
+		expectedResource = tc.ExpectResource.DeepCopyObject().(T)
 	}
 	if expectedResource.GetResourceVersion() == "" {
 		// mirror defaulting of the resource
