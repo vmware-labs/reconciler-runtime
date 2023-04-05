@@ -15,61 +15,98 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-func TestResourceReconciler_validate(t *testing.T) {
+func TestResourceReconciler_validate_TestResource(t *testing.T) {
 	tests := []struct {
 		name         string
-		reconciler   *ResourceReconciler
+		reconciler   *ResourceReconciler[*resources.TestResource]
 		shouldErr    string
 		expectedLogs []string
 	}{
 		{
-			name:       "empty",
-			reconciler: &ResourceReconciler{},
-			shouldErr:  `ResourceReconciler "" must define Type`,
-		},
-		{
 			name: "valid",
-			reconciler: &ResourceReconciler{
-				Type:       &resources.TestResource{},
-				Reconciler: Sequence{},
+			reconciler: &ResourceReconciler[*resources.TestResource]{
+				Reconciler: Sequence[*resources.TestResource]{},
 			},
 		},
 		{
-			name: "missing type",
-			reconciler: &ResourceReconciler{
-				Name:       "missing type",
-				Reconciler: Sequence{},
+			name: "with type",
+			reconciler: &ResourceReconciler[*resources.TestResource]{
+				Name:       "with type",
+				Type:       &resources.TestResource{},
+				Reconciler: Sequence[*resources.TestResource]{},
 			},
-			shouldErr: `ResourceReconciler "missing type" must define Type`,
 		},
 		{
 			name: "missing reconciler",
-			reconciler: &ResourceReconciler{
+			reconciler: &ResourceReconciler[*resources.TestResource]{
 				Name: "missing reconciler",
-				Type: &resources.TestResource{},
 			},
 			shouldErr: `ResourceReconciler "missing reconciler" must define Reconciler`,
 		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &bufferedSink{}
+			ctx := logr.NewContext(context.TODO(), logr.New(sink))
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+			if diff := cmp.Diff(c.expectedLogs, sink.Lines); diff != "" {
+				t.Errorf("%s: unexpected logs (-expected, +actual): %s", c.name, diff)
+			}
+		})
+	}
+}
+
+func TestResourceReconciler_validate_TestResourceNoStatus(t *testing.T) {
+	tests := []struct {
+		name         string
+		reconciler   *ResourceReconciler[*resources.TestResourceNoStatus]
+		shouldErr    string
+		expectedLogs []string
+	}{
 		{
 			name: "type has no status",
-			reconciler: &ResourceReconciler{
-				Type:       &resources.TestResourceNoStatus{},
-				Reconciler: Sequence{},
+			reconciler: &ResourceReconciler[*resources.TestResourceNoStatus]{
+				Reconciler: Sequence[*resources.TestResourceNoStatus]{},
 			},
 			expectedLogs: []string{
 				"resource missing status field, operations related to status will be skipped",
 			},
 		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &bufferedSink{}
+			ctx := logr.NewContext(context.TODO(), logr.New(sink))
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+			if diff := cmp.Diff(c.expectedLogs, sink.Lines); diff != "" {
+				t.Errorf("%s: unexpected logs (-expected, +actual): %s", c.name, diff)
+			}
+		})
+	}
+}
+
+func TestResourceReconciler_validate_TestResourceEmptyStatus(t *testing.T) {
+	tests := []struct {
+		name         string
+		reconciler   *ResourceReconciler[*resources.TestResourceEmptyStatus]
+		shouldErr    string
+		expectedLogs []string
+	}{
 		{
 			name: "type has empty status",
-			reconciler: &ResourceReconciler{
-				Type:       &resources.TestResourceEmptyStatus{},
-				Reconciler: Sequence{},
+			reconciler: &ResourceReconciler[*resources.TestResourceEmptyStatus]{
+				Reconciler: Sequence[*resources.TestResourceEmptyStatus]{},
 			},
 			expectedLogs: []string{
 				"resource status missing ObservedGeneration field of type int64, generation will not be managed",
@@ -77,11 +114,34 @@ func TestResourceReconciler_validate(t *testing.T) {
 				"resource status is missing field Conditions of type []metav1.Condition, condition timestamps will not be managed",
 			},
 		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &bufferedSink{}
+			ctx := logr.NewContext(context.TODO(), logr.New(sink))
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+			if diff := cmp.Diff(c.expectedLogs, sink.Lines); diff != "" {
+				t.Errorf("%s: unexpected logs (-expected, +actual): %s", c.name, diff)
+			}
+		})
+	}
+}
+
+func TestResourceReconciler_validate_TestResourceNilableStatus(t *testing.T) {
+	tests := []struct {
+		name         string
+		reconciler   *ResourceReconciler[*resources.TestResourceNilableStatus]
+		shouldErr    string
+		expectedLogs []string
+	}{
 		{
 			name: "type has nilable status",
-			reconciler: &ResourceReconciler{
-				Type:       &resources.TestResourceNilableStatus{},
-				Reconciler: Sequence{},
+			reconciler: &ResourceReconciler[*resources.TestResourceNilableStatus]{
+				Reconciler: Sequence[*resources.TestResourceNilableStatus]{},
 			},
 			expectedLogs: []string{
 				"resource status is nilable, status is typically a struct",
@@ -105,7 +165,7 @@ func TestResourceReconciler_validate(t *testing.T) {
 }
 
 func TestAggregateReconciler_validate(t *testing.T) {
-	req := reconcile.Request{
+	req := Request{
 		NamespacedName: types.NamespacedName{
 			Namespace: "my-namespace",
 			Name:      "my-name",
@@ -114,49 +174,48 @@ func TestAggregateReconciler_validate(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		reconciler   *AggregateReconciler
+		reconciler   *AggregateReconciler[*resources.TestResource]
 		shouldErr    string
 		expectedLogs []string
 	}{
 		{
 			name:       "empty",
-			reconciler: &AggregateReconciler{},
-			shouldErr:  `AggregateReconciler "" must define Type`,
+			reconciler: &AggregateReconciler[*resources.TestResource]{},
+			shouldErr:  `AggregateReconciler "" must define Request`,
 		},
 		{
 			name: "valid",
-			reconciler: &AggregateReconciler{
+			reconciler: &AggregateReconciler[*resources.TestResource]{
 				Type:              &resources.TestResource{},
 				Request:           req,
-				Reconciler:        Sequence{},
+				Reconciler:        Sequence[*resources.TestResource]{},
 				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
 			},
 		},
 		{
 			name: "Type missing",
-			reconciler: &AggregateReconciler{
+			reconciler: &AggregateReconciler[*resources.TestResource]{
 				Name: "Type missing",
 				// Type:              &resources.TestResource{},
 				Request:           req,
-				Reconciler:        Sequence{},
+				Reconciler:        Sequence[*resources.TestResource]{},
 				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
 			},
-			shouldErr: `AggregateReconciler "Type missing" must define Type`,
 		},
 		{
 			name: "Request missing",
-			reconciler: &AggregateReconciler{
+			reconciler: &AggregateReconciler[*resources.TestResource]{
 				Name: "Request missing",
 				Type: &resources.TestResource{},
 				// Request:           req,
-				Reconciler:        Sequence{},
+				Reconciler:        Sequence[*resources.TestResource]{},
 				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
 			},
 			shouldErr: `AggregateReconciler "Request missing" must define Request`,
 		},
 		{
 			name: "Reconciler missing",
-			reconciler: &AggregateReconciler{
+			reconciler: &AggregateReconciler[*resources.TestResource]{
 				Name:    "Reconciler missing",
 				Type:    &resources.TestResource{},
 				Request: req,
@@ -167,97 +226,15 @@ func TestAggregateReconciler_validate(t *testing.T) {
 		},
 		{
 			name: "DesiredResource",
-			reconciler: &AggregateReconciler{
+			reconciler: &AggregateReconciler[*resources.TestResource]{
 				Type:              &resources.TestResource{},
 				Request:           req,
-				Reconciler:        Sequence{},
+				Reconciler:        Sequence[*resources.TestResource]{},
 				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
 				DesiredResource: func(ctx context.Context, resource *resources.TestResource) (*resources.TestResource, error) {
 					return nil, nil
 				},
 			},
-		},
-		{
-			name: "DesiredResource num in",
-			reconciler: &AggregateReconciler{
-				Name:              "DesiredResource num in",
-				Type:              &resources.TestResource{},
-				Request:           req,
-				Reconciler:        Sequence{},
-				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
-				DesiredResource: func() (*resources.TestResource, error) {
-					return nil, nil
-				},
-			},
-			shouldErr: `AggregateReconciler "DesiredResource num in" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func() (*resources.TestResource, error)`,
-		},
-		{
-			name: "DesiredResource in 0",
-			reconciler: &AggregateReconciler{
-				Name:              "DesiredResource in 0",
-				Type:              &resources.TestResource{},
-				Request:           req,
-				Reconciler:        Sequence{},
-				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
-				DesiredResource: func(err error, resource *resources.TestResource) (*resources.TestResource, error) {
-					return nil, nil
-				},
-			},
-			shouldErr: `AggregateReconciler "DesiredResource in 0" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func(error, *resources.TestResource) (*resources.TestResource, error)`,
-		},
-		{
-			name: "DesiredResource in 1",
-			reconciler: &AggregateReconciler{
-				Name:              "DesiredResource in 1",
-				Type:              &resources.TestResource{},
-				Request:           req,
-				Reconciler:        Sequence{},
-				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
-				DesiredResource: func(ctx context.Context, resource *corev1.Pod) (*resources.TestResource, error) {
-					return nil, nil
-				},
-			},
-			shouldErr: `AggregateReconciler "DesiredResource in 1" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func(context.Context, *v1.Pod) (*resources.TestResource, error)`,
-		},
-		{
-			name: "DesiredResource num out",
-			reconciler: &AggregateReconciler{
-				Name:              "DesiredResource num out",
-				Type:              &resources.TestResource{},
-				Request:           req,
-				Reconciler:        Sequence{},
-				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
-				DesiredResource:   func(ctx context.Context, resource *resources.TestResource) {},
-			},
-			shouldErr: `AggregateReconciler "DesiredResource num out" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func(context.Context, *resources.TestResource)`,
-		},
-		{
-			name: "DesiredResource out 0",
-			reconciler: &AggregateReconciler{
-				Name:              "DesiredResource out 0",
-				Type:              &resources.TestResource{},
-				Request:           req,
-				Reconciler:        Sequence{},
-				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
-				DesiredResource: func(ctx context.Context, resource *resources.TestResource) (*corev1.Pod, error) {
-					return nil, nil
-				},
-			},
-			shouldErr: `AggregateReconciler "DesiredResource out 0" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func(context.Context, *resources.TestResource) (*v1.Pod, error)`,
-		},
-		{
-			name: "DesiredResource out 1",
-			reconciler: &AggregateReconciler{
-				Name:              "DesiredResource out 1",
-				Type:              &resources.TestResource{},
-				Request:           req,
-				Reconciler:        Sequence{},
-				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
-				DesiredResource: func(ctx context.Context, resource *resources.TestResource) (*resources.TestResource, string) {
-					return nil, ""
-				},
-			},
-			shouldErr: `AggregateReconciler "DesiredResource out 1" must implement DesiredResource: nil | func(context.Context, *resources.TestResource) (*resources.TestResource, error), found: func(context.Context, *resources.TestResource) (*resources.TestResource, string)`,
 		},
 	}
 
@@ -280,91 +257,59 @@ func TestSyncReconciler_validate(t *testing.T) {
 	tests := []struct {
 		name       string
 		resource   client.Object
-		reconciler *SyncReconciler
+		reconciler *SyncReconciler[*corev1.ConfigMap]
 		shouldErr  string
 	}{
 		{
 			name:       "empty",
 			resource:   &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{},
-			shouldErr:  `SyncReconciler "" must implement Sync`,
+			reconciler: &SyncReconciler[*corev1.ConfigMap]{},
+			shouldErr:  `SyncReconciler "" must implement Sync or SyncWithResult`,
 		},
 		{
 			name:     "valid",
 			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
+			reconciler: &SyncReconciler[*corev1.ConfigMap]{
 				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
 			},
 		},
 		{
-			name:     "valid Sync with result",
+			name:     "valid SyncWithResult",
 			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Sync: func(ctx context.Context, resource *corev1.ConfigMap) (ctrl.Result, error) {
-					return ctrl.Result{}, nil
+			reconciler: &SyncReconciler[*corev1.ConfigMap]{
+				SyncWithResult: func(ctx context.Context, resource *corev1.ConfigMap) (Result, error) {
+					return Result{}, nil
 				},
 			},
 		},
 		{
-			name:     "Sync num in",
+			name:     "valid",
 			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Name: "Sync num in",
-				Sync: func() error {
+			reconciler: &SyncReconciler[*corev1.ConfigMap]{
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
 			},
-			shouldErr: `SyncReconciler "Sync num in" must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func() error`,
 		},
 		{
-			name:     "Sync in 1",
+			name:     "invalid Sync and SyncWithResult",
 			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Name: "Sync in 1",
-				Sync: func(ctx context.Context, resource *corev1.Secret) error {
+			reconciler: &SyncReconciler[*corev1.ConfigMap]{
+				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
-			},
-			shouldErr: `SyncReconciler "Sync in 1" must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.Secret) error`,
-		},
-		{
-			name:     "Sync num out",
-			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Name: "Sync num out",
-				Sync: func(ctx context.Context, resource *corev1.ConfigMap) {
+				SyncWithResult: func(ctx context.Context, resource *corev1.ConfigMap) (Result, error) {
+					return Result{}, nil
 				},
 			},
-			shouldErr: `SyncReconciler "Sync num out" must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap)`,
-		},
-		{
-			name:     "Sync out 1",
-			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Name: "Sync out 1",
-				Sync: func(ctx context.Context, resource *corev1.ConfigMap) string {
-					return ""
-				},
-			},
-			shouldErr: `SyncReconciler "Sync out 1" must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap) string`,
-		},
-		{
-			name:     "Sync result out 1",
-			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Name: "Sync result out 1",
-				Sync: func(ctx context.Context, resource *corev1.ConfigMap) (ctrl.Result, string) {
-					return ctrl.Result{}, ""
-				},
-			},
-			shouldErr: `SyncReconciler "Sync result out 1" must implement Sync: func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap) (reconcile.Result, string)`,
+			shouldErr: `SyncReconciler "" may not implement both Sync and SyncWithResult`,
 		},
 		{
 			name:     "valid Finalize",
 			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
+			reconciler: &SyncReconciler[*corev1.ConfigMap]{
 				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
@@ -376,83 +321,30 @@ func TestSyncReconciler_validate(t *testing.T) {
 		{
 			name:     "valid Finalize with result",
 			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
+			reconciler: &SyncReconciler[*corev1.ConfigMap]{
 				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
-				Finalize: func(ctx context.Context, resource *corev1.ConfigMap) (ctrl.Result, error) {
-					return ctrl.Result{}, nil
+				FinalizeWithResult: func(ctx context.Context, resource *corev1.ConfigMap) (Result, error) {
+					return Result{}, nil
 				},
 			},
 		},
 		{
-			name:     "Finalize num in",
+			name:     "invalid Finalize and FinalizeWithResult",
 			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Name: "Finalize num in",
+			reconciler: &SyncReconciler[*corev1.ConfigMap]{
 				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
 				},
-				Finalize: func() error {
+				Finalize: func(ctx context.Context, resource *corev1.ConfigMap) error {
 					return nil
+				},
+				FinalizeWithResult: func(ctx context.Context, resource *corev1.ConfigMap) (Result, error) {
+					return Result{}, nil
 				},
 			},
-			shouldErr: `SyncReconciler "Finalize num in" must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func() error`,
-		},
-		{
-			name:     "Finalize in 1",
-			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Name: "Finalize in 1",
-				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
-					return nil
-				},
-				Finalize: func(ctx context.Context, resource *corev1.Secret) error {
-					return nil
-				},
-			},
-			shouldErr: `SyncReconciler "Finalize in 1" must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.Secret) error`,
-		},
-		{
-			name:     "Finalize num out",
-			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Name: "Finalize num out",
-				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
-					return nil
-				},
-				Finalize: func(ctx context.Context, resource *corev1.ConfigMap) {
-				},
-			},
-			shouldErr: `SyncReconciler "Finalize num out" must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap)`,
-		},
-		{
-			name:     "Finalize out 1",
-			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Name: "Finalize out 1",
-				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
-					return nil
-				},
-				Finalize: func(ctx context.Context, resource *corev1.ConfigMap) string {
-					return ""
-				},
-			},
-			shouldErr: `SyncReconciler "Finalize out 1" must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap) string`,
-		},
-		{
-			name:     "Finalize result out 1",
-			resource: &corev1.ConfigMap{},
-			reconciler: &SyncReconciler{
-				Name: "Finalize result out 1",
-				Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
-					return nil
-				},
-				Finalize: func(ctx context.Context, resource *corev1.ConfigMap) (ctrl.Result, string) {
-					return ctrl.Result{}, ""
-				},
-			},
-			shouldErr: `SyncReconciler "Finalize result out 1" must implement Finalize: nil | func(context.Context, *v1.ConfigMap) error | func(context.Context, *v1.ConfigMap) (ctrl.Result, error), found: func(context.Context, *v1.ConfigMap) (reconcile.Result, string)`,
+			shouldErr: `SyncReconciler "" may not implement both Finalize and FinalizeWithResult`,
 		},
 	}
 
@@ -470,20 +362,20 @@ func TestSyncReconciler_validate(t *testing.T) {
 func TestChildReconciler_validate(t *testing.T) {
 	tests := []struct {
 		name       string
-		parent     client.Object
-		reconciler *ChildReconciler
+		parent     *corev1.ConfigMap
+		reconciler *ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]
 		shouldErr  string
 	}{
 		{
 			name:       "empty",
 			parent:     &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{},
-			shouldErr:  `ChildReconciler "" must define ChildType`,
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{},
+			shouldErr:  `ChildReconciler "" must implement DesiredChild`,
 		},
 		{
 			name:   "valid",
 			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -494,7 +386,7 @@ func TestChildReconciler_validate(t *testing.T) {
 		{
 			name:   "ChildType missing",
 			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
 				Name: "ChildType missing",
 				// ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
@@ -502,12 +394,11 @@ func TestChildReconciler_validate(t *testing.T) {
 				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 			},
-			shouldErr: `ChildReconciler "ChildType missing" must define ChildType`,
 		},
 		{
 			name:   "ChildListType missing",
 			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
 				Name:      "ChildListType missing",
 				ChildType: &corev1.Pod{},
 				// ChildListType:              &corev1.PodList{},
@@ -515,12 +406,11 @@ func TestChildReconciler_validate(t *testing.T) {
 				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 			},
-			shouldErr: `ChildReconciler "ChildListType missing" must define ChildListType`,
 		},
 		{
 			name:   "DesiredChild missing",
 			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
 				Name:          "DesiredChild missing",
 				ChildType:     &corev1.Pod{},
 				ChildListType: &corev1.PodList{},
@@ -531,87 +421,9 @@ func TestChildReconciler_validate(t *testing.T) {
 			shouldErr: `ChildReconciler "DesiredChild missing" must implement DesiredChild`,
 		},
 		{
-			name:   "DesiredChild num in",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "DesiredChild num in",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func() (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "DesiredChild num in" must implement DesiredChild: func(context.Context, *v1.ConfigMap) (*v1.Pod, error), found: func() (*v1.Pod, error)`,
-		},
-		{
-			name:   "DesiredChild in 0",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "DesiredChild in 0",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx string, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "DesiredChild in 0" must implement DesiredChild: func(context.Context, *v1.ConfigMap) (*v1.Pod, error), found: func(string, *v1.ConfigMap) (*v1.Pod, error)`,
-		},
-		{
-			name:   "DesiredChild in 1",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "DesiredChild in 1",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.Secret) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "DesiredChild in 1" must implement DesiredChild: func(context.Context, *v1.ConfigMap) (*v1.Pod, error), found: func(context.Context, *v1.Secret) (*v1.Pod, error)`,
-		},
-		{
-			name:   "DesiredChild num out",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "DesiredChild num out",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) {},
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "DesiredChild num out" must implement DesiredChild: func(context.Context, *v1.ConfigMap) (*v1.Pod, error), found: func(context.Context, *v1.ConfigMap)`,
-		},
-		{
-			name:   "DesiredChild out 0",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "DesiredChild out 0",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Secret, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "DesiredChild out 0" must implement DesiredChild: func(context.Context, *v1.ConfigMap) (*v1.Pod, error), found: func(context.Context, *v1.ConfigMap) (*v1.Secret, error)`,
-		},
-		{
-			name:   "DesiredChild out 1",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "DesiredChild out 1",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, string) { return nil, "" },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "DesiredChild out 1" must implement DesiredChild: func(context.Context, *v1.ConfigMap) (*v1.Pod, error), found: func(context.Context, *v1.ConfigMap) (*v1.Pod, string)`,
-		},
-		{
 			name:   "ReflectChildStatusOnParent missing",
 			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
 				Name:          "ReflectChildStatusOnParent missing",
 				ChildType:     &corev1.Pod{},
 				ChildListType: &corev1.PodList{},
@@ -622,74 +434,9 @@ func TestChildReconciler_validate(t *testing.T) {
 			shouldErr: `ChildReconciler "ReflectChildStatusOnParent missing" must implement ReflectChildStatusOnParent`,
 		},
 		{
-			name:   "ReflectChildStatusOnParent num in",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "ReflectChildStatusOnParent num in",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func() {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "ReflectChildStatusOnParent num in" must implement ReflectChildStatusOnParent: func(*v1.ConfigMap, *v1.Pod, error), found: func()`,
-		},
-		{
-			name:   "ReflectChildStatusOnParent in 0",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "ReflectChildStatusOnParent in 0",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.Secret, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "ReflectChildStatusOnParent in 0" must implement ReflectChildStatusOnParent: func(*v1.ConfigMap, *v1.Pod, error), found: func(*v1.Secret, *v1.Pod, error)`,
-		},
-		{
-			name:   "ReflectChildStatusOnParent in 1",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "ReflectChildStatusOnParent in 1",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Secret, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "ReflectChildStatusOnParent in 1" must implement ReflectChildStatusOnParent: func(*v1.ConfigMap, *v1.Pod, error), found: func(*v1.ConfigMap, *v1.Secret, error)`,
-		},
-		{
-			name:   "ReflectChildStatusOnParent in 2",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "ReflectChildStatusOnParent in 2",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, ctx context.Context) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "ReflectChildStatusOnParent in 2" must implement ReflectChildStatusOnParent: func(*v1.ConfigMap, *v1.Pod, error), found: func(*v1.ConfigMap, *v1.Pod, context.Context)`,
-		},
-		{
-			name:   "ReflectChildStatusOnParent num out",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "ReflectChildStatusOnParent num out",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) error { return nil },
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "ReflectChildStatusOnParent num out" must implement ReflectChildStatusOnParent: func(*v1.ConfigMap, *v1.Pod, error), found: func(*v1.ConfigMap, *v1.Pod, error) error`,
-		},
-		{
 			name:   "ListOptions",
 			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -699,79 +446,9 @@ func TestChildReconciler_validate(t *testing.T) {
 			},
 		},
 		{
-			name:   "ListOptions num in",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "ListOptions num in",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				ListOptions:                func() []client.ListOption { return []client.ListOption{} },
-			},
-			shouldErr: `ChildReconciler "ListOptions num in" must implement ListOptions: nil | func(context.Context, *v1.ConfigMap) []client.ListOption, found: func() []client.ListOption`,
-		},
-		{
-			name:   "ListOptions in 1",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "ListOptions in 1",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				ListOptions:                func(child *corev1.Secret, parent *corev1.ConfigMap) []client.ListOption { return []client.ListOption{} },
-			},
-			shouldErr: `ChildReconciler "ListOptions in 1" must implement ListOptions: nil | func(context.Context, *v1.ConfigMap) []client.ListOption, found: func(*v1.Secret, *v1.ConfigMap) []client.ListOption`,
-		},
-		{
-			name:   "ListOptions in 2",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "ListOptions in 2",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				ListOptions:                func(ctx context.Context, parent *corev1.Secret) []client.ListOption { return []client.ListOption{} },
-			},
-			shouldErr: `ChildReconciler "ListOptions in 2" must implement ListOptions: nil | func(context.Context, *v1.ConfigMap) []client.ListOption, found: func(context.Context, *v1.Secret) []client.ListOption`,
-		},
-		{
-			name:   "ListOptions num out",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "ListOptions num out",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				ListOptions:                func(ctx context.Context, parent *corev1.ConfigMap) {},
-			},
-			shouldErr: `ChildReconciler "ListOptions num out" must implement ListOptions: nil | func(context.Context, *v1.ConfigMap) []client.ListOption, found: func(context.Context, *v1.ConfigMap)`,
-		},
-		{
-			name:   "ListOptions out 1",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "ListOptions out 1",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				ListOptions:                func(ctx context.Context, parent *corev1.ConfigMap) client.ListOptions { return client.ListOptions{} },
-			},
-			shouldErr: `ChildReconciler "ListOptions out 1" must implement ListOptions: nil | func(context.Context, *v1.ConfigMap) []client.ListOption, found: func(context.Context, *v1.ConfigMap) client.ListOptions`,
-		},
-		{
 			name:   "Finalizer without OurChild",
 			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
 				Name:                       "Finalizer without OurChild",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
@@ -785,7 +462,7 @@ func TestChildReconciler_validate(t *testing.T) {
 		{
 			name:   "SkipOwnerReference without OurChild",
 			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
 				Name:                       "SkipOwnerReference without OurChild",
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
@@ -799,7 +476,7 @@ func TestChildReconciler_validate(t *testing.T) {
 		{
 			name:   "OurChild",
 			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
 				ChildType:                  &corev1.Pod{},
 				ChildListType:              &corev1.PodList{},
 				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
@@ -807,76 +484,6 @@ func TestChildReconciler_validate(t *testing.T) {
 				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
 				OurChild:                   func(parent *corev1.ConfigMap, child *corev1.Pod) bool { return false },
 			},
-		},
-		{
-			name:   "OurChild num in",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "OurChild num in",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				OurChild:                   func() bool { return false },
-			},
-			shouldErr: `ChildReconciler "OurChild num in" must implement OurChild: nil | func(*v1.ConfigMap, *v1.Pod) bool, found: func() bool`,
-		},
-		{
-			name:   "OurChild in 1",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "OurChild in 1",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				OurChild:                   func(parent *corev1.ConfigMap, child *corev1.Secret) bool { return false },
-			},
-			shouldErr: `ChildReconciler "OurChild in 1" must implement OurChild: nil | func(*v1.ConfigMap, *v1.Pod) bool, found: func(*v1.ConfigMap, *v1.Secret) bool`,
-		},
-		{
-			name:   "OurChild in 2",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "OurChild in 2",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				OurChild:                   func(parent *corev1.Secret, child *corev1.Pod) bool { return false },
-			},
-			shouldErr: `ChildReconciler "OurChild in 2" must implement OurChild: nil | func(*v1.ConfigMap, *v1.Pod) bool, found: func(*v1.Secret, *v1.Pod) bool`,
-		},
-		{
-			name:   "OurChild num out",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "OurChild num out",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				OurChild:                   func(parent *corev1.ConfigMap, child *corev1.Pod) {},
-			},
-			shouldErr: `ChildReconciler "OurChild num out" must implement OurChild: nil | func(*v1.ConfigMap, *v1.Pod) bool, found: func(*v1.ConfigMap, *v1.Pod)`,
-		},
-		{
-			name:   "OurChild out 1",
-			parent: &corev1.ConfigMap{},
-			reconciler: &ChildReconciler{
-				Name:                       "OurChild out 1",
-				ChildType:                  &corev1.Pod{},
-				ChildListType:              &corev1.PodList{},
-				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
-				ReflectChildStatusOnParent: func(parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
-				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
-				OurChild:                   func(parent *corev1.ConfigMap, child *corev1.Pod) *corev1.Pod { return child },
-			},
-			shouldErr: `ChildReconciler "OurChild out 1" must implement OurChild: nil | func(*v1.ConfigMap, *v1.Pod) bool, found: func(*v1.ConfigMap, *v1.Pod) *v1.Pod`,
 		},
 	}
 
@@ -895,47 +502,31 @@ func TestCastResource_validate(t *testing.T) {
 	tests := []struct {
 		name       string
 		resource   client.Object
-		reconciler *CastResource
+		reconciler *CastResource[*corev1.ConfigMap, *corev1.Secret]
 		shouldErr  string
 	}{
 		{
 			name:       "empty",
 			resource:   &corev1.ConfigMap{},
-			reconciler: &CastResource{},
-			shouldErr:  `CastResource "" must define Type`,
+			reconciler: &CastResource[*corev1.ConfigMap, *corev1.Secret]{},
+			shouldErr:  `CastResource "" must define Reconciler`,
 		},
 		{
 			name:     "valid",
 			resource: &corev1.ConfigMap{},
-			reconciler: &CastResource{
-				Type: &corev1.Secret{},
-				Reconciler: &SyncReconciler{
+			reconciler: &CastResource[*corev1.ConfigMap, *corev1.Secret]{
+				Reconciler: &SyncReconciler[*corev1.Secret]{
 					Sync: func(ctx context.Context, resource *corev1.Secret) error {
 						return nil
 					},
 				},
 			},
-		},
-		{
-			name:     "missing type",
-			resource: &corev1.ConfigMap{},
-			reconciler: &CastResource{
-				Name: "missing type",
-				Type: nil,
-				Reconciler: &SyncReconciler{
-					Sync: func(ctx context.Context, resource *corev1.Secret) error {
-						return nil
-					},
-				},
-			},
-			shouldErr: `CastResource "missing type" must define Type`,
 		},
 		{
 			name:     "missing reconciler",
 			resource: &corev1.ConfigMap{},
-			reconciler: &CastResource{
+			reconciler: &CastResource[*corev1.ConfigMap, *corev1.Secret]{
 				Name:       "missing reconciler",
-				Type:       &corev1.Secret{},
 				Reconciler: nil,
 			},
 			shouldErr: `CastResource "missing reconciler" must define Reconciler`,
@@ -961,20 +552,20 @@ func TestWithConfig_validate(t *testing.T) {
 	tests := []struct {
 		name       string
 		resource   client.Object
-		reconciler *WithConfig
+		reconciler *WithConfig[*corev1.ConfigMap]
 		shouldErr  string
 	}{
 		{
 			name:       "empty",
 			resource:   &corev1.ConfigMap{},
-			reconciler: &WithConfig{},
+			reconciler: &WithConfig[*corev1.ConfigMap]{},
 			shouldErr:  `WithConfig "" must define Config`,
 		},
 		{
 			name:     "valid",
 			resource: &corev1.ConfigMap{},
-			reconciler: &WithConfig{
-				Reconciler: &Sequence{},
+			reconciler: &WithConfig[*corev1.ConfigMap]{
+				Reconciler: &Sequence[*corev1.ConfigMap]{},
 				Config: func(ctx context.Context, c Config) (Config, error) {
 					return config, nil
 				},
@@ -983,16 +574,16 @@ func TestWithConfig_validate(t *testing.T) {
 		{
 			name:     "missing config",
 			resource: &corev1.ConfigMap{},
-			reconciler: &WithConfig{
+			reconciler: &WithConfig[*corev1.ConfigMap]{
 				Name:       "missing config",
-				Reconciler: &Sequence{},
+				Reconciler: &Sequence[*corev1.ConfigMap]{},
 			},
 			shouldErr: `WithConfig "missing config" must define Config`,
 		},
 		{
 			name:     "missing reconciler",
 			resource: &corev1.ConfigMap{},
-			reconciler: &WithConfig{
+			reconciler: &WithConfig[*corev1.ConfigMap]{
 				Name: "missing reconciler",
 				Config: func(ctx context.Context, c Config) (Config, error) {
 					return config, nil
@@ -1017,36 +608,36 @@ func TestWithFinalizer_validate(t *testing.T) {
 	tests := []struct {
 		name       string
 		resource   client.Object
-		reconciler *WithFinalizer
+		reconciler *WithFinalizer[*corev1.ConfigMap]
 		shouldErr  string
 	}{
 		{
 			name:       "empty",
 			resource:   &corev1.ConfigMap{},
-			reconciler: &WithFinalizer{},
+			reconciler: &WithFinalizer[*corev1.ConfigMap]{},
 			shouldErr:  `WithFinalizer "" must define Finalizer`,
 		},
 		{
 			name:     "valid",
 			resource: &corev1.ConfigMap{},
-			reconciler: &WithFinalizer{
-				Reconciler: &Sequence{},
+			reconciler: &WithFinalizer[*corev1.ConfigMap]{
+				Reconciler: &Sequence[*corev1.ConfigMap]{},
 				Finalizer:  "my-finalizer",
 			},
 		},
 		{
 			name:     "missing finalizer",
 			resource: &corev1.ConfigMap{},
-			reconciler: &WithFinalizer{
+			reconciler: &WithFinalizer[*corev1.ConfigMap]{
 				Name:       "missing finalizer",
-				Reconciler: &Sequence{},
+				Reconciler: &Sequence[*corev1.ConfigMap]{},
 			},
 			shouldErr: `WithFinalizer "missing finalizer" must define Finalizer`,
 		},
 		{
 			name:     "missing reconciler",
 			resource: &corev1.ConfigMap{},
-			reconciler: &WithFinalizer{
+			reconciler: &WithFinalizer[*corev1.ConfigMap]{
 				Name:      "missing reconciler",
 				Finalizer: "my-finalizer",
 			},
@@ -1068,34 +659,33 @@ func TestWithFinalizer_validate(t *testing.T) {
 func TestResourceManager_validate(t *testing.T) {
 	tests := []struct {
 		name         string
-		reconciler   *ResourceManager
+		reconciler   *ResourceManager[*resources.TestResource]
 		shouldErr    string
 		expectedLogs []string
 	}{
 		{
 			name:       "empty",
-			reconciler: &ResourceManager{},
-			shouldErr:  `ResourceManager "" must define Type`,
+			reconciler: &ResourceManager[*resources.TestResource]{},
+			shouldErr:  `ResourceManager "" must define MergeBeforeUpdate`,
 		},
 		{
 			name: "valid",
-			reconciler: &ResourceManager{
+			reconciler: &ResourceManager[*resources.TestResource]{
 				Type:              &resources.TestResource{},
 				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
 			},
 		},
 		{
 			name: "Type missing",
-			reconciler: &ResourceManager{
+			reconciler: &ResourceManager[*resources.TestResource]{
 				Name: "Type missing",
 				// Type:              &resources.TestResource{},
 				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
 			},
-			shouldErr: `ResourceManager "Type missing" must define Type`,
 		},
 		{
 			name: "MergeBeforeUpdate missing",
-			reconciler: &ResourceManager{
+			reconciler: &ResourceManager[*resources.TestResource]{
 				Name: "MergeBeforeUpdate missing",
 				Type: &resources.TestResource{},
 				// MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
@@ -1103,126 +693,20 @@ func TestResourceManager_validate(t *testing.T) {
 			shouldErr: `ResourceManager "MergeBeforeUpdate missing" must define MergeBeforeUpdate`,
 		},
 		{
-			name: "MergeBeforeUpdate num in",
-			reconciler: &ResourceManager{
-				Name:              "MergeBeforeUpdate num in",
-				Type:              &resources.TestResource{},
-				MergeBeforeUpdate: func() {},
-			},
-			shouldErr: `ResourceManager "MergeBeforeUpdate num in" must implement MergeBeforeUpdate: func(*resources.TestResource, *resources.TestResource), found: func()`,
-		},
-		{
-			name: "MergeBeforeUpdate in 0",
-			reconciler: &ResourceManager{
-				Name:              "MergeBeforeUpdate in 0",
-				Type:              &resources.TestResource{},
-				MergeBeforeUpdate: func(current *corev1.Pod, desired *resources.TestResource) {},
-			},
-			shouldErr: `ResourceManager "MergeBeforeUpdate in 0" must implement MergeBeforeUpdate: func(*resources.TestResource, *resources.TestResource), found: func(*v1.Pod, *resources.TestResource)`,
-		},
-		{
-			name: "MergeBeforeUpdate in 1",
-			reconciler: &ResourceManager{
-				Name:              "MergeBeforeUpdate in 1",
-				Type:              &resources.TestResource{},
-				MergeBeforeUpdate: func(current *resources.TestResource, desired *corev1.Pod) {},
-			},
-			shouldErr: `ResourceManager "MergeBeforeUpdate in 1" must implement MergeBeforeUpdate: func(*resources.TestResource, *resources.TestResource), found: func(*resources.TestResource, *v1.Pod)`,
-		},
-		{
-			name: "MergeBeforeUpdate num out",
-			reconciler: &ResourceManager{
-				Name:              "MergeBeforeUpdate num out",
-				Type:              &resources.TestResource{},
-				MergeBeforeUpdate: func(current, desired *resources.TestResource) error { return nil },
-			},
-			shouldErr: `ResourceManager "MergeBeforeUpdate num out" must implement MergeBeforeUpdate: func(*resources.TestResource, *resources.TestResource), found: func(*resources.TestResource, *resources.TestResource) error`,
-		},
-		{
 			name: "HarmonizeImmutableFields",
-			reconciler: &ResourceManager{
+			reconciler: &ResourceManager[*resources.TestResource]{
 				Type:                     &resources.TestResource{},
 				MergeBeforeUpdate:        func(current, desired *resources.TestResource) {},
 				HarmonizeImmutableFields: func(current, desired *resources.TestResource) {},
 			},
 		},
 		{
-			name: "HarmonizeImmutableFields num in",
-			reconciler: &ResourceManager{
-				Name:                     "HarmonizeImmutableFields num in",
-				Type:                     &resources.TestResource{},
-				MergeBeforeUpdate:        func(current, desired *resources.TestResource) {},
-				HarmonizeImmutableFields: func() {},
-			},
-			shouldErr: `ResourceManager "HarmonizeImmutableFields num in" must implement HarmonizeImmutableFields: nil | func(*resources.TestResource, *resources.TestResource), found: func()`,
-		},
-		{
-			name: "HarmonizeImmutableFields in 0",
-			reconciler: &ResourceManager{
-				Name:                     "HarmonizeImmutableFields in 0",
-				Type:                     &resources.TestResource{},
-				MergeBeforeUpdate:        func(current, desired *resources.TestResource) {},
-				HarmonizeImmutableFields: func(current *corev1.Pod, desired *resources.TestResource) {},
-			},
-			shouldErr: `ResourceManager "HarmonizeImmutableFields in 0" must implement HarmonizeImmutableFields: nil | func(*resources.TestResource, *resources.TestResource), found: func(*v1.Pod, *resources.TestResource)`,
-		},
-		{
-			name: "HarmonizeImmutableFields in 1",
-			reconciler: &ResourceManager{
-				Name:                     "HarmonizeImmutableFields in 1",
-				Type:                     &resources.TestResource{},
-				MergeBeforeUpdate:        func(current, desired *resources.TestResource) {},
-				HarmonizeImmutableFields: func(current *resources.TestResource, desired *corev1.Pod) {},
-			},
-			shouldErr: `ResourceManager "HarmonizeImmutableFields in 1" must implement HarmonizeImmutableFields: nil | func(*resources.TestResource, *resources.TestResource), found: func(*resources.TestResource, *v1.Pod)`,
-		},
-		{
-			name: "HarmonizeImmutableFields num out",
-			reconciler: &ResourceManager{
-				Name:                     "HarmonizeImmutableFields num out",
-				Type:                     &resources.TestResource{},
-				MergeBeforeUpdate:        func(current, desired *resources.TestResource) {},
-				HarmonizeImmutableFields: func(current, desired *resources.TestResource) error { return nil },
-			},
-			shouldErr: `ResourceManager "HarmonizeImmutableFields num out" must implement HarmonizeImmutableFields: nil | func(*resources.TestResource, *resources.TestResource), found: func(*resources.TestResource, *resources.TestResource) error`,
-		},
-		{
 			name: "Sanitize",
-			reconciler: &ResourceManager{
+			reconciler: &ResourceManager[*resources.TestResource]{
 				Type:              &resources.TestResource{},
 				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
-				Sanitize:          func(child *resources.TestResource) resources.TestResourceSpec { return child.Spec },
+				Sanitize:          func(child *resources.TestResource) interface{} { return child.Spec },
 			},
-		},
-		{
-			name: "Sanitize num in",
-			reconciler: &ResourceManager{
-				Name:              "Sanitize num in",
-				Type:              &resources.TestResource{},
-				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
-				Sanitize:          func() resources.TestResourceSpec { return resources.TestResourceSpec{} },
-			},
-			shouldErr: `ResourceManager "Sanitize num in" must implement Sanitize: nil | func(*resources.TestResource) interface{}, found: func() resources.TestResourceSpec`,
-		},
-		{
-			name: "Sanitize in 1",
-			reconciler: &ResourceManager{
-				Name:              "Sanitize in 1",
-				Type:              &resources.TestResource{},
-				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
-				Sanitize:          func(child *corev1.Pod) corev1.PodSpec { return child.Spec },
-			},
-			shouldErr: `ResourceManager "Sanitize in 1" must implement Sanitize: nil | func(*resources.TestResource) interface{}, found: func(*v1.Pod) v1.PodSpec`,
-		},
-		{
-			name: "Sanitize num out",
-			reconciler: &ResourceManager{
-				Name:              "Sanitize num out",
-				Type:              &resources.TestResource{},
-				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
-				Sanitize:          func(child *resources.TestResource) {},
-			},
-			shouldErr: `ResourceManager "Sanitize num out" must implement Sanitize: nil | func(*resources.TestResource) interface{}, found: func(*resources.TestResource)`,
 		},
 	}
 

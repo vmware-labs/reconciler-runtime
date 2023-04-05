@@ -14,8 +14,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -35,10 +33,8 @@ type ReconcilerTestCase struct {
 
 	// inputs
 
-	// Deprecated use Request
-	Key types.NamespacedName
 	// Request identifies the object to be reconciled
-	Request controllerruntime.Request
+	Request reconcilers.Request
 	// WithReactors installs each ReactionFunc into each fake clientset. ReactionFuncs intercept
 	// each call to the clientset providing the ability to mutate the resource or inject an error.
 	WithReactors []ReactionFunc
@@ -82,7 +78,7 @@ type ReconcilerTestCase struct {
 	// ShouldErr is true if and only if reconciliation is expected to return an error
 	ShouldErr bool
 	// ExpectedResult is compared to the result returned from the reconciler if there was no error
-	ExpectedResult controllerruntime.Result
+	ExpectedResult reconcilers.Result
 	// Verify provides the reconciliation Result and error for custom assertions
 	Verify VerifyFunc
 
@@ -99,7 +95,7 @@ type ReconcilerTestCase struct {
 }
 
 // VerifyFunc is a verification function for a reconciler's result
-type VerifyFunc func(t *testing.T, result controllerruntime.Result, err error)
+type VerifyFunc func(t *testing.T, result reconcilers.Result, err error)
 
 // VerifyStashedValueFunc is a verification function for the entries in the stash
 type VerifyStashedValueFunc func(t *testing.T, key reconcilers.StashKey, expected, actual interface{})
@@ -184,11 +180,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	r := factory(t, tc, expectConfig.Config())
 
 	// Run the Reconcile we're testing.
-	request := tc.Request
-	if request == (controllerruntime.Request{}) {
-		request.NamespacedName = tc.Key
-	}
-	result, err := r.Reconcile(ctx, request)
+	result, err := r.Reconcile(ctx, tc.Request)
 
 	if (err != nil) != tc.ShouldErr {
 		t.Errorf("Reconcile() error = %v, ShouldErr %v", err, tc.ShouldErr)
@@ -210,7 +202,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	}
 }
 
-func normalizeResult(result controllerruntime.Result) controllerruntime.Result {
+func normalizeResult(result reconcilers.Result) reconcilers.Result {
 	// RequeueAfter implies Requeue, no need to set both
 	if result.RequeueAfter != 0 {
 		result.Requeue = false

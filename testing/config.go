@@ -11,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
@@ -20,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -128,8 +128,6 @@ func (c *ExpectConfig) Config() reconcilers.Config {
 		APIReader: c.apiReader,
 		Recorder:  c.recorder,
 		Tracker:   c.tracker,
-		// Log is deprecated and should not be used. Setting the discard logger until it is fully removed.
-		Log: logr.Discard(),
 	}
 }
 
@@ -415,13 +413,13 @@ var (
 		if s == nil || s.Empty() {
 			return nil
 		}
-		return StringPtr(s.String())
+		return pointer.String(s.String())
 	})
 	NormalizeFieldSelector = cmp.Transformer("fields.Selector", func(s fields.Selector) *string {
 		if s == nil || s.Empty() {
 			return nil
 		}
-		return StringPtr(s.String())
+		return pointer.String(s.String())
 	})
 )
 

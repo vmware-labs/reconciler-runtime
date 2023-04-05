@@ -10,19 +10,20 @@ import (
 	"fmt"
 
 	"github.com/vmware-labs/reconciler-runtime/apis"
-	"github.com/vmware-labs/reconciler-runtime/validation"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 var (
-	_ webhook.Defaulter         = &TestResource{}
-	_ client.Object             = &TestResource{}
-	_ validation.FieldValidator = &TestResource{}
+	_ webhook.Defaulter = &TestResource{}
+	_ webhook.Validator = &TestResource{}
+	_ client.Object     = &TestResource{}
 )
 
 // +kubebuilder:object:root=true
@@ -43,12 +44,24 @@ func (r *TestResource) Default() {
 	r.Spec.Fields["Defaulter"] = "ran"
 }
 
-func (r *TestResource) Validate() validation.FieldErrors {
-	errs := validation.FieldErrors{}
+func (r *TestResource) ValidateCreate() error {
+	return r.validate().ToAggregate()
+}
+
+func (r *TestResource) ValidateUpdate(old runtime.Object) error {
+	return r.validate().ToAggregate()
+}
+
+func (r *TestResource) ValidateDelete() error {
+	return nil
+}
+
+func (r *TestResource) validate() field.ErrorList {
+	errs := field.ErrorList{}
 
 	if r.Spec.Fields != nil {
 		if _, ok := r.Spec.Fields["invalid"]; ok {
-			errs = errs.Also(validation.ErrInvalidValue(r.Spec.Fields["invalid"], "spec.fields.invalid"))
+			field.Invalid(field.NewPath("spec", "fields", "invalid"), r.Spec.Fields["invalid"], "")
 		}
 	}
 

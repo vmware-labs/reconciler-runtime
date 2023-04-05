@@ -10,8 +10,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/vmware-labs/reconciler-runtime/internal"
 	"gomodules.xyz/jsonpatch/v3"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -19,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	crlog "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
@@ -41,35 +42,49 @@ import (
 //
 // If the resource being reconciled is mutated and the response does not already define a patch, a
 // json patch is computed for the mutation and set on the response.
-type AdmissionWebhookAdapter struct {
+//
+// If the webhook can handle multiple types, use *unstructured.Unstructured as the generic type.
+type AdmissionWebhookAdapter[Type client.Object] struct {
 	// Name used to identify this reconciler.  Defaults to `{Type}AdmissionWebhookAdapter`.  Ideally
 	// unique, but not required to be so.
 	//
 	// +optional
 	Name string
 
-	// Type of resource to reconcile. If the webhook can handle multiple types, use
-	// *unstructured.Unstructured{}.
-	Type client.Object
+	// Type of resource to reconcile. Required when the generic type is not a struct.
+	//
+	// +optional
+	Type Type
 
 	// Reconciler is called for each reconciler request with the resource being reconciled.
 	// Typically, Reconciler is a Sequence of multiple SubReconcilers.
-	Reconciler SubReconciler
+	Reconciler SubReconciler[Type]
 
 	Config Config
+
+	lazyInit sync.Once
 }
 
-func (r *AdmissionWebhookAdapter) Build() *admission.Webhook {
-	name := r.Name
-	if name == "" {
-		name = fmt.Sprintf("%sAdmissionWebhookAdapter", typeName(r.Type))
-	}
+func (r *AdmissionWebhookAdapter[T]) init() {
+	r.lazyInit.Do(func() {
+		if internal.IsNil(r.Type) {
+			var nilT T
+			r.Type = newEmpty(nilT).(T)
+		}
+		if r.Name == "" {
+			r.Name = fmt.Sprintf("%sAdmissionWebhookAdapter", typeName(r.Type))
+		}
+	})
+}
+
+func (r *AdmissionWebhookAdapter[T]) Build() *admission.Webhook {
+	r.init()
 	return &admission.Webhook{
 		Handler: r,
 		WithContextFunc: func(ctx context.Context, req *http.Request) context.Context {
 			log := crlog.FromContext(ctx).
 				WithName("controller-runtime.webhook.webhooks").
-				WithName(name).
+				WithName(r.Name).
 				WithValues(
 					"webhook", req.URL.Path,
 				)
@@ -89,7 +104,9 @@ func (r *AdmissionWebhookAdapter) Build() *admission.Webhook {
 }
 
 // Handle implements admission.Handler
-func (r *AdmissionWebhookAdapter) Handle(ctx context.Context, req admission.Request) admission.Response {
+func (r *AdmissionWebhookAdapter[T]) Handle(ctx context.Context, req admission.Request) admission.Response {
+	r.init()
+
 	log := logr.FromContextOrDiscard(ctx).
 		WithValues(
 			"UID", req.UID,
@@ -111,7 +128,7 @@ func (r *AdmissionWebhookAdapter) Handle(ctx context.Context, req admission.Requ
 	ctx = StashAdmissionResponse(ctx, resp)
 
 	// defined for compatibility since this is not a reconciler
-	ctx = StashRequest(ctx, reconcile.Request{
+	ctx = StashRequest(ctx, Request{
 		NamespacedName: types.NamespacedName{
 			Namespace: req.Namespace,
 			Name:      req.Name,
@@ -132,10 +149,10 @@ func (r *AdmissionWebhookAdapter) Handle(ctx context.Context, req admission.Requ
 	return *resp
 }
 
-func (r *AdmissionWebhookAdapter) reconcile(ctx context.Context, req admission.Request, resp *admission.Response) error {
+func (r *AdmissionWebhookAdapter[T]) reconcile(ctx context.Context, req admission.Request, resp *admission.Response) error {
 	log := logr.FromContextOrDiscard(ctx)
 
-	resource := r.Type.DeepCopyObject().(client.Object)
+	resource := r.Type.DeepCopyObject().(T)
 	resourceBytes := req.Object.Raw
 	if req.Operation == admissionv1.Delete {
 		resourceBytes = req.OldObject.Raw
@@ -144,7 +161,7 @@ func (r *AdmissionWebhookAdapter) reconcile(ctx context.Context, req admission.R
 		return err
 	}
 
-	if defaulter, ok := resource.(webhook.Defaulter); ok {
+	if defaulter, ok := client.Object(resource).(webhook.Defaulter); ok {
 		// resource.Default()
 		defaulter.Default()
 	}

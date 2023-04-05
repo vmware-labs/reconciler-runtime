@@ -66,11 +66,10 @@ The implementor is responsible for:
 Resource reconcilers tend to be quite simple, as they delegate their work to sub reconcilers. We'll use an example from projectriff of the Function resource, which uses Kpack to build images from a git repo. In this case the FunctionTargetImageReconciler resolves the target image for the function, and FunctionChildImageReconciler creates a child Kpack Image resource based on the resolve value. 
 
 ```go
-func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler {
+func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler[*buildv1alpha1.Function] {
 	return &reconcilers.ResourceReconciler{
 		Name: "Function",
-		Type: &buildv1alpha1.Function{},
-		Reconciler: reconcilers.Sequence{
+		Reconciler: reconcilers.Sequence[*buildv1alpha1.Function]{
 			FunctionTargetImageReconciler(c),
 			FunctionChildImageReconciler(c),
 		},
@@ -141,21 +140,19 @@ The resulting `ValidatingWebhookConfiguration` will have the current desired rul
 // AdmissionTriggerReconciler reconciles a ValidatingWebhookConfiguration object to
 // dynamically be notified of resource mutations. A less reliable, but potentially more
 // efficient than an informer watching each tracked resource.
-func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReconciler {
+func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReconciler[*admissionregistrationv1.ValidatingWebhookConfiguration] {
 	return &reconcilers.AggregateReconciler{
 		Name:     "AdmissionTrigger",
-		Type:     &admissionregistrationv1.ValidatingWebhookConfiguration{},
-		ListType: &admissionregistrationv1.ValidatingWebhookConfigurationList{},
-		Request:  reconcile.Request{
+		Request:  reconcilers.Request{
 			NamesspacedName: types.NamesspacedName{
 				// no namespace since ValidatingWebhookConfiguration is cluster scoped
 				Name: "my-trigger",
 			},
 		},
-		Reconciler: reconcilers.Sequence{
+		Reconciler: reconcilers.Sequence[*admissionregistrationv1.ValidatingWebhookConfiguration]{
 			DeriveWebhookRules(),
 		},
-		DesiredResource: func(ctx context.Context, resource *admissionregistrationv1.ValidatingWebhookConfiguration) (client.Object, error) {
+		DesiredResource: func(ctx context.Context, resource *admissionregistrationv1.ValidatingWebhookConfiguration) (*admissionregistrationv1.ValidatingWebhookConfiguration, error) {
 			// assumes other aspects of the webhook config are part of a preexisting
 			// install, and that there is a server ready to receive the requests.
 			rules := RetrieveWebhookRules(ctx)
@@ -165,7 +162,7 @@ func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReco
 		MergeBeforeUpdate: func(current, desired *admissionregistrationv1.ValidatingWebhookConfiguration) {
 			current.Webhooks[0].Rules = desired.Webhooks[0].Rules
 		},
-		Sanitize: func(resource *admissionregistrationv1.ValidatingWebhookConfiguration) []admissionregistrationv1.RuleWithOperations {
+		Sanitize: func(resource *admissionregistrationv1.ValidatingWebhookConfiguration) interface{} {
 			return resource.Webhooks[0].Rules
 		},
 
@@ -215,8 +212,8 @@ When a resource is deleted that has pending finalizers, the Finalize method is c
 While sync reconcilers have the ability to do anything a reconciler can do, it's best to keep them focused on a single goal, letting the resource reconciler structure multiple sub reconcilers together. In this case, we use the reconciled resource and the client to resolve the target image and stash the value on the resource's status. The status is a good place to stash simple values that can be made public. More [advanced forms of stashing](#stash) are also available. Learn more about [status and its contract](#status).
 
 ```go
-func FunctionTargetImageReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	return &reconcilers.SyncReconciler{
+func FunctionTargetImageReconciler(c reconcilers.Config) reconcilers.SubReconciler[*buildv1alpha1.Function] {
+	return &reconcilers.SyncReconciler[*buildv1alpha1.Function]{
 		Name: "TargetImage",
 		Sync: func(ctx context.Context, resource *buildv1alpha1.Function) error {
 			log := logr.FromContextOrDiscard(ctx)
@@ -264,12 +261,9 @@ Using a finalizer means that the child resource will not use an owner reference.
 Now it's time to create the child Image resource that will do the work of building our Function. This reconciler looks more more complex than what we have seen so far, each function on the reconciler provides a focused hook into the lifecycle being orchestrated by the ChildReconciler.
 
 ```go
-func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	return &reconcilers.ChildReconciler{
+func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconciler[*buildv1alpha1.Function] {
+	return &reconcilers.ChildReconciler[*buildv1alpha1.Function, *kpackbuildv1alpha1.Image, *kpackbuildv1alpha1.ImageList]{
 		Name:          "ChildImage",
-		ChildType:     &kpackbuildv1alpha1.Image{},
-		ChildListType: &kpackbuildv1alpha1.ImageList{},
-
 		DesiredChild: func(ctx context.Context, parent *buildv1alpha1.Function) (*kpackbuildv1alpha1.Image, error) {
 			if parent.Spec.Source == nil {
 				// don't create an Image, and delete any existing Image
@@ -363,20 +357,20 @@ Higher order reconcilers are SubReconcilers that do not perform work directly, b
 
 A [`CastResource`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#CastResource) (formerly CastParent) casts the ResourceReconciler's type by projecting the resource data onto a new struct. Casting the reconciled resource is useful to create cross cutting reconcilers that can operate on common portion of multiple  resource kinds, commonly referred to as a duck type.
 
+The `CastResource` can also be used to bridge a `SubReconciler` for a specific struct to a generic SubReconciler that can process any object by using `client.Object` as the CastType generic type. In this case, the resource is passed through without coercion.
+
 **Example:**
 
 ```go
-func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler {
-	return &reconcilers.ResourceReconciler{
+func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler[*buildv1alpha1.Function] {
+	return &reconcilers.ResourceReconciler[*buildv1alpha1.Function]{
 		Name: "Function",
-		Type: &buildv1alpha1.Function{},
-		Reconciler: reconcilers.Sequence{
-			&reconcilers.CastResource{
-				Type: &duckv1alpha1.ImageRef{},
+		Reconciler: reconcilers.Sequence[*buildv1alpha1.Function]{
+			&reconcilers.CastResource[*buildv1alpha1.Function, *duckv1alpha1.ImageRef]{
 				// Reconciler that now operates on the ImageRef type. This SubReconciler is likely
 				// shared between multiple ResourceReconcilers that operate on different types,
 				// otherwise it would be easier to work directly with the Function type directly.
-				Reconciler: &reconcilers.SyncReconciler{
+				Reconciler: &reconcilers.SyncReconciler[*duckv1alpha1.ImageRef]{
 					Sync: func(ctx context.Context, resource *duckv1alpha1.ImageRef) error {
 						// do something with the duckv1alpha1.ImageRef instead of a buildv1alpha1.Function
 						return nil
@@ -400,11 +394,10 @@ A [`Sequence`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reco
 A Sequence is commonly used in a ResourceReconciler, but may be used anywhere a SubReconciler is accepted. 
 
 ```go
-func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler {
-	return &reconcilers.ResourceReconciler{
+func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler[*buildv1alpha1.Function] {
+	return &reconcilers.ResourceReconciler[*buildv1alpha1.Function]{
 		Name: "Function",
-		Type: &buildv1alpha1.Function{},
-		Reconciler: reconcilers.Sequence{
+		Reconciler: reconcilers.Sequence[*buildv1alpha1.Function]{
 			FunctionTargetImageReconciler(c),
 			FunctionChildImageReconciler(c),
 		},
@@ -424,9 +417,9 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler {
 `WithConfig` can be used to change the REST Config backing the clients. This could be to make requests to the same cluster with a user defined service account, or target an entirely different Kubernetes cluster.
 
 ```go
-func SwapRESTConfig(rc *rest.Config) *reconcilers.SubReconciler {
-	return &reconcilers.WithConfig{
-		Reconciler: reconcilers.Sequence{
+func SwapRESTConfig(rc *rest.Config) *reconcilers.SubReconciler[*resources.MyResource] {
+	return &reconcilers.WithConfig[*resources.MyResource]{
+		Reconciler: reconcilers.Sequence[*resources.MyResource]{
 			LookupReferenceDataReconciler(),
 			DoSomethingChildReconciler(),
 		},
@@ -456,15 +449,15 @@ The [Finalizers](#finalizers) utilities are used to manage the finalizer on the 
 `WithFinalizer` can be used to wrap any other [SubReconciler](#subreconciler), which can then safely allocate external state while the resource is not terminating, and then cleanup that state once the resource is terminating.
 
 ```go
-func SyncExternalState() *reconcilers.SubReconciler {
-	return &reconcilers.WithFinalizer{
+func SyncExternalState() *reconcilers.SubReconciler[*resources.MyResource] {
+	return &reconcilers.WithFinalizer[*resources.MyResource]{
 		Finalizer: "unique.finalizer.name"
-		Reconciler: &reconcilers.SyncReconciler{
-			Sync: func(ctx context.Context, resource *resources.TestResource) error {
+		Reconciler: &reconcilers.SyncReconciler[*resources.MyResource]{
+			Sync: func(ctx context.Context, resource *resources.MyResource) error {
 				// allocate external state
 				return nil
 			},
-			Finalize: func(ctx context.Context, resource *resources.TestResource) error {
+			Finalize: func(ctx context.Context, resource *resources.MyResource) error {
 				// cleanup the external state
 				return nil
 			},
@@ -490,11 +483,10 @@ Testing can be done on the reconciler directly with [SubReconcilerTests](#subrec
 The Service Binding controller uses a mutating webhook to intercept the creation and updating of workload resources. It projects services into the workload based on ServiceBindings that reference that workload, mutating the resource. If the resource is mutated, a patch is automatically created and added to the webhook response. The webhook allows workloads to be bound at admission time.
 
 ```go
-func AdmissionProjectorWebhook(c reconcilers.Config) *reconcilers.AdmissionWebhookAdapter {
+func AdmissionProjectorWebhook(c reconcilers.Config) *reconcilers.AdmissionWebhookAdapter[*unstructured.Unstructured] {
 	return &reconcilers.AdmissionWebhookAdapter{
 		Name: "AdmissionProjectorWebhook",
-		Type: &unstructured.Unstructured{},
-		Reconciler: &reconcilers.SyncReconciler{
+		Reconciler: &reconcilers.SyncReconciler[*unstructured.Unstructured]{
 			Sync: func(ctx context.Context, workload *unstructured.Unstructured) error {
 				c := reconcilers.RetrieveConfigOrDie(ctx)
 
@@ -620,7 +612,7 @@ Like with the tracking example, the processor reconciler in projectriff also loo
 processor := ...
 processorImagesConfigMap := ...
 
-rts := rtesting.SubReconcilerTests{
+rts := rtesting.SubReconcilerTests[*streamingv1alpha1.Processor]{
 	"missing images configmap": {
 		Resource: processor,
 		ExpectTracks: []rtesting.TrackRequest{
@@ -642,7 +634,7 @@ rts := rtesting.SubReconcilerTests{
 	},
 }
 
-rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase, c reconcilers.Config) reconcilers.SubReconciler {
+rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase[*streamingv1alpha1.Processor], c reconcilers.Config) reconcilers.SubReconciler[*streamingv1alpha1.Processor] {
 	return streaming.ProcessorSyncProcessorImages(c, testSystemNamespace)
 })
 ```
@@ -788,8 +780,8 @@ The tracked resource and its tracker are managed by reference and do not need co
 The stream gateways in projectriff fetch the image references they use to run from a ConfigMap. When the ConfigMap changes, we want to detect and rollout the updated images.
 
 ```go
-func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string) reconcilers.SubReconciler {
-	return &reconcilers.SyncReconciler{
+func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string) reconcilers.SubReconciler[*streamingv1alpha1.InMemoryGateway] {
+	return &reconcilers.SyncReconciler[*streamingv1alpha1.InMemoryGateway]{
 		Name: "SyncConfig",
 		Sync: func(ctx context.Context, resource *streamingv1alpha1.InMemoryGateway) error {
 			log := logr.FromContextOrDiscard(ctx)
@@ -874,7 +866,7 @@ A minimal test case for a sub reconciler that adds a finalizer may look like:
 	...
 	{
 		Name: "add 'test.finalizer' finalizer",
-		Resource: resourceDie,
+		Resource: resourceDie.DieReleasePtr(),
 		ExpectEvents: []rtesting.Event{
 			rtesting.NewEvent(resourceDie, scheme, corev1.EventTypeNormal, "FinalizerPatched",
 				`Patched finalizer %q`, "test.finalizer"),
