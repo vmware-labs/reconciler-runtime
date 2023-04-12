@@ -20,6 +20,10 @@ import (
 	unstructured "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
+	jsonpath "k8s.io/client-go/util/jsonpath"
+	osx "os"
+	reflectx "reflect"
+	yaml "sigs.k8s.io/yaml"
 )
 
 var TestResourceBlank = (&TestResourceDie{}).DieFeed(resources.TestResource{})
@@ -62,12 +66,40 @@ func (d *TestResourceDie) DieFeedPtr(r *resources.TestResource) *TestResourceDie
 	return d.DieFeed(*r)
 }
 
-// DieFeedRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceDie {
-	b, _ := json.Marshal(raw)
+// DieFeedJSON returns a new die with the provided JSON. Panics on error.
+func (d *TestResourceDie) DieFeedJSON(j []byte) *TestResourceDie {
 	r := resources.TestResource{}
-	_ = json.Unmarshal(b, &r)
+	if err := json.Unmarshal(j, &r); err != nil {
+		panic(err)
+	}
 	return d.DieFeed(r)
+}
+
+// DieFeedYAML returns a new die with the provided YAML. Panics on error.
+func (d *TestResourceDie) DieFeedYAML(y []byte) *TestResourceDie {
+	r := resources.TestResource{}
+	if err := yaml.Unmarshal(y, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAMLFile returns a new die loading YAML from a file path. Panics on error.
+func (d *TestResourceDie) DieFeedYAMLFile(name string) *TestResourceDie {
+	y, err := osx.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedYAML(y)
+}
+
+// DieFeedRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceDie {
+	j, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedJSON(j)
 }
 
 // DieRelease returns the resource managed by the die.
@@ -84,21 +116,45 @@ func (d *TestResourceDie) DieReleasePtr() *resources.TestResource {
 	return &r
 }
 
-// DieReleaseUnstructured returns the resource managed by the die as an unstructured object.
+// DieReleaseUnstructured returns the resource managed by the die as an unstructured object. Panics on error.
 func (d *TestResourceDie) DieReleaseUnstructured() *unstructured.Unstructured {
 	r := d.DieReleasePtr()
-	u, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	if err != nil {
+		panic(err)
+	}
 	return &unstructured.Unstructured{
 		Object: u,
 	}
 }
 
-// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceDie) DieReleaseRawExtension() runtime.RawExtension {
+// DieReleaseJSON returns the resource managed by the die as JSON. Panics on error.
+func (d *TestResourceDie) DieReleaseJSON() []byte {
 	r := d.DieReleasePtr()
-	b, _ := json.Marshal(r)
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+// DieReleaseYAML returns the resource managed by the die as YAML. Panics on error.
+func (d *TestResourceDie) DieReleaseYAML() []byte {
+	r := d.DieReleasePtr()
+	y, err := yaml.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return y
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceDie) DieReleaseRawExtension() runtime.RawExtension {
+	j := d.DieReleaseJSON()
 	raw := runtime.RawExtension{}
-	_ = json.Unmarshal(b, &raw)
+	if err := json.Unmarshal(j, &raw); err != nil {
+		panic(err)
+	}
 	return raw
 }
 
@@ -107,6 +163,27 @@ func (d *TestResourceDie) DieStamp(fn func(r *resources.TestResource)) *TestReso
 	r := d.DieRelease()
 	fn(&r)
 	return d.DieFeed(r)
+}
+
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+//
+// Future iterations will improve type coercion from the resource to the callback argument.
+func (d *TestResourceDie) DieStampAt(jp string, fn interface{}) *TestResourceDie {
+	return d.DieStamp(func(r *resources.TestResource) {
+		cp := jsonpath.New("")
+		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
+			panic(err)
+		}
+		cr, err := cp.FindResults(r)
+		if err != nil {
+			// errors are expected if a path is not found
+			return
+		}
+		for _, cv := range cr[0] {
+			args := []reflectx.Value{cv}
+			reflectx.ValueOf(fn).Call(args)
+		}
+	})
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -237,12 +314,40 @@ func (d *TestResourceSpecDie) DieFeedPtr(r *resources.TestResourceSpec) *TestRes
 	return d.DieFeed(*r)
 }
 
-// DieFeedRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceSpecDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceSpecDie {
-	b, _ := json.Marshal(raw)
+// DieFeedJSON returns a new die with the provided JSON. Panics on error.
+func (d *TestResourceSpecDie) DieFeedJSON(j []byte) *TestResourceSpecDie {
 	r := resources.TestResourceSpec{}
-	_ = json.Unmarshal(b, &r)
+	if err := json.Unmarshal(j, &r); err != nil {
+		panic(err)
+	}
 	return d.DieFeed(r)
+}
+
+// DieFeedYAML returns a new die with the provided YAML. Panics on error.
+func (d *TestResourceSpecDie) DieFeedYAML(y []byte) *TestResourceSpecDie {
+	r := resources.TestResourceSpec{}
+	if err := yaml.Unmarshal(y, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAMLFile returns a new die loading YAML from a file path. Panics on error.
+func (d *TestResourceSpecDie) DieFeedYAMLFile(name string) *TestResourceSpecDie {
+	y, err := osx.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedYAML(y)
+}
+
+// DieFeedRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceSpecDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceSpecDie {
+	j, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedJSON(j)
 }
 
 // DieRelease returns the resource managed by the die.
@@ -259,12 +364,33 @@ func (d *TestResourceSpecDie) DieReleasePtr() *resources.TestResourceSpec {
 	return &r
 }
 
-// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceSpecDie) DieReleaseRawExtension() runtime.RawExtension {
+// DieReleaseJSON returns the resource managed by the die as JSON. Panics on error.
+func (d *TestResourceSpecDie) DieReleaseJSON() []byte {
 	r := d.DieReleasePtr()
-	b, _ := json.Marshal(r)
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+// DieReleaseYAML returns the resource managed by the die as YAML. Panics on error.
+func (d *TestResourceSpecDie) DieReleaseYAML() []byte {
+	r := d.DieReleasePtr()
+	y, err := yaml.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return y
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceSpecDie) DieReleaseRawExtension() runtime.RawExtension {
+	j := d.DieReleaseJSON()
 	raw := runtime.RawExtension{}
-	_ = json.Unmarshal(b, &raw)
+	if err := json.Unmarshal(j, &raw); err != nil {
+		panic(err)
+	}
 	return raw
 }
 
@@ -273,6 +399,27 @@ func (d *TestResourceSpecDie) DieStamp(fn func(r *resources.TestResourceSpec)) *
 	r := d.DieRelease()
 	fn(&r)
 	return d.DieFeed(r)
+}
+
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+//
+// Future iterations will improve type coercion from the resource to the callback argument.
+func (d *TestResourceSpecDie) DieStampAt(jp string, fn interface{}) *TestResourceSpecDie {
+	return d.DieStamp(func(r *resources.TestResourceSpec) {
+		cp := jsonpath.New("")
+		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
+			panic(err)
+		}
+		cr, err := cp.FindResults(r)
+		if err != nil {
+			// errors are expected if a path is not found
+			return
+		}
+		for _, cv := range cr[0] {
+			args := []reflectx.Value{cv}
+			reflectx.ValueOf(fn).Call(args)
+		}
+	})
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -345,12 +492,40 @@ func (d *TestResourceStatusDie) DieFeedPtr(r *resources.TestResourceStatus) *Tes
 	return d.DieFeed(*r)
 }
 
-// DieFeedRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceStatusDie {
-	b, _ := json.Marshal(raw)
+// DieFeedJSON returns a new die with the provided JSON. Panics on error.
+func (d *TestResourceStatusDie) DieFeedJSON(j []byte) *TestResourceStatusDie {
 	r := resources.TestResourceStatus{}
-	_ = json.Unmarshal(b, &r)
+	if err := json.Unmarshal(j, &r); err != nil {
+		panic(err)
+	}
 	return d.DieFeed(r)
+}
+
+// DieFeedYAML returns a new die with the provided YAML. Panics on error.
+func (d *TestResourceStatusDie) DieFeedYAML(y []byte) *TestResourceStatusDie {
+	r := resources.TestResourceStatus{}
+	if err := yaml.Unmarshal(y, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAMLFile returns a new die loading YAML from a file path. Panics on error.
+func (d *TestResourceStatusDie) DieFeedYAMLFile(name string) *TestResourceStatusDie {
+	y, err := osx.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedYAML(y)
+}
+
+// DieFeedRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceStatusDie {
+	j, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedJSON(j)
 }
 
 // DieRelease returns the resource managed by the die.
@@ -367,12 +542,33 @@ func (d *TestResourceStatusDie) DieReleasePtr() *resources.TestResourceStatus {
 	return &r
 }
 
-// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+// DieReleaseJSON returns the resource managed by the die as JSON. Panics on error.
+func (d *TestResourceStatusDie) DieReleaseJSON() []byte {
 	r := d.DieReleasePtr()
-	b, _ := json.Marshal(r)
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+// DieReleaseYAML returns the resource managed by the die as YAML. Panics on error.
+func (d *TestResourceStatusDie) DieReleaseYAML() []byte {
+	r := d.DieReleasePtr()
+	y, err := yaml.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return y
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	j := d.DieReleaseJSON()
 	raw := runtime.RawExtension{}
-	_ = json.Unmarshal(b, &raw)
+	if err := json.Unmarshal(j, &raw); err != nil {
+		panic(err)
+	}
 	return raw
 }
 
@@ -381,6 +577,27 @@ func (d *TestResourceStatusDie) DieStamp(fn func(r *resources.TestResourceStatus
 	r := d.DieRelease()
 	fn(&r)
 	return d.DieFeed(r)
+}
+
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+//
+// Future iterations will improve type coercion from the resource to the callback argument.
+func (d *TestResourceStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceStatus) {
+		cp := jsonpath.New("")
+		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
+			panic(err)
+		}
+		cr, err := cp.FindResults(r)
+		if err != nil {
+			// errors are expected if a path is not found
+			return
+		}
+		for _, cv := range cr[0] {
+			args := []reflectx.Value{cv}
+			reflectx.ValueOf(fn).Call(args)
+		}
+	})
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -444,12 +661,40 @@ func (d *TestResourceEmptyStatusDie) DieFeedPtr(r *resources.TestResourceEmptySt
 	return d.DieFeed(*r)
 }
 
-// DieFeedRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceEmptyStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceEmptyStatusDie {
-	b, _ := json.Marshal(raw)
+// DieFeedJSON returns a new die with the provided JSON. Panics on error.
+func (d *TestResourceEmptyStatusDie) DieFeedJSON(j []byte) *TestResourceEmptyStatusDie {
 	r := resources.TestResourceEmptyStatus{}
-	_ = json.Unmarshal(b, &r)
+	if err := json.Unmarshal(j, &r); err != nil {
+		panic(err)
+	}
 	return d.DieFeed(r)
+}
+
+// DieFeedYAML returns a new die with the provided YAML. Panics on error.
+func (d *TestResourceEmptyStatusDie) DieFeedYAML(y []byte) *TestResourceEmptyStatusDie {
+	r := resources.TestResourceEmptyStatus{}
+	if err := yaml.Unmarshal(y, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAMLFile returns a new die loading YAML from a file path. Panics on error.
+func (d *TestResourceEmptyStatusDie) DieFeedYAMLFile(name string) *TestResourceEmptyStatusDie {
+	y, err := osx.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedYAML(y)
+}
+
+// DieFeedRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceEmptyStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceEmptyStatusDie {
+	j, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedJSON(j)
 }
 
 // DieRelease returns the resource managed by the die.
@@ -466,21 +711,45 @@ func (d *TestResourceEmptyStatusDie) DieReleasePtr() *resources.TestResourceEmpt
 	return &r
 }
 
-// DieReleaseUnstructured returns the resource managed by the die as an unstructured object.
+// DieReleaseUnstructured returns the resource managed by the die as an unstructured object. Panics on error.
 func (d *TestResourceEmptyStatusDie) DieReleaseUnstructured() *unstructured.Unstructured {
 	r := d.DieReleasePtr()
-	u, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	if err != nil {
+		panic(err)
+	}
 	return &unstructured.Unstructured{
 		Object: u,
 	}
 }
 
-// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceEmptyStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+// DieReleaseJSON returns the resource managed by the die as JSON. Panics on error.
+func (d *TestResourceEmptyStatusDie) DieReleaseJSON() []byte {
 	r := d.DieReleasePtr()
-	b, _ := json.Marshal(r)
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+// DieReleaseYAML returns the resource managed by the die as YAML. Panics on error.
+func (d *TestResourceEmptyStatusDie) DieReleaseYAML() []byte {
+	r := d.DieReleasePtr()
+	y, err := yaml.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return y
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceEmptyStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	j := d.DieReleaseJSON()
 	raw := runtime.RawExtension{}
-	_ = json.Unmarshal(b, &raw)
+	if err := json.Unmarshal(j, &raw); err != nil {
+		panic(err)
+	}
 	return raw
 }
 
@@ -489,6 +758,27 @@ func (d *TestResourceEmptyStatusDie) DieStamp(fn func(r *resources.TestResourceE
 	r := d.DieRelease()
 	fn(&r)
 	return d.DieFeed(r)
+}
+
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+//
+// Future iterations will improve type coercion from the resource to the callback argument.
+func (d *TestResourceEmptyStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceEmptyStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceEmptyStatus) {
+		cp := jsonpath.New("")
+		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
+			panic(err)
+		}
+		cr, err := cp.FindResults(r)
+		if err != nil {
+			// errors are expected if a path is not found
+			return
+		}
+		for _, cv := range cr[0] {
+			args := []reflectx.Value{cv}
+			reflectx.ValueOf(fn).Call(args)
+		}
+	})
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -619,12 +909,40 @@ func (d *TestResourceEmptyStatusStatusDie) DieFeedPtr(r *resources.TestResourceE
 	return d.DieFeed(*r)
 }
 
-// DieFeedRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceEmptyStatusStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceEmptyStatusStatusDie {
-	b, _ := json.Marshal(raw)
+// DieFeedJSON returns a new die with the provided JSON. Panics on error.
+func (d *TestResourceEmptyStatusStatusDie) DieFeedJSON(j []byte) *TestResourceEmptyStatusStatusDie {
 	r := resources.TestResourceEmptyStatusStatus{}
-	_ = json.Unmarshal(b, &r)
+	if err := json.Unmarshal(j, &r); err != nil {
+		panic(err)
+	}
 	return d.DieFeed(r)
+}
+
+// DieFeedYAML returns a new die with the provided YAML. Panics on error.
+func (d *TestResourceEmptyStatusStatusDie) DieFeedYAML(y []byte) *TestResourceEmptyStatusStatusDie {
+	r := resources.TestResourceEmptyStatusStatus{}
+	if err := yaml.Unmarshal(y, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAMLFile returns a new die loading YAML from a file path. Panics on error.
+func (d *TestResourceEmptyStatusStatusDie) DieFeedYAMLFile(name string) *TestResourceEmptyStatusStatusDie {
+	y, err := osx.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedYAML(y)
+}
+
+// DieFeedRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceEmptyStatusStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceEmptyStatusStatusDie {
+	j, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedJSON(j)
 }
 
 // DieRelease returns the resource managed by the die.
@@ -641,12 +959,33 @@ func (d *TestResourceEmptyStatusStatusDie) DieReleasePtr() *resources.TestResour
 	return &r
 }
 
-// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceEmptyStatusStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+// DieReleaseJSON returns the resource managed by the die as JSON. Panics on error.
+func (d *TestResourceEmptyStatusStatusDie) DieReleaseJSON() []byte {
 	r := d.DieReleasePtr()
-	b, _ := json.Marshal(r)
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+// DieReleaseYAML returns the resource managed by the die as YAML. Panics on error.
+func (d *TestResourceEmptyStatusStatusDie) DieReleaseYAML() []byte {
+	r := d.DieReleasePtr()
+	y, err := yaml.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return y
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceEmptyStatusStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	j := d.DieReleaseJSON()
 	raw := runtime.RawExtension{}
-	_ = json.Unmarshal(b, &raw)
+	if err := json.Unmarshal(j, &raw); err != nil {
+		panic(err)
+	}
 	return raw
 }
 
@@ -655,6 +994,27 @@ func (d *TestResourceEmptyStatusStatusDie) DieStamp(fn func(r *resources.TestRes
 	r := d.DieRelease()
 	fn(&r)
 	return d.DieFeed(r)
+}
+
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+//
+// Future iterations will improve type coercion from the resource to the callback argument.
+func (d *TestResourceEmptyStatusStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceEmptyStatusStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceEmptyStatusStatus) {
+		cp := jsonpath.New("")
+		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
+			panic(err)
+		}
+		cr, err := cp.FindResults(r)
+		if err != nil {
+			// errors are expected if a path is not found
+			return
+		}
+		for _, cv := range cr[0] {
+			args := []reflectx.Value{cv}
+			reflectx.ValueOf(fn).Call(args)
+		}
+	})
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -706,12 +1066,40 @@ func (d *TestResourceNoStatusDie) DieFeedPtr(r *resources.TestResourceNoStatus) 
 	return d.DieFeed(*r)
 }
 
-// DieFeedRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceNoStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceNoStatusDie {
-	b, _ := json.Marshal(raw)
+// DieFeedJSON returns a new die with the provided JSON. Panics on error.
+func (d *TestResourceNoStatusDie) DieFeedJSON(j []byte) *TestResourceNoStatusDie {
 	r := resources.TestResourceNoStatus{}
-	_ = json.Unmarshal(b, &r)
+	if err := json.Unmarshal(j, &r); err != nil {
+		panic(err)
+	}
 	return d.DieFeed(r)
+}
+
+// DieFeedYAML returns a new die with the provided YAML. Panics on error.
+func (d *TestResourceNoStatusDie) DieFeedYAML(y []byte) *TestResourceNoStatusDie {
+	r := resources.TestResourceNoStatus{}
+	if err := yaml.Unmarshal(y, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAMLFile returns a new die loading YAML from a file path. Panics on error.
+func (d *TestResourceNoStatusDie) DieFeedYAMLFile(name string) *TestResourceNoStatusDie {
+	y, err := osx.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedYAML(y)
+}
+
+// DieFeedRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceNoStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceNoStatusDie {
+	j, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedJSON(j)
 }
 
 // DieRelease returns the resource managed by the die.
@@ -728,21 +1116,45 @@ func (d *TestResourceNoStatusDie) DieReleasePtr() *resources.TestResourceNoStatu
 	return &r
 }
 
-// DieReleaseUnstructured returns the resource managed by the die as an unstructured object.
+// DieReleaseUnstructured returns the resource managed by the die as an unstructured object. Panics on error.
 func (d *TestResourceNoStatusDie) DieReleaseUnstructured() *unstructured.Unstructured {
 	r := d.DieReleasePtr()
-	u, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	if err != nil {
+		panic(err)
+	}
 	return &unstructured.Unstructured{
 		Object: u,
 	}
 }
 
-// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceNoStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+// DieReleaseJSON returns the resource managed by the die as JSON. Panics on error.
+func (d *TestResourceNoStatusDie) DieReleaseJSON() []byte {
 	r := d.DieReleasePtr()
-	b, _ := json.Marshal(r)
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+// DieReleaseYAML returns the resource managed by the die as YAML. Panics on error.
+func (d *TestResourceNoStatusDie) DieReleaseYAML() []byte {
+	r := d.DieReleasePtr()
+	y, err := yaml.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return y
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceNoStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	j := d.DieReleaseJSON()
 	raw := runtime.RawExtension{}
-	_ = json.Unmarshal(b, &raw)
+	if err := json.Unmarshal(j, &raw); err != nil {
+		panic(err)
+	}
 	return raw
 }
 
@@ -751,6 +1163,27 @@ func (d *TestResourceNoStatusDie) DieStamp(fn func(r *resources.TestResourceNoSt
 	r := d.DieRelease()
 	fn(&r)
 	return d.DieFeed(r)
+}
+
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+//
+// Future iterations will improve type coercion from the resource to the callback argument.
+func (d *TestResourceNoStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceNoStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNoStatus) {
+		cp := jsonpath.New("")
+		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
+			panic(err)
+		}
+		cr, err := cp.FindResults(r)
+		if err != nil {
+			// errors are expected if a path is not found
+			return
+		}
+		for _, cv := range cr[0] {
+			args := []reflectx.Value{cv}
+			reflectx.ValueOf(fn).Call(args)
+		}
+	})
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -869,12 +1302,40 @@ func (d *TestResourceNilableStatusDie) DieFeedPtr(r *resources.TestResourceNilab
 	return d.DieFeed(*r)
 }
 
-// DieFeedRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceNilableStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceNilableStatusDie {
-	b, _ := json.Marshal(raw)
+// DieFeedJSON returns a new die with the provided JSON. Panics on error.
+func (d *TestResourceNilableStatusDie) DieFeedJSON(j []byte) *TestResourceNilableStatusDie {
 	r := resources.TestResourceNilableStatus{}
-	_ = json.Unmarshal(b, &r)
+	if err := json.Unmarshal(j, &r); err != nil {
+		panic(err)
+	}
 	return d.DieFeed(r)
+}
+
+// DieFeedYAML returns a new die with the provided YAML. Panics on error.
+func (d *TestResourceNilableStatusDie) DieFeedYAML(y []byte) *TestResourceNilableStatusDie {
+	r := resources.TestResourceNilableStatus{}
+	if err := yaml.Unmarshal(y, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAMLFile returns a new die loading YAML from a file path. Panics on error.
+func (d *TestResourceNilableStatusDie) DieFeedYAMLFile(name string) *TestResourceNilableStatusDie {
+	y, err := osx.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedYAML(y)
+}
+
+// DieFeedRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceNilableStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceNilableStatusDie {
+	j, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedJSON(j)
 }
 
 // DieRelease returns the resource managed by the die.
@@ -891,21 +1352,45 @@ func (d *TestResourceNilableStatusDie) DieReleasePtr() *resources.TestResourceNi
 	return &r
 }
 
-// DieReleaseUnstructured returns the resource managed by the die as an unstructured object.
+// DieReleaseUnstructured returns the resource managed by the die as an unstructured object. Panics on error.
 func (d *TestResourceNilableStatusDie) DieReleaseUnstructured() *unstructured.Unstructured {
 	r := d.DieReleasePtr()
-	u, _ := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	if err != nil {
+		panic(err)
+	}
 	return &unstructured.Unstructured{
 		Object: u,
 	}
 }
 
-// DieReleaseRawExtension returns the resource managed by the die as an raw extension.
-func (d *TestResourceNilableStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+// DieReleaseJSON returns the resource managed by the die as JSON. Panics on error.
+func (d *TestResourceNilableStatusDie) DieReleaseJSON() []byte {
 	r := d.DieReleasePtr()
-	b, _ := json.Marshal(r)
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+// DieReleaseYAML returns the resource managed by the die as YAML. Panics on error.
+func (d *TestResourceNilableStatusDie) DieReleaseYAML() []byte {
+	r := d.DieReleasePtr()
+	y, err := yaml.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return y
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceNilableStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	j := d.DieReleaseJSON()
 	raw := runtime.RawExtension{}
-	_ = json.Unmarshal(b, &raw)
+	if err := json.Unmarshal(j, &raw); err != nil {
+		panic(err)
+	}
 	return raw
 }
 
@@ -914,6 +1399,27 @@ func (d *TestResourceNilableStatusDie) DieStamp(fn func(r *resources.TestResourc
 	r := d.DieRelease()
 	fn(&r)
 	return d.DieFeed(r)
+}
+
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+//
+// Future iterations will improve type coercion from the resource to the callback argument.
+func (d *TestResourceNilableStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceNilableStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceNilableStatus) {
+		cp := jsonpath.New("")
+		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
+			panic(err)
+		}
+		cr, err := cp.FindResults(r)
+		if err != nil {
+			// errors are expected if a path is not found
+			return
+		}
+		for _, cv := range cr[0] {
+			args := []reflectx.Value{cv}
+			reflectx.ValueOf(fn).Call(args)
+		}
+	})
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.

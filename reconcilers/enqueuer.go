@@ -18,7 +18,7 @@ func EnqueueTracked(ctx context.Context) handler.EventHandler {
 	log := logr.FromContextOrDiscard(ctx)
 
 	return handler.EnqueueRequestsFromMapFunc(
-		func(obj client.Object) []Request {
+		func(ctx context.Context, obj client.Object) []Request {
 			var requests []Request
 
 			items, err := c.Tracker.GetObservers(obj)

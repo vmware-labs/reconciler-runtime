@@ -120,6 +120,14 @@ func (w *clientWrapper) RESTMapper() meta.RESTMapper {
 	return w.client.RESTMapper()
 }
 
+func (w *clientWrapper) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	return w.client.GroupVersionKindFor(obj)
+}
+
+func (w *clientWrapper) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return w.client.IsObjectNamespaced(obj)
+}
+
 func (w *clientWrapper) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	gvr, namespace, name, err := w.objmeta(obj)
 	if err != nil {
