@@ -580,6 +580,26 @@ func TestResourceReconciler(t *testing.T) {
 				}),
 			},
 		},
+		"skip status updates": {
+			Request: testRequest,
+			GivenObjects: []client.Object{
+				resource,
+			},
+			Metadata: map[string]interface{}{
+				"SkipStatusUpdate": true,
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
+						Sync: func(ctx context.Context, resource *resources.TestResource) error {
+							if resource.Status.Fields == nil {
+								resource.Status.Fields = map[string]string{}
+							}
+							resource.Status.Fields["Reconciler"] = "ran"
+							return nil
+						},
+					}
+				},
+			},
+		},
 		"sub reconciler erred": {
 			Request: testRequest,
 			GivenObjects: []client.Object{
@@ -760,9 +780,14 @@ func TestResourceReconciler(t *testing.T) {
 	}
 
 	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+		skipStatusUpdate := false
+		if skip, ok := rtc.Metadata["SkipStatusUpdate"].(bool); ok {
+			skipStatusUpdate = skip
+		}
 		return &reconcilers.ResourceReconciler[*resources.TestResource]{
-			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource])(t, c),
-			Config:     c,
+			Reconciler:       rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource])(t, c),
+			SkipStatusUpdate: skipStatusUpdate,
+			Config:           c,
 		}
 	})
 }
