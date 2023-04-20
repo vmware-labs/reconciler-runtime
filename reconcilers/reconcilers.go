@@ -113,6 +113,11 @@ type ResourceReconciler[Type client.Object] struct {
 	// +optional
 	Type Type
 
+	// SkipStatusUpdate when true, the resource's status will not be updated. If this
+	// is not the primary reconciler for a resource, skipping status updates can avoid
+	// conflicts. Finalizers and events are still actionable.
+	SkipStatusUpdate bool
+
 	// Reconciler is called for each reconciler request with the resource being reconciled.
 	// Typically, Reconciler is a Sequence of multiple SubReconcilers.
 	//
@@ -250,6 +255,10 @@ func (r *ResourceReconciler[T]) Reconcile(ctx context.Context, req Request) (Res
 
 	r.initializeConditions(resource)
 	result, err := r.reconcile(ctx, resource)
+
+	if r.SkipStatusUpdate {
+		return result, err
+	}
 
 	// attempt to restore last transition time for unchanged conditions
 	r.syncLastTransitionTime(r.conditions(resource), r.conditions(originalResource))
