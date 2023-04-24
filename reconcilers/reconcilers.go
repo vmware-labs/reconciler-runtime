@@ -1121,7 +1121,7 @@ func (r *ChildReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T)
 			// the created child from a previous turn may be slow to appear in the informer cache, but shouldn't appear
 			// on the reconciled resource as being not ready.
 			apierr := err.(apierrs.APIStatus)
-			conflicted := newEmpty(r.ChildType).(CT)
+			conflicted := r.ChildType.DeepCopyObject().(CT)
 			_ = c.APIReader.Get(ctx, types.NamespacedName{Namespace: resource.GetNamespace(), Name: apierr.Status().Details.Name}, conflicted)
 			if r.ourChild(resource, conflicted) {
 				// skip updating the reconciled resource's status, fail and try again
@@ -1145,8 +1145,8 @@ func (r *ChildReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource T)
 	pc := RetrieveOriginalConfigOrDie(ctx)
 	c := RetrieveConfigOrDie(ctx)
 
-	actual := newEmpty(r.ChildType).(CT)
-	children := newEmpty(r.ChildListType).(CLT)
+	actual := r.ChildType.DeepCopyObject().(CT)
+	children := r.ChildListType.DeepCopyObject().(CLT)
 	if err := c.List(ctx, children, r.listOptions(ctx, resource)...); err != nil {
 		return nilCT, err
 	}
