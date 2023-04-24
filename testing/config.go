@@ -173,7 +173,7 @@ func (c *ExpectConfig) AssertClientCreateExpectations(t *testing.T) {
 	}
 	c.init()
 
-	c.compareActions(t, "create", c.ExpectCreates, c.client.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreResourceVersion, cmpopts.EquateEmpty())
+	c.compareActions(t, "create", c.ExpectCreates, c.client.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
 }
 
 // AssertClientUpdateExpectations asserts observed reconciler client update behavior matches the expected client update behavior
