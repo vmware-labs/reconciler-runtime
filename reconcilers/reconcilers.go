@@ -980,7 +980,7 @@ type ChildReconciler[Type, ChildType client.Object, ChildListType client.ObjectL
 	// ReflectChildStatusOnParent updates the reconciled resource's status with values from the
 	// child. Select types of error are passed, including:
 	//   - apierrs.IsConflict
-	ReflectChildStatusOnParent func(parent Type, child ChildType, err error)
+	ReflectChildStatusOnParent func(ctx context.Context, parent Type, child ChildType, err error)
 
 	// HarmonizeImmutableFields allows fields that are immutable on the current
 	// object to be copied to the desired object in order to avoid creating
@@ -1128,13 +1128,13 @@ func (r *ChildReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T)
 				return Result{}, err
 			}
 			log.Info("unable to reconcile child, not owned", "child", namespaceName(conflicted), "ownerRefs", conflicted.GetOwnerReferences())
-			r.ReflectChildStatusOnParent(resource, child, err)
+			r.ReflectChildStatusOnParent(ctx, resource, child, err)
 			return Result{}, nil
 		}
 		log.Error(err, "unable to reconcile child")
 		return Result{}, err
 	}
-	r.ReflectChildStatusOnParent(resource, child, err)
+	r.ReflectChildStatusOnParent(ctx, resource, child, err)
 
 	return Result{}, nil
 }

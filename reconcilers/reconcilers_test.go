@@ -1501,7 +1501,7 @@ func TestChildReconciler(t *testing.T) {
 			MergeBeforeUpdate: func(current, desired *corev1.ConfigMap) {
 				current.Data = desired.Data
 			},
-			ReflectChildStatusOnParent: func(parent *resources.TestResource, child *corev1.ConfigMap, err error) {
+			ReflectChildStatusOnParent: func(ctx context.Context, parent *resources.TestResource, child *corev1.ConfigMap, err error) {
 				if err != nil {
 					if apierrs.IsAlreadyExists(err) {
 						name := err.(apierrs.APIStatus).Status().Details.Name
@@ -2474,7 +2474,7 @@ func TestChildReconciler_Unstructured(t *testing.T) {
 			MergeBeforeUpdate: func(current, desired *unstructured.Unstructured) {
 				current.Object["data"] = desired.Object["data"]
 			},
-			ReflectChildStatusOnParent: func(parent *unstructured.Unstructured, child *unstructured.Unstructured, err error) {
+			ReflectChildStatusOnParent: func(ctx context.Context, parent *unstructured.Unstructured, child *unstructured.Unstructured, err error) {
 				if err != nil {
 					if apierrs.IsAlreadyExists(err) {
 						name := err.(apierrs.APIStatus).Status().Details.Name
