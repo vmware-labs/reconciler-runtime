@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
@@ -44,16 +45,16 @@ func (r *TestResource) Default() {
 	r.Spec.Fields["Defaulter"] = "ran"
 }
 
-func (r *TestResource) ValidateCreate() error {
-	return r.validate().ToAggregate()
+func (r *TestResource) ValidateCreate() (admission.Warnings, error) {
+	return nil, r.validate().ToAggregate()
 }
 
-func (r *TestResource) ValidateUpdate(old runtime.Object) error {
-	return r.validate().ToAggregate()
+func (r *TestResource) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+	return nil, r.validate().ToAggregate()
 }
 
-func (r *TestResource) ValidateDelete() error {
-	return nil
+func (r *TestResource) ValidateDelete() (admission.Warnings, error) {
+	return nil, nil
 }
 
 func (r *TestResource) validate() field.ErrorList {
