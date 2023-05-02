@@ -23,9 +23,17 @@ jobs:
     - name: Get dependencies
       run: |
         go get -v -t -d ./...
+    - name: Regenerate files
+      run: |
+        ./hack/update-codegen.sh
+    - name: Check for drift in generated files
+      run: |
+        git diff --exit-code .
     - name: Test
-      run: go test -v ./... -coverprofile cover.out
+      run: |
+        go test -v ./... -coverprofile cover.out
     - name: Report coverage
-      run: bash <(curl -s https://codecov.io/bash)
+      run: |
+        bash <(curl -s https://codecov.io/bash)
       env:
         CODECOV_TOKEN: 16421b44-8cd3-49d9-a01e-189c5141009e
