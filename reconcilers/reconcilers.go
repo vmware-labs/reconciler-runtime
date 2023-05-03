@@ -978,8 +978,11 @@ type ChildReconciler[Type, ChildType client.Object, ChildListType client.ObjectL
 	DesiredChild func(ctx context.Context, resource Type) (ChildType, error)
 
 	// ReflectChildStatusOnParent updates the reconciled resource's status with values from the
-	// child. Select types of error are passed, including:
-	//   - apierrs.IsConflict
+	// child. Select types of errors are passed, including:
+	//   - apierrs.IsAlreadyExists
+	//
+	// Most errors are returned directly, skipping this method. The set of handled error types
+	// may grow, implementations should be defensive rather than assuming the error type.
 	ReflectChildStatusOnParent func(ctx context.Context, parent Type, child ChildType, err error)
 
 	// HarmonizeImmutableFields allows fields that are immutable on the current
