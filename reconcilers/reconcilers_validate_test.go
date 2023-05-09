@@ -14,7 +14,9 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/internal/resources"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -545,8 +547,12 @@ func TestCastResource_validate(t *testing.T) {
 }
 
 func TestWithConfig_validate(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = resources.AddToScheme(scheme)
+	_ = clientgoscheme.AddToScheme(scheme)
+
 	config := Config{
-		Tracker: tracker.New(0),
+		Tracker: tracker.New(scheme, 0),
 	}
 
 	tests := []struct {

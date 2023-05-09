@@ -102,7 +102,7 @@ func (c *ExpectConfig) init() {
 			events: []Event{},
 			scheme: c.Scheme,
 		}
-		c.tracker = createTracker(c.GivenTracks)
+		c.tracker = createTracker(c.GivenTracks, c.Scheme)
 		c.observedErrors = []string{}
 	})
 }
@@ -330,18 +330,20 @@ func (c *ExpectConfig) AssertTrackerExpectations(t *testing.T) {
 
 	actualTracks := c.tracker.getTrackRequests()
 	for i, exp := range c.ExpectTracks {
+		exp.normalize()
+
 		if i >= len(actualTracks) {
-			c.errorf(t, "Missing tracking request for config %q: %s", c.Name, exp)
+			c.errorf(t, "Missing tracking request for config %q: %v", c.Name, exp)
 			continue
 		}
 
-		if diff := cmp.Diff(exp, actualTracks[i]); diff != "" {
+		if diff := cmp.Diff(exp, actualTracks[i], NormalizeLabelSelector); diff != "" {
 			c.errorf(t, "Unexpected tracking request for config %q (-expected, +actual): %s", c.Name, diff)
 		}
 	}
 	if actual, exp := len(actualTracks), len(c.ExpectTracks); actual > exp {
 		for _, extra := range actualTracks[exp:] {
-			c.errorf(t, "Extra tracking request for config %q: %s", c.Name, extra)
+			c.errorf(t, "Extra tracking request for config %q: %v", c.Name, extra)
 		}
 	}
 }

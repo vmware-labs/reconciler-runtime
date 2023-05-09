@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,11 +22,13 @@ import (
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/cache"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/reference"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -71,21 +74,56 @@ func (c Config) WithCluster(cluster cluster.Cluster) Config {
 // TrackAndGet tracks the resources for changes and returns the current value. The track is
 // registered even when the resource does not exists so that its creation can be tracked.
 //
-// Equivalent to calling both `c.Tracker.Track(...)` and `c.Client.Get(...)`
+// Equivalent to calling both `c.Tracker.TrackObject(...)` and `c.Client.Get(...)`
 func (c Config) TrackAndGet(ctx context.Context, key types.NamespacedName, obj client.Object, opts ...client.GetOption) error {
-	c.Tracker.Track(
-		ctx,
-		tracker.NewKey(gvk(obj, c.Scheme()), key),
-		RetrieveRequest(ctx).NamespacedName,
-	)
+	// create synthetic resource to track from known type and request
+	req := RetrieveRequest(ctx)
+	resource := RetrieveResourceType(ctx).DeepCopyObject().(client.Object)
+	resource.SetNamespace(req.Namespace)
+	resource.SetName(req.Name)
+	ref := obj.DeepCopyObject().(client.Object)
+	ref.SetNamespace(key.Namespace)
+	ref.SetName(key.Name)
+	c.Tracker.TrackObject(ref, resource)
+
 	return c.Get(ctx, key, obj, opts...)
+}
+
+// TrackAndList tracks the resources for changes and returns the current value.
+//
+// Equivalent to calling both `c.Tracker.TrackReference(...)` and `c.Client.List(...)`
+func (c Config) TrackAndList(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	// create synthetic resource to track from known type and request
+	req := RetrieveRequest(ctx)
+	resource := RetrieveResourceType(ctx).DeepCopyObject().(client.Object)
+	resource.SetNamespace(req.Namespace)
+	resource.SetName(req.Name)
+
+	or, err := reference.GetReference(c.Scheme(), list)
+	if err != nil {
+		return err
+	}
+	gvk := schema.FromAPIVersionAndKind(or.APIVersion, or.Kind)
+	listOpts := (&client.ListOptions{}).ApplyOptions(opts)
+	if listOpts.LabelSelector == nil {
+		listOpts.LabelSelector = labels.Everything()
+	}
+	ref := tracker.Reference{
+		APIGroup:  gvk.Group,
+		Kind:      strings.TrimSuffix(gvk.Kind, "List"),
+		Namespace: listOpts.Namespace,
+		Selector:  listOpts.LabelSelector,
+	}
+	c.Tracker.TrackReference(ref, resource)
+
+	return c.List(ctx, list, opts...)
 }
 
 // NewConfig creates a Config for a specific API type. Typically passed into a
 // reconciler.
 func NewConfig(mgr ctrl.Manager, apiType client.Object, syncPeriod time.Duration) Config {
 	return Config{
-		Tracker: tracker.New(2 * syncPeriod),
+		Tracker: tracker.New(mgr.GetScheme(), 2*syncPeriod),
 	}.WithCluster(mgr)
 }
 
@@ -601,7 +639,7 @@ func (r *AggregateReconciler[T]) Reconcile(ctx context.Context, req Request) (Re
 		Client:    c.Client,
 		APIReader: c.APIReader,
 		Recorder:  c.Recorder,
-		Tracker:   tracker.New(0),
+		Tracker:   tracker.New(c.Scheme(), 0),
 	})
 	desired, err := r.desiredResource(ctx, resource)
 	if err != nil {
@@ -1069,7 +1107,7 @@ func (r *ChildReconciler[T, CT, CLT]) SetupWithManager(ctx context.Context, mgr 
 	}
 
 	if r.SkipOwnerReference {
-		bldr.Watches(&source.Kind{Type: r.ChildType}, EnqueueTracked(ctx, r.ChildType))
+		bldr.Watches(&source.Kind{Type: r.ChildType}, EnqueueTracked(ctx))
 	} else {
 		bldr.Owns(r.ChildType)
 	}
@@ -1680,7 +1718,8 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 		if r.TrackDesired {
 			// normally tracks should occur before API operations, but when creating a resource with a
 			// generated name, we need to know the actual resource name.
-			if err := c.Tracker.TrackChild(ctx, resource, desired, c.Scheme()); err != nil {
+
+			if err := c.Tracker.TrackObject(desired, resource); err != nil {
 				return nilT, err
 			}
 		}
@@ -1715,7 +1754,7 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 	}
 	log.Info("updating resource", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
 	if r.TrackDesired {
-		if err := c.Tracker.TrackChild(ctx, resource, current, c.Scheme()); err != nil {
+		if err := c.Tracker.TrackObject(current, resource); err != nil {
 			return nilT, err
 		}
 	}

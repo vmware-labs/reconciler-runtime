@@ -8,29 +8,26 @@ package reconcilers
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/types"
+	"github.com/go-logr/logr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-
-	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
 
-func EnqueueTracked(ctx context.Context, by client.Object) handler.EventHandler {
+func EnqueueTracked(ctx context.Context) handler.EventHandler {
 	c := RetrieveConfigOrDie(ctx)
+	log := logr.FromContextOrDiscard(ctx)
+
 	return handler.EnqueueRequestsFromMapFunc(
-		func(a client.Object) []Request {
+		func(obj client.Object) []Request {
 			var requests []Request
 
-			gvks, _, err := c.Scheme().ObjectKinds(by)
+			items, err := c.Tracker.GetObservers(obj)
 			if err != nil {
-				panic(err)
+				log.Error(err, "unable to get tracked requests")
+				return nil
 			}
 
-			key := tracker.NewKey(
-				gvks[0],
-				types.NamespacedName{Namespace: a.GetNamespace(), Name: a.GetName()},
-			)
-			for _, item := range c.Tracker.Lookup(ctx, key) {
+			for _, item := range items {
 				requests = append(requests, Request{NamespacedName: item})
 			}
 
