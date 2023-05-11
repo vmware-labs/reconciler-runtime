@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/tools/reference"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -47,10 +48,10 @@ type impl struct {
 	m sync.Mutex
 	// exact maps from an object reference to the set of
 	// keys for objects watching it.
-	exact map[Reference]set
+	exact map[Reference]exactSet
 	// inexact maps from a partial object reference (no name/selector) to
 	// a map from watcher keys to the compiled selector and expiry.
-	inexact map[Reference]matchers
+	inexact map[Reference]inexactSet
 
 	// scheme used to convert typed objects to GVKs
 	scheme *runtime.Scheme
@@ -62,23 +63,32 @@ type impl struct {
 // Check that impl implements Interface.
 var _ Tracker = (*impl)(nil)
 
-// set is a map from keys to expirations
-type set map[types.NamespacedName]time.Time
+// exactSet is a map from keys to expirations.
+type exactSet map[types.NamespacedName]time.Time
 
-// matchers maps the tracker's key to the matcher.
-type matchers map[types.NamespacedName]matcher
+// inexactSet is a map from keys to matchers.
+type inexactSet map[types.NamespacedName]matchers
+
+// matchers is a map from matcherKeys to matchers
+type matchers map[matcherKey]matcher
 
 // matcher holds the selector and expiry for matching tracked objects.
 type matcher struct {
 	// The selector to complete the match.
 	selector labels.Selector
 
+	// When this lease expires.
+	expiry time.Time
+}
+
+// matcherKey holds a stringified selector and namespace.
+type matcherKey struct {
+	// The selector for the matcher stringified
+	selector string
+
 	// The namespace to complete the match. Empty matches cluster scope
 	// and all namespaced resources.
 	namespace string
-
-	// When this lease expires.
-	expiry time.Time
 }
 
 // Track implements Interface.
@@ -133,17 +143,17 @@ func (i *impl) TrackReference(ref Reference, obj client.Object) error {
 	i.m.Lock()
 	defer i.m.Unlock()
 	if i.exact == nil {
-		i.exact = make(map[Reference]set)
+		i.exact = make(map[Reference]exactSet)
 	}
 	if i.inexact == nil {
-		i.inexact = make(map[Reference]matchers)
+		i.inexact = make(map[Reference]inexactSet)
 	}
 
 	// If the reference uses Name then it is an exact match.
 	if ref.Selector == nil {
 		l, ok := i.exact[ref]
 		if !ok {
-			l = set{}
+			l = exactSet{}
 		}
 
 		// Overwrite the key with a new expiration.
@@ -159,24 +169,28 @@ func (i *impl) TrackReference(ref Reference, obj client.Object) error {
 		Kind:     ref.Kind,
 		// Exclude the namespace and selector, they are captured in the matcher.
 	}
-	l, ok := i.inexact[partialRef]
+	is, ok := i.inexact[partialRef]
 	if !ok {
-		l = matchers{}
+		is = inexactSet{}
+	}
+	m, ok := is[key]
+	if !ok {
+		m = matchers{}
 	}
 
 	// Overwrite the key with a new expiration.
-	l[key] = matcher{
-		selector:  ref.Selector,
+	m[matcherKey{
+		selector:  ref.Selector.String(),
 		namespace: ref.Namespace,
-		expiry:    time.Now().Add(i.leaseDuration),
+	}] = matcher{
+		selector: ref.Selector,
+		expiry:   time.Now().Add(i.leaseDuration),
 	}
 
-	i.inexact[partialRef] = l
-	return nil
-}
+	is[key] = m
 
-func isExpired(expiry time.Time) bool {
-	return time.Now().After(expiry)
+	i.inexact[partialRef] = is
+	return nil
 }
 
 // GetObservers implements Interface.
@@ -197,21 +211,23 @@ func (i *impl) GetObservers(obj client.Object) ([]types.NamespacedName, error) {
 		Name:      or.Name,
 	}
 
-	var keys []types.NamespacedName
+	keys := sets.Set[types.NamespacedName]{}
 
 	i.m.Lock()
 	defer i.m.Unlock()
+
+	now := time.Now()
 
 	// Handle exact matches.
 	s, ok := i.exact[ref]
 	if ok {
 		for key, expiry := range s {
 			// If the expiration has lapsed, then delete the key.
-			if isExpired(expiry) {
+			if now.After(expiry) {
 				delete(s, key)
 				continue
 			}
-			keys = append(keys, key)
+			keys.Insert(key)
 		}
 		if len(s) == 0 {
 			delete(i.exact, ref)
@@ -221,26 +237,33 @@ func (i *impl) GetObservers(obj client.Object) ([]types.NamespacedName, error) {
 	// Handle inexact matches.
 	ref.Name = ""
 	ref.Namespace = ""
-	ms, ok := i.inexact[ref]
+	is, ok := i.inexact[ref]
 	if ok {
 		ls := labels.Set(obj.GetLabels())
-		for key, m := range ms {
-			// If the expiration has lapsed, then delete the key.
-			if isExpired(m.expiry) {
-				delete(ms, key)
-				continue
+		for key, ms := range is {
+			for k, m := range ms {
+				// If the expiration has lapsed, then delete the key.
+				if now.After(m.expiry) {
+					delete(ms, k)
+					continue
+				}
+				// Match namespace, allowing for a cluster wide match.
+				if k.namespace != "" && k.namespace != obj.GetNamespace() {
+					continue
+				}
+				if !m.selector.Matches(ls) {
+					continue
+				}
+				keys.Insert(key)
 			}
-			if m.namespace != "" && m.namespace != obj.GetNamespace() {
-				continue
-			}
-			if m.selector.Matches(ls) {
-				keys = append(keys, key)
+			if len(ms) == 0 {
+				delete(is, key)
 			}
 		}
-		if len(s) == 0 {
-			delete(i.exact, ref)
+		if len(is) == 0 {
+			delete(i.inexact, ref)
 		}
 	}
 
-	return keys, nil
+	return keys.UnsortedList(), nil
 }
