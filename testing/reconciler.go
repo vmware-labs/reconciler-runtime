@@ -40,6 +40,14 @@ type ReconcilerTestCase struct {
 	WithReactors []ReactionFunc
 	// WithClientBuilder allows a test to modify the fake client initialization.
 	WithClientBuilder func(*fake.ClientBuilder) *fake.ClientBuilder
+	// StatusSubResourceTypes is a set of object types that support the status sub-resource. For
+	// these types, the only way to modify the resource's status is update or patch the status
+	// sub-resource. Patching or updating the main resource will not mutated the status field.
+	// Built-in Kubernetes types are already accounted for and do not need to be listed.
+	//
+	// Interacting with a status sub-resource for a type not enumerated as having a status
+	// sub-resource will return a not found error.
+	StatusSubResourceTypes []client.Object
 	// GivenObjects build the kubernetes objects which are present at the onset of reconciliation
 	GivenObjects []client.Object
 	// APIGivenObjects contains objects that are only available via an API reader instead of the normal cache
@@ -154,6 +162,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	expectConfig := &ExpectConfig{
 		Name:                    "default",
 		Scheme:                  scheme,
+		StatusSubResourceTypes:  tc.StatusSubResourceTypes,
 		GivenObjects:            tc.GivenObjects,
 		APIGivenObjects:         tc.APIGivenObjects,
 		WithClientBuilder:       tc.WithClientBuilder,

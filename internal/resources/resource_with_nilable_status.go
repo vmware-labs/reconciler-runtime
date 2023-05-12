@@ -11,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 var (
@@ -37,16 +38,16 @@ func (r *TestResourceNilableStatus) Default() {
 	r.Spec.Fields["Defaulter"] = "ran"
 }
 
-func (r *TestResourceNilableStatus) ValidateCreate() error {
-	return r.validate().ToAggregate()
+func (r *TestResourceNilableStatus) ValidateCreate() (admission.Warnings, error) {
+	return nil, r.validate().ToAggregate()
 }
 
-func (r *TestResourceNilableStatus) ValidateUpdate(old runtime.Object) error {
-	return r.validate().ToAggregate()
+func (r *TestResourceNilableStatus) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
+	return nil, r.validate().ToAggregate()
 }
 
-func (r *TestResourceNilableStatus) ValidateDelete() error {
-	return nil
+func (r *TestResourceNilableStatus) ValidateDelete() (admission.Warnings, error) {
+	return nil, nil
 }
 
 func (r *TestResourceNilableStatus) validate() field.ErrorList {

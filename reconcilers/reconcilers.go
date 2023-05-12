@@ -36,7 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/vmware-labs/reconciler-runtime/internal"
@@ -1107,7 +1106,7 @@ func (r *ChildReconciler[T, CT, CLT]) SetupWithManager(ctx context.Context, mgr 
 	}
 
 	if r.SkipOwnerReference {
-		bldr.Watches(&source.Kind{Type: r.ChildType}, EnqueueTracked(ctx))
+		bldr.Watches(r.ChildType, EnqueueTracked(ctx))
 	} else {
 		bldr.Owns(r.ChildType)
 	}

@@ -376,6 +376,9 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 	rts := rtesting.ReconcilerTests{
 		"nil status": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResourceNilableStatus{},
+			},
 			GivenObjects: []client.Object{
 				resource.Status(nil),
 			},
@@ -394,6 +397,9 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 		},
 		"status conditions are initialized": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResourceNilableStatus{},
+			},
 			GivenObjects: []client.Object{
 				resource.StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.ConditionsDie()
@@ -424,6 +430,9 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 		},
 		"reconciler mutated status": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResourceNilableStatus{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -452,6 +461,9 @@ func TestResourceReconciler_NilableStatus(t *testing.T) {
 		},
 		"status update failed": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResourceNilableStatus{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -521,6 +533,9 @@ func TestResourceReconciler_Unstructured(t *testing.T) {
 	rts := rtesting.ReconcilerTests{
 		"in sync status": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -536,6 +551,9 @@ func TestResourceReconciler_Unstructured(t *testing.T) {
 		},
 		"status update": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -601,6 +619,9 @@ func TestResourceReconciler(t *testing.T) {
 	rts := rtesting.ReconcilerTests{
 		"resource does not exist": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
@@ -614,6 +635,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"ignore deleted resource": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&deletedAt)
@@ -632,6 +656,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"error fetching resource": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -652,6 +679,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"resource is defaulted": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -670,6 +700,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"status conditions are initialized": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource.StatusDie(func(d *dies.TestResourceStatusDie) {
 					d.ConditionsDie()
@@ -700,6 +733,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"reconciler mutated status": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -748,6 +784,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"sub reconciler erred": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -764,6 +803,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"sub reconciler halted": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -801,6 +843,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"status update failed": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -835,6 +880,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"context is stashable": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -853,6 +901,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"context has config": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -874,6 +925,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"context has resource type": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
@@ -895,6 +949,9 @@ func TestResourceReconciler(t *testing.T) {
 		},
 		"context can be augmented in Prepare and accessed in Cleanup": {
 			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
 			GivenObjects: []client.Object{
 				resource,
 			},
