@@ -6,14 +6,14 @@ SPDX-License-Identifier: Apache-2.0
 package testing
 
 import (
-	"context"
-	"fmt"
 	"time"
 
 	"github.com/vmware-labs/reconciler-runtime/tracker"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/reference"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -21,8 +21,26 @@ import (
 type TrackRequest struct {
 	// Tracker is the object doing the tracking
 	Tracker types.NamespacedName
+
+	// Deprecated use TrackedReference
 	// Tracked is the object being tracked
 	Tracked tracker.Key
+
+	// TrackedReference is a ref to the object being tracked
+	TrackedReference tracker.Reference
+}
+
+func (tr *TrackRequest) normalize() {
+	if tr.TrackedReference != (tracker.Reference{}) {
+		return
+	}
+	tr.TrackedReference = tracker.Reference{
+		APIGroup:  tr.Tracked.GroupKind.Group,
+		Kind:      tr.Tracked.GroupKind.Kind,
+		Namespace: tr.Tracked.NamespacedName.Namespace,
+		Name:      tr.Tracked.NamespacedName.Name,
+	}
+	tr.Tracked = tracker.Key{}
 }
 
 type trackBy func(trackingObjNamespace, trackingObjName string) TrackRequest
@@ -34,7 +52,12 @@ func (t trackBy) By(trackingObjNamespace, trackingObjName string) TrackRequest {
 func CreateTrackRequest(trackedObjGroup, trackedObjKind, trackedObjNamespace, trackedObjName string) trackBy {
 	return func(trackingObjNamespace, trackingObjName string) TrackRequest {
 		return TrackRequest{
-			Tracked: tracker.Key{GroupKind: schema.GroupKind{Group: trackedObjGroup, Kind: trackedObjKind}, NamespacedName: types.NamespacedName{Namespace: trackedObjNamespace, Name: trackedObjName}},
+			TrackedReference: tracker.Reference{
+				APIGroup:  trackedObjGroup,
+				Kind:      trackedObjKind,
+				Namespace: trackedObjNamespace,
+				Name:      trackedObjName,
+			},
 			Tracker: types.NamespacedName{Namespace: trackingObjNamespace, Name: trackingObjName},
 		}
 	}
@@ -47,17 +70,27 @@ func NewTrackRequest(t, b client.Object, scheme *runtime.Scheme) TrackRequest {
 		panic(err)
 	}
 	return TrackRequest{
-		Tracked: tracker.Key{GroupKind: schema.GroupKind{Group: gvks[0].Group, Kind: gvks[0].Kind}, NamespacedName: types.NamespacedName{Namespace: tracked.GetNamespace(), Name: tracked.GetName()}},
+		TrackedReference: tracker.Reference{
+			APIGroup:  gvks[0].Group,
+			Kind:      gvks[0].Kind,
+			Namespace: tracked.GetNamespace(),
+			Name:      tracked.GetName(),
+		},
 		Tracker: types.NamespacedName{Namespace: by.GetNamespace(), Name: by.GetName()},
 	}
 }
 
-const maxDuration = time.Duration(1<<63 - 1)
-
-func createTracker(given []TrackRequest) *mockTracker {
-	t := &mockTracker{Tracker: tracker.New(maxDuration)}
+func createTracker(given []TrackRequest, scheme *runtime.Scheme) *mockTracker {
+	t := &mockTracker{
+		Tracker: tracker.New(scheme, 24*time.Hour),
+		scheme:  scheme,
+	}
 	for _, g := range given {
-		t.Track(context.TODO(), g.Tracked, g.Tracker)
+		g.normalize()
+		obj := &unstructured.Unstructured{}
+		obj.SetNamespace(g.Tracker.Namespace)
+		obj.SetName(g.Tracker.Name)
+		t.TrackReference(g.TrackedReference, obj)
 	}
 	// reset tracked requests
 	t.reqs = []TrackRequest{}
@@ -66,30 +99,39 @@ func createTracker(given []TrackRequest) *mockTracker {
 
 type mockTracker struct {
 	tracker.Tracker
-	reqs []TrackRequest
+	reqs   []TrackRequest
+	scheme *runtime.Scheme
 }
 
 var _ tracker.Tracker = &mockTracker{}
 
-func (t *mockTracker) Track(ctx context.Context, ref tracker.Key, obj types.NamespacedName) {
-	t.Tracker.Track(ctx, ref, obj)
-	t.reqs = append(t.reqs, TrackRequest{Tracked: ref, Tracker: obj})
-}
-
-func (t *mockTracker) TrackChild(ctx context.Context, parent, child client.Object, s *runtime.Scheme) error {
-	gvks, _, err := s.ObjectKinds(child)
+// TrackObject tells us that "obj" is tracking changes to the
+// referenced object.
+func (t *mockTracker) TrackObject(ref client.Object, obj client.Object) error {
+	or, err := reference.GetReference(t.scheme, ref)
 	if err != nil {
 		return err
 	}
-	if len(gvks) != 1 {
-		return fmt.Errorf("expected exactly one GVK, found: %s", gvks)
-	}
-	t.Track(
-		ctx,
-		tracker.NewKey(gvks[0], types.NamespacedName{Namespace: child.GetNamespace(), Name: child.GetName()}),
-		types.NamespacedName{Namespace: parent.GetNamespace(), Name: parent.GetName()},
-	)
-	return nil
+	gv := schema.FromAPIVersionAndKind(or.APIVersion, or.Kind)
+	return t.TrackReference(tracker.Reference{
+		APIGroup:  gv.Group,
+		Kind:      gv.Kind,
+		Namespace: ref.GetNamespace(),
+		Name:      ref.GetName(),
+	}, obj)
+}
+
+// TrackReference tells us that "obj" is tracking changes to the
+// referenced object.
+func (t *mockTracker) TrackReference(ref tracker.Reference, obj client.Object) error {
+	t.reqs = append(t.reqs, TrackRequest{
+		Tracker: types.NamespacedName{
+			Namespace: obj.GetNamespace(),
+			Name:      obj.GetName(),
+		},
+		TrackedReference: ref,
+	})
+	return t.Tracker.TrackReference(ref, obj)
 }
 
 func (t *mockTracker) getTrackRequests() []TrackRequest {

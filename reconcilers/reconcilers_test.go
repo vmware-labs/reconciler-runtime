@@ -25,6 +25,7 @@ import (
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -112,6 +113,151 @@ func TestConfig_TrackAndGet(t *testing.T) {
 					}
 
 					if expected, actual := "hello", cm.UnstructuredContent()["data"].(map[string]interface{})["greeting"].(string); expected != actual {
+						// should never get here
+						panic(fmt.Errorf("expected configmap to have greeting %q, found %q", expected, actual))
+					}
+					return nil
+				},
+			}
+		})
+	})
+}
+
+func TestConfig_TrackAndList(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+	testSelector, _ := labels.Parse("app=test-app")
+
+	scheme := runtime.NewScheme()
+	_ = resources.AddToScheme(scheme)
+	_ = clientgoscheme.AddToScheme(scheme)
+
+	resource := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+		})
+
+	configMap := diecorev1.ConfigMapBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace("track-namespace")
+			d.Name("track-name")
+			d.AddLabel("app", "test-app")
+		}).
+		AddData("greeting", "hello")
+
+	rts := rtesting.SubReconcilerTests[*resources.TestResource]{
+		"track and list": {
+			Resource: resource.DieReleasePtr(),
+			GivenObjects: []client.Object{
+				configMap,
+			},
+			Metadata: map[string]interface{}{
+				"listOpts": []client.ListOption{},
+			},
+			ExpectTracks: []rtesting.TrackRequest{
+				{
+					Tracker: types.NamespacedName{
+						Namespace: testNamespace,
+						Name:      testName,
+					},
+					TrackedReference: tracker.Reference{
+						Kind:     "ConfigMap",
+						Selector: labels.Everything(),
+					},
+				},
+			},
+		},
+		"track and list constrained": {
+			Resource: resource.DieReleasePtr(),
+			GivenObjects: []client.Object{
+				configMap,
+			},
+			Metadata: map[string]interface{}{
+				"listOpts": []client.ListOption{
+					client.InNamespace("track-namespace"),
+					client.MatchingLabels(map[string]string{"app": "test-app"}),
+				},
+			},
+			ExpectTracks: []rtesting.TrackRequest{
+				{
+					Tracker: types.NamespacedName{
+						Namespace: testNamespace,
+						Name:      testName,
+					},
+					TrackedReference: tracker.Reference{
+						Kind:      "ConfigMap",
+						Namespace: "track-namespace",
+						Selector:  testSelector,
+					},
+				},
+			},
+		},
+		"track with errored list": {
+			Resource:  resource.DieReleasePtr(),
+			ShouldErr: true,
+			WithReactors: []rtesting.ReactionFunc{
+				rtesting.InduceFailure("list", "ConfigMapList"),
+			},
+			Metadata: map[string]interface{}{
+				"listOpts": []client.ListOption{},
+			},
+			ExpectTracks: []rtesting.TrackRequest{
+				{
+					Tracker: types.NamespacedName{
+						Namespace: testNamespace,
+						Name:      testName,
+					},
+					TrackedReference: tracker.Reference{
+						Kind:     "ConfigMap",
+						Selector: labels.Everything(),
+					},
+				},
+			},
+		},
+	}
+
+	// run with typed objects
+	t.Run("typed", func(t *testing.T) {
+		rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase[*resources.TestResource], c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+			return &reconcilers.SyncReconciler[*resources.TestResource]{
+				Sync: func(ctx context.Context, resource *resources.TestResource) error {
+					c := reconcilers.RetrieveConfigOrDie(ctx)
+
+					cms := &corev1.ConfigMapList{}
+					listOpts := rtc.Metadata["listOpts"].([]client.ListOption)
+					err := c.TrackAndList(ctx, cms, listOpts...)
+					if err != nil {
+						return err
+					}
+
+					if expected, actual := "hello", cms.Items[0].Data["greeting"]; expected != actual {
+						// should never get here
+						panic(fmt.Errorf("expected configmap to have greeting %q, found %q", expected, actual))
+					}
+					return nil
+				},
+			}
+		})
+	})
+
+	// run with unstructured objects
+	t.Run("unstructured", func(t *testing.T) {
+		rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase[*resources.TestResource], c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+			return &reconcilers.SyncReconciler[*resources.TestResource]{
+				Sync: func(ctx context.Context, resource *resources.TestResource) error {
+					c := reconcilers.RetrieveConfigOrDie(ctx)
+
+					cms := &unstructured.UnstructuredList{}
+					cms.SetAPIVersion("v1")
+					cms.SetKind("ConfigMapList")
+					listOpts := rtc.Metadata["listOpts"].([]client.ListOption)
+					err := c.TrackAndList(ctx, cms, listOpts...)
+					if err != nil {
+						return err
+					}
+
+					if expected, actual := "hello", cms.UnstructuredContent()["items"].([]interface{})[0].(map[string]interface{})["data"].(map[string]interface{})["greeting"].(string); expected != actual {
 						// should never get here
 						panic(fmt.Errorf("expected configmap to have greeting %q, found %q", expected, actual))
 					}
@@ -3807,7 +3953,7 @@ func TestWithConfig(t *testing.T) {
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, oc reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					c := reconcilers.Config{
-						Tracker: tracker.New(0),
+						Tracker: tracker.New(oc.Scheme(), 0),
 					}
 
 					return &reconcilers.WithConfig[*resources.TestResource]{

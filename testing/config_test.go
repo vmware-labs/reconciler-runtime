@@ -171,7 +171,7 @@ func TestExpectConfig(t *testing.T) {
 				},
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {
-				actual := c.Tracker.Lookup(ctx, NewTrackRequest(r2, r1, scheme).Tracked)
+				actual, _ := c.Tracker.GetObservers(r2)
 				expected := []types.NamespacedName{
 					{Namespace: r1.Namespace, Name: r1.Name},
 				}
@@ -188,7 +188,7 @@ func TestExpectConfig(t *testing.T) {
 				},
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {
-				c.Tracker.TrackChild(ctx, r1, r2, scheme)
+				c.Tracker.TrackObject(r2, r1)
 			},
 			failedAssertions: []string{},
 		},
@@ -199,7 +199,7 @@ func TestExpectConfig(t *testing.T) {
 				},
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {
-				c.Tracker.TrackChild(ctx, r1, r2, scheme)
+				c.Tracker.TrackObject(r2, r1)
 			},
 			failedAssertions: []string{
 				`Unexpected tracking request for config "test" (-expected, +actual): `,
@@ -210,10 +210,10 @@ func TestExpectConfig(t *testing.T) {
 				ExpectTracks: []TrackRequest{},
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {
-				c.Tracker.TrackChild(ctx, r1, r2, scheme)
+				c.Tracker.TrackObject(r2, r1)
 			},
 			failedAssertions: []string{
-				`Extra tracking request for config "test": {my-namespace/resource-1 {TestResource.testing.reconciler.runtime my-namespace/resource-2}}`,
+				`Extra tracking request for config "test": {my-namespace/resource-1 { /} {testing.reconciler.runtime TestResource my-namespace resource-2 <nil>}}`,
 			},
 		},
 		"missing track": {
@@ -224,7 +224,7 @@ func TestExpectConfig(t *testing.T) {
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
-				`Missing tracking request for config "test": {my-namespace/resource-1 {TestResource.testing.reconciler.runtime my-namespace/resource-2}}`,
+				`Missing tracking request for config "test": {my-namespace/resource-1 { /} {testing.reconciler.runtime TestResource my-namespace resource-2 <nil>}}`,
 			},
 		},
 
