@@ -142,6 +142,7 @@ func (i *impl) TrackReference(ref Reference, obj client.Object) error {
 
 	i.m.Lock()
 	defer i.m.Unlock()
+
 	if i.exact == nil {
 		i.exact = make(map[Reference]exactSet)
 	}
