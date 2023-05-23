@@ -597,6 +597,7 @@ func TestResourceReconciler_Unstructured(t *testing.T) {
 func TestResourceReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
+	testFinalizer := "test.finalizer"
 	testRequest := reconcilers.Request{
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testName},
 	}
@@ -641,6 +642,7 @@ func TestResourceReconciler(t *testing.T) {
 			GivenObjects: []client.Object{
 				resource.MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&deletedAt)
+					d.Finalizers(testFinalizer)
 				}),
 			},
 			Metadata: map[string]interface{}{
@@ -998,6 +1000,7 @@ func TestResourceReconciler(t *testing.T) {
 func TestAggregateReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
+	testFinalizer := "test.finalizer"
 	request := reconcilers.Request{
 		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testName},
 	}
@@ -1064,6 +1067,7 @@ func TestAggregateReconciler(t *testing.T) {
 				configMapGiven.
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 						d.DeletionTimestamp(&now)
+						d.Finalizers(testFinalizer)
 					}),
 			},
 			Metadata: map[string]interface{}{
@@ -1443,6 +1447,7 @@ func TestAggregateReconciler(t *testing.T) {
 func TestSyncReconciler(t *testing.T) {
 	testNamespace := "test-namespace"
 	testName := "test-resource"
+	testFinalizer := "test.finalizer"
 
 	now := metav1.Now()
 
@@ -1518,6 +1523,7 @@ func TestSyncReconciler(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
+					d.Finalizers(testFinalizer)
 				}).
 				DieReleasePtr(),
 			Metadata: map[string]interface{}{
@@ -1539,6 +1545,7 @@ func TestSyncReconciler(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
+					d.Finalizers(testFinalizer)
 				}).
 				DieReleasePtr(),
 			Metadata: map[string]interface{}{
@@ -1560,6 +1567,7 @@ func TestSyncReconciler(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
+					d.Finalizers(testFinalizer)
 				}).
 				DieReleasePtr(),
 			Metadata: map[string]interface{}{
@@ -1581,6 +1589,7 @@ func TestSyncReconciler(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
+					d.Finalizers(testFinalizer)
 				}).
 				DieReleasePtr(),
 			Metadata: map[string]interface{}{
@@ -1597,6 +1606,7 @@ func TestSyncReconciler(t *testing.T) {
 			Resource: resource.
 				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 					d.DeletionTimestamp(&now)
+					d.Finalizers(testFinalizer)
 				}).
 				DieReleasePtr(),
 			Metadata: map[string]interface{}{
@@ -2203,6 +2213,7 @@ func TestChildReconciler(t *testing.T) {
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 						d.OwnerReferences()
 						d.DeletionTimestamp(&now)
+						d.Finalizers(testFinalizer)
 					}),
 			},
 			Metadata: map[string]interface{}{
@@ -3201,6 +3212,7 @@ func TestChildReconciler_Unstructured(t *testing.T) {
 					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
 						d.OwnerReferences()
 						d.DeletionTimestamp(&now)
+						d.Finalizers(testFinalizer)
 					}),
 			},
 			Metadata: map[string]interface{}{
