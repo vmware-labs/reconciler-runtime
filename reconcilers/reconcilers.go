@@ -1706,7 +1706,7 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 	}
 
 	// create resource if it doesn't exist
-	if actual.GetCreationTimestamp().Time.IsZero() {
+	if internal.IsNil(actual) || actual.GetCreationTimestamp().Time.IsZero() {
 		log.Info("creating resource", "resource", r.sanitize(desired))
 		if err := c.Create(ctx, desired); err != nil {
 			log.Error(err, "unable to create resource", "resource", namespaceName(desired))
