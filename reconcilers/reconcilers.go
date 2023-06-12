@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	utilErrs "k8s.io/apimachinery/pkg/util/errors"
 	"reflect"
 	"strings"
 	"sync"
@@ -1174,7 +1175,7 @@ func (r *ChildReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T)
 		log.Error(err, "unable to reconcile child")
 		return Result{}, err
 	}
-	r.ReflectChildStatusOnParent(ctx, resource, child, err)
+	r.ReflectChildStatusOnParent(ctx, resource, child, nil)
 
 	return Result{}, nil
 }
@@ -1263,6 +1264,413 @@ func (r *ChildReconciler[T, CT, CLT]) listOptions(ctx context.Context, resource 
 }
 
 func (r *ChildReconciler[T, CT, CLT]) ourChild(resource T, obj CT) bool {
+	if !r.SkipOwnerReference && !metav1.IsControlledBy(obj, resource) {
+		return false
+	}
+	// TODO do we need to remove resources pending deletion?
+	if r.OurChild == nil {
+		return true
+	}
+	return r.OurChild(resource, obj)
+}
+
+// ChildSetReconciler is a sub reconciler that manages a set of child resources for a reconciled
+// resource. A stable key links the desired state to a specific desired child:
+//   - Children with new keys are created
+//   - Children with matching keys are updated
+//   - Children with missing keys are removed
+//
+// The flow for each reconciliation request is:
+//   - DesiredChildSet
+//   - For each desired child that exists: HarmonizeImmutableFields (optional)
+//   - For each desired child that exists: MergeBeforeUpdate
+//   - For each desired child that doesn't exist: create
+//   - For each existing child that's not desired: remove
+//   - ReflectChildSetStatusOnParent
+//
+// During setup, the child resource type is registered to watch for changes.
+type ChildSetReconciler[Type, ChildType client.Object, ChildListType client.ObjectList] struct {
+	// Name used to identify this reconciler.  Defaults to `ChildSetReconciler`.  Ideally unique, but
+	// not required to be so.
+	//
+	// +optional
+	Name string
+
+	// ChildType is the type of the dynamic set of resources being created/updated/deleted by the reconciler.
+	// For example, a reconciled resource ReplicaSet would have as set of Pods as a child set. Required when the
+	// generic type is not a struct, or is unstructured.
+	//
+	// +optional
+	ChildType ChildType
+	// ChildListType is the listing type for the child set type. For example,
+	// PodList is the list type for Pod. Required when the generic type is not
+	// a struct, or is unstructured.
+	//
+	// +optional
+	ChildListType ChildListType
+
+	// Finalizer is set on the reconciled resource before a child resource is created, and cleared
+	// after a child resource is deleted. The value must be unique to this specific reconciler
+	// instance and not shared. Reusing a value may result in orphaned resources when the
+	// reconciled resource is deleted.
+	//
+	// Using a finalizer is encouraged when the Kubernetes garbage collector is unable to delete
+	// the child resource automatically, like when the reconciled resource and child are in different
+	// namespaces, scopes or clusters.
+	//
+	// Use of a finalizer implies that SkipOwnerReference is true, and OurChild must be defined.
+	//
+	// +optional
+	Finalizer string
+	//
+	// SkipOwnerReference when true will not create and find child resources via an owner
+	// reference. OurChild must be defined for the reconciler to distinguish the child being
+	// reconciled from other resources of the same type.
+	//
+	// Any child resource created is tracked for changes.
+	SkipOwnerReference bool
+
+	// Setup performs initialization on the manager and builder this reconciler
+	// will run with. It's common to setup field indexes and watch resources.
+	//
+	// +optional
+	Setup func(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error
+
+	// DesiredChildSet returns the desired set of child object for the given reconciled resource, or empty set if
+	// no child should exist. The key of the set should be an identifier of each child.
+	//
+	// To skip reconciliation of the child resource while still reflecting an existing child's
+	// status on the reconciled resource, return OnlyReconcileChildStatus as an error.
+	DesiredChildSet func(ctx context.Context, resource Type) ([]ChildType, error)
+
+	// ChildKey returns the key for the given reconciled child resource, or err if key is not found.
+	ChildKey func(child ChildType) (string, error)
+
+	// ReflectChildSetStatusOnParent updates the reconciled resource's status with values from the
+	// child set. Select types of error are passed, including:
+	//   - apierrs.IsAlreadyExists
+	//
+	// Most errors are returned directly, skipping this method. The set of handled error types
+	// may grow, implementations should be defensive rather than assuming the error type.
+	ReflectChildSetStatusOnParent func(ctx context.Context, parent Type, childSet []ChildType, err utilErrs.Aggregate)
+
+	// HarmonizeImmutableFieldsForEachChild allows fields that are immutable on the current
+	// object to be copied to the desired object in order to avoid creating
+	// updates which are guaranteed to fail.
+	//
+	// +optional
+	HarmonizeImmutableFieldsForEachChild func(current, desired ChildType)
+
+	// MergeBeforeUpdateForEachChild copies desired fields on to the current object before
+	// calling update. Typically fields to copy are the Spec, Labels and
+	// Annotations.
+	MergeBeforeUpdateForEachChild func(current, desired ChildType)
+
+	// ListOptions allows custom options to be use when listing potential child resources. Each
+	// resource retrieved as part of the listing is confirmed via OurChild.
+	//
+	// Defaults to filtering by the reconciled resource's namespace:
+	//     []client.ListOption{
+	//         client.InNamespace(resource.GetNamespace()),
+	//     }
+	//
+	// +optional
+	ListOptions func(ctx context.Context, resource Type) []client.ListOption
+
+	// OurChild is used when there are multiple ChildSetReconciler for the same ChildType controlled
+	// by the same reconciled resource. The function return true for child resources managed by
+	// this ChildSetReconciler. Objects returned from the DesiredChildSet function should match this
+	// function, otherwise they may be orphaned. If not specified, all children match.
+	//
+	// OurChild is required when a Finalizer is defined or SkipOwnerReference is true.
+	//
+	// +optional
+	OurChild func(resource Type, child ChildType) bool
+
+	// SanitizeForEachChild is called with an object before logging the value. Any value may
+	// be returned. A meaningful subset of the resource is typically returned,
+	// like the Spec.
+	//
+	// +optional
+	SanitizeForEachChild func(child ChildType) interface{}
+
+	stamp    *ResourceManager[ChildType]
+	lazyInit sync.Once
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) init() {
+	r.lazyInit.Do(func() {
+		if internal.IsNil(r.ChildType) {
+			var nilCT CT
+			r.ChildType = newEmpty(nilCT).(CT)
+		}
+		if internal.IsNil(r.ChildListType) {
+			var nilCLT CLT
+			r.ChildListType = newEmpty(nilCLT).(CLT)
+		}
+		if r.Name == "" {
+			r.Name = fmt.Sprintf("%sChildSetReconciler", typeName(r.ChildType))
+		}
+		r.stamp = &ResourceManager[CT]{
+			Name:                     r.Name,
+			Type:                     r.ChildType,
+			TrackDesired:             r.SkipOwnerReference,
+			HarmonizeImmutableFields: r.HarmonizeImmutableFieldsForEachChild,
+			MergeBeforeUpdate:        r.MergeBeforeUpdateForEachChild,
+			Sanitize:                 r.SanitizeForEachChild,
+		}
+	})
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bldr *builder.Builder) error {
+	r.init()
+
+	c := RetrieveConfigOrDie(ctx)
+
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name).
+		WithValues("childType", gvk(r.ChildType, c.Scheme()))
+	ctx = logr.NewContext(ctx, log)
+
+	if err := r.validate(ctx); err != nil {
+		return err
+	}
+
+	if r.SkipOwnerReference {
+		bldr.Watches(r.ChildType, EnqueueTracked(ctx))
+	} else {
+		bldr.Owns(r.ChildType)
+	}
+
+	if r.Setup == nil {
+		return nil
+	}
+	return r.Setup(ctx, mgr, bldr)
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) validate(ctx context.Context) error {
+	// default implicit values
+	if r.Finalizer != "" {
+		r.SkipOwnerReference = true
+	}
+
+	// require ChildKey
+	if r.ChildKey == nil {
+		return fmt.Errorf("ChildSetReconciler %q must implement ChildKey", r.Name)
+	}
+
+	// require DesiredChild
+	if r.DesiredChildSet == nil {
+		return fmt.Errorf("ChildSetReconciler %q must implement DesiredChildSet", r.Name)
+	}
+
+	// require ReflectChildSetStatusOnParent
+	if r.ReflectChildSetStatusOnParent == nil {
+		return fmt.Errorf("ChildSetReconciler %q must implement ReflectChildSetStatusOnParent", r.Name)
+	}
+
+	if r.OurChild == nil && r.SkipOwnerReference {
+		// OurChild is required when SkipOwnerReference is true
+		return fmt.Errorf("ChildSetReconciler %q must implement OurChild since owner references are not used", r.Name)
+	}
+
+	return nil
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T) (Result, error) {
+	r.init()
+
+	c := RetrieveConfigOrDie(ctx)
+
+	log := logr.FromContextOrDiscard(ctx).
+		WithName(r.Name).
+		WithValues("childType", gvk(r.ChildType, c.Scheme()))
+	ctx = logr.NewContext(ctx, log)
+
+	childSet, aggregateErr := r.reconcile(ctx, resource)
+	if resource.GetDeletionTimestamp() != nil {
+		return Result{}, aggregateErr
+	}
+	if aggregateErr != nil {
+		for _, eachErr := range aggregateErr.(utilErrs.Aggregate).Errors() {
+			if apierrs.IsAlreadyExists(eachErr) {
+				// check if the resource blocking create is owned by the reconciled resource.
+				// the created child from a previous turn may be slow to appear in the informer cache, but shouldn't appear
+				// on the reconciled resource as being not ready.
+				apierr := eachErr.(apierrs.APIStatus)
+				conflicted := r.ChildType.DeepCopyObject().(CT)
+				_ = c.APIReader.Get(ctx, types.NamespacedName{Namespace: resource.GetNamespace(), Name: apierr.Status().Details.Name}, conflicted)
+				if r.ourChild(resource, conflicted) {
+					// skip updating the reconciled resource's status, fail and try again
+					return Result{}, aggregateErr
+				}
+				log.Info("unable to reconcile child, not owned", "child", namespaceName(conflicted), "ownerRefs", conflicted.GetOwnerReferences())
+				r.ReflectChildSetStatusOnParent(ctx, resource, childSet, aggregateErr)
+				return Result{}, nil
+			}
+		}
+		log.Error(aggregateErr, "unable to reconcile child")
+		return Result{}, aggregateErr
+	}
+	r.ReflectChildSetStatusOnParent(ctx, resource, childSet, nil)
+
+	return Result{}, nil
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) childListToMap(childList []CT) (map[string]CT, utilErrs.Aggregate) {
+	var childKeyErrors []error
+	childMap := make(map[string]CT)
+	for _, item := range childList {
+		key, err := r.ChildKey(item)
+		if err != nil {
+			childKeyErrors = append(childKeyErrors, err)
+			continue
+		}
+		childMap[key] = item
+	}
+	if len(childKeyErrors) != 0 {
+		return nil, utilErrs.NewAggregate(childKeyErrors)
+	}
+	return childMap, nil
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) getValueOrDefault(m map[string]CT, key string, defaultValue CT) CT {
+	if val, ok := m[key]; ok {
+		return val
+	}
+	return defaultValue
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource T) ([]CT, utilErrs.Aggregate) {
+	log := logr.FromContextOrDiscard(ctx)
+	c := RetrieveConfigOrDie(ctx)
+
+	children := r.ChildListType.DeepCopyObject().(CLT)
+	if err := c.List(ctx, children, r.listOptions(ctx, resource)...); err != nil {
+		return nil, utilErrs.NewAggregate([]error{err})
+	}
+	actualChildren := r.filterChildren(resource, children)
+	desiredChildren, err := r.desiredChildSet(ctx, resource)
+	if err != nil {
+		if errors.Is(err, OnlyReconcileChildStatus) {
+			return actualChildren, nil
+		}
+		return nil, utilErrs.NewAggregate([]error{err})
+	}
+	if internal.IsNil(desiredChildren) {
+		desiredChildren = []CT{}
+
+		if !r.hasChild(actualChildren) {
+			err = ClearFinalizer(ctx, resource, r.Finalizer)
+			return nil, utilErrs.NewAggregate([]error{err})
+		}
+	} else {
+		if err = AddFinalizer(ctx, resource, r.Finalizer); err != nil {
+			return nil, utilErrs.NewAggregate([]error{err})
+		}
+	}
+
+	actualChildrenMap, err1 := r.childListToMap(actualChildren)
+	if err1 != nil {
+		return nil, err1
+	}
+
+	desiredChildrenMap, err2 := r.childListToMap(desiredChildren)
+	if err2 != nil {
+		return nil, err2
+	}
+
+	emtpyCT := r.ChildType.DeepCopyObject().(CT)
+	var resultList []CT
+	var errorList []error
+	for _, desiredChild := range desiredChildren {
+		key, err3 := r.ChildKey(desiredChild)
+		if err3 != nil {
+			errorList = append(errorList, err3)
+		}
+
+		if !r.SkipOwnerReference {
+			if err = ctrl.SetControllerReference(resource, desiredChild, c.Scheme()); err != nil {
+				errorList = append(errorList, err)
+				continue
+			}
+		}
+
+		if !r.ourChild(resource, desiredChild) {
+			log.Info("One child returned from DesiredChildSet does not match OurChild, this can result in orphaned children", "child", namespaceName(desiredChild))
+		}
+
+		var result CT
+		actualChild := r.getValueOrDefault(actualChildrenMap, key, emtpyCT)
+		result, err = r.stamp.Manage(ctx, resource, actualChild, desiredChild)
+		if err != nil {
+			errorList = append(errorList, err)
+			continue
+		}
+		resultList = append(resultList, result)
+	}
+
+	// Undesired keys
+	for _, actualChild := range actualChildren {
+		key, err3 := r.ChildKey(actualChild)
+		if err3 != nil {
+			errorList = append(errorList, err3)
+		}
+		if _, ok := desiredChildrenMap[key]; !ok {
+			_, err = r.stamp.Manage(ctx, resource, actualChild, emtpyCT)
+			if err != nil {
+				errorList = append(errorList, err)
+			}
+		}
+	}
+
+	return resultList, utilErrs.NewAggregate(errorList)
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) hasChild(childSet []CT) bool {
+	hasChild := false
+	if !internal.IsNil(childSet) {
+		for _, value := range childSet {
+			if !value.GetCreationTimestamp().Time.IsZero() {
+				hasChild = true
+			}
+		}
+	}
+	return hasChild
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) desiredChildSet(ctx context.Context, resource T) ([]CT, error) {
+	if resource.GetDeletionTimestamp() != nil {
+		// the reconciled resource is pending deletion, cleanup the child resource
+		return nil, nil
+	}
+
+	return r.DesiredChildSet(ctx, resource)
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) filterChildren(resource T, children CLT) []CT {
+	childrenValue := reflect.ValueOf(children).Elem()
+	itemsValue := childrenValue.FieldByName("Items")
+	var items []CT
+	for i := 0; i < itemsValue.Len(); i++ {
+		obj := itemsValue.Index(i).Addr().Interface().(CT)
+		if r.ourChild(resource, obj) {
+			items = append(items, obj)
+		}
+	}
+	return items
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) listOptions(ctx context.Context, resource T) []client.ListOption {
+	if r.ListOptions == nil {
+		return []client.ListOption{
+			client.InNamespace(resource.GetNamespace()),
+		}
+	}
+	return r.ListOptions(ctx, resource)
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) ourChild(resource T, obj CT) bool {
 	if !r.SkipOwnerReference && !metav1.IsControlledBy(obj, resource) {
 		return false
 	}
