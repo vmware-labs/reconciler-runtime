@@ -240,6 +240,7 @@ The ChildReconciler is responsible for:
 - creating/updating/deleting the child resource based on the desired state
 - setting the owner reference on the child resource (when not using a finalizer)
 - logging the reconcilers activities
+- enqueuing the parent resource for reconciliation when the child is mutated
 - recording child mutations and errors for the parent resource
 - adapting to child resource changes applied by mutating webhooks
 - adding and clearing of a finalizer, if specified
