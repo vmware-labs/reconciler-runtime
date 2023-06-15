@@ -1492,7 +1492,7 @@ func (r *ChildSetReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource
 		return Result{}, aggregateErr
 	}
 	if aggregateErr != nil {
-		for _, eachErr := range aggregateErr.(utilErrs.Aggregate).Errors() {
+		for _, eachErr := range aggregateErr.Errors() {
 			if apierrs.IsAlreadyExists(eachErr) {
 				// check if the resource blocking create is owned by the reconciled resource.
 				// the created child from a previous turn may be slow to appear in the informer cache, but shouldn't appear
@@ -1570,23 +1570,23 @@ func (r *ChildSetReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource
 		}
 	}
 
-	actualChildrenMap, err1 := r.childListToMap(actualChildren)
-	if err1 != nil {
-		return nil, err1
+	actualChildrenMap, actualMappingErr := r.childListToMap(actualChildren)
+	if actualMappingErr != nil {
+		return nil, actualMappingErr
 	}
 
-	desiredChildrenMap, err2 := r.childListToMap(desiredChildren)
-	if err2 != nil {
-		return nil, err2
+	desiredChildrenMap, desiredMappingErr := r.childListToMap(desiredChildren)
+	if desiredMappingErr != nil {
+		return nil, desiredMappingErr
 	}
 
 	emtpyCT := r.ChildType.DeepCopyObject().(CT)
 	var resultList []CT
 	var errorList []error
 	for _, desiredChild := range desiredChildren {
-		key, err3 := r.ChildKey(desiredChild)
-		if err3 != nil {
-			errorList = append(errorList, err3)
+		key, childKeyErr := r.ChildKey(desiredChild)
+		if childKeyErr != nil {
+			errorList = append(errorList, childKeyErr)
 		}
 
 		if !r.SkipOwnerReference {
@@ -1612,9 +1612,9 @@ func (r *ChildSetReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource
 
 	// Undesired keys
 	for _, actualChild := range actualChildren {
-		key, err3 := r.ChildKey(actualChild)
-		if err3 != nil {
-			errorList = append(errorList, err3)
+		key, childKeyErr := r.ChildKey(actualChild)
+		if childKeyErr != nil {
+			errorList = append(errorList, childKeyErr)
 		}
 		if _, ok := desiredChildrenMap[key]; !ok {
 			_, err = r.stamp.Manage(ctx, resource, actualChild, emtpyCT)
@@ -1629,7 +1629,7 @@ func (r *ChildSetReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource
 
 func (r *ChildSetReconciler[T, CT, CLT]) hasChild(childSet []CT) bool {
 	hasChild := false
-	if !internal.IsNil(childSet) {
+	if len(childSet) != 0 {
 		for _, value := range childSet {
 			if !value.GetCreationTimestamp().Time.IsZero() {
 				hasChild = true
