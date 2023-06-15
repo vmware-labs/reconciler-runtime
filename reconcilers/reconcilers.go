@@ -1559,7 +1559,9 @@ func (r *ChildSetReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource
 	}
 	if internal.IsNil(desiredChildren) {
 		desiredChildren = []CT{}
+	}
 
+	if len(desiredChildren) == 0 {
 		if !r.hasChild(actualChildren) {
 			err = ClearFinalizer(ctx, resource, r.Finalizer)
 			return nil, utilErrs.NewAggregate([]error{err})
@@ -1611,13 +1613,14 @@ func (r *ChildSetReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource
 	}
 
 	// Undesired keys
+	var nilCT CT
 	for _, actualChild := range actualChildren {
 		key, childKeyErr := r.ChildKey(actualChild)
 		if childKeyErr != nil {
 			errorList = append(errorList, childKeyErr)
 		}
 		if _, ok := desiredChildrenMap[key]; !ok {
-			_, err = r.stamp.Manage(ctx, resource, actualChild, emtpyCT)
+			_, err = r.stamp.Manage(ctx, resource, actualChild, nilCT)
 			if err != nil {
 				errorList = append(errorList, err)
 			}
@@ -1642,7 +1645,7 @@ func (r *ChildSetReconciler[T, CT, CLT]) hasChild(childSet []CT) bool {
 func (r *ChildSetReconciler[T, CT, CLT]) desiredChildSet(ctx context.Context, resource T) ([]CT, error) {
 	if resource.GetDeletionTimestamp() != nil {
 		// the reconciled resource is pending deletion, cleanup the child resource
-		return nil, nil
+		return []CT{}, nil
 	}
 
 	return r.DesiredChildSet(ctx, resource)
