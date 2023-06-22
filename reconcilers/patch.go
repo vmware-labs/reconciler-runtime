@@ -58,7 +58,7 @@ func (p *Patch) Apply(rebase client.Object) error {
 	if err != nil {
 		return err
 	}
-	patchedBytes, err := merge.Apply(rebaseBytes)
+	patchedBytes, err := merge.ApplyWithOptions(rebaseBytes, &jsonmergepatch.ApplyOptions{EnsurePathExistsOnAdd: true})
 	if err != nil {
 		return err
 	}
