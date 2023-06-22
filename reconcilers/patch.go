@@ -9,8 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	jsonmergepatch "github.com/evanphx/json-patch/v5"
-	jsonpatch "gomodules.xyz/jsonpatch/v2"
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -23,18 +22,14 @@ func NewPatch(base, update client.Object) (*Patch, error) {
 	if err != nil {
 		return nil, err
 	}
-	patch, err := jsonpatch.CreatePatch(baseBytes, updateBytes)
-	if err != nil {
-		return nil, err
-	}
-	patchBytes, err := json.Marshal(patch)
+	patch, err := jsonpatch.CreateMergePatch(baseBytes, updateBytes)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Patch{
 		generation: base.GetGeneration(),
-		bytes:      patchBytes,
+		bytes:      patch,
 	}, nil
 }
 
@@ -54,11 +49,7 @@ func (p *Patch) Apply(rebase client.Object) error {
 	if err != nil {
 		return err
 	}
-	merge, err := jsonmergepatch.DecodePatch(p.bytes)
-	if err != nil {
-		return err
-	}
-	patchedBytes, err := merge.Apply(rebaseBytes)
+	patchedBytes, err := jsonpatch.MergePatch(rebaseBytes, p.bytes)
 	if err != nil {
 		return err
 	}
