@@ -10,3 +10,6 @@ DIEGEN="go run -modfile=${SCRIPT_ROOT}/hack/go.mod dies.dev/diegen"
 
 ( cd $SCRIPT_ROOT ; $CONTROLLER_GEN object:headerFile="./hack/boilerplate.go.txt" paths="./..." )
 ( cd $SCRIPT_ROOT ; $DIEGEN die:headerFile="./hack/boilerplate.go.txt" paths="./..." )
+
+( cd $SCRIPT_ROOT ; go mod tidy )
+( cd $SCRIPT_ROOT/hack ; go mod tidy )
