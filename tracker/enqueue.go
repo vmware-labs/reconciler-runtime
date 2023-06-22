@@ -98,9 +98,10 @@ func (i *impl) TrackObject(ref client.Object, obj client.Object) error {
 		return err
 	}
 
+	gvk := schema.FromAPIVersionAndKind(or.APIVersion, or.Kind)
 	return i.TrackReference(Reference{
-		APIGroup:  or.APIVersion,
-		Kind:      or.Kind,
+		APIGroup:  gvk.Group,
+		Kind:      gvk.Kind,
 		Namespace: or.Namespace,
 		Name:      or.Name,
 	}, obj)
