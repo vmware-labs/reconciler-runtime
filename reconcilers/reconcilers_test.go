@@ -843,6 +843,47 @@ func TestResourceReconciler(t *testing.T) {
 				}),
 			},
 		},
+		"sub reconciler halted with result": {
+			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResource{},
+			},
+			GivenObjects: []client.Object{
+				resource,
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return reconcilers.Sequence[*resources.TestResource]{
+						&reconcilers.SyncReconciler[*resources.TestResource]{
+							SyncWithResult: func(ctx context.Context, resource *resources.TestResource) (reconcilers.Result, error) {
+								resource.Status.Fields = map[string]string{
+									"want": "this to run",
+								}
+								return reconcilers.Result{ Requeue: true }, reconcilers.HaltSubReconcilers
+							},
+						},
+						&reconcilers.SyncReconciler[*resources.TestResource]{
+							Sync: func(ctx context.Context, resource *resources.TestResource) error {
+								resource.Status.Fields = map[string]string{
+									"don't want": "this to run",
+								}
+								return fmt.Errorf("reconciler error")
+							},
+						},
+					}
+				},
+			},
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated",
+					`Updated status`),
+			},
+			ExpectStatusUpdates: []client.Object{
+				resource.StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("want", "this to run")
+				}),
+			},
+			ExpectedResult: reconcilers.Result{ Requeue: true },
+		},
 		"status update failed": {
 			Request: testRequest,
 			StatusSubResourceTypes: []client.Object{
@@ -1335,6 +1376,36 @@ func TestAggregateReconciler(t *testing.T) {
 					AddData("foo", "bar"),
 			},
 		},
+		"reconcile halted with result": {
+			Request: request,
+			Metadata: map[string]interface{}{
+				"Reconciler": func(t *testing.T, c reconcilers.Config) reconcile.Reconciler {
+					r := defaultAggregateReconciler(c)
+					r.Reconciler = reconcilers.Sequence[*corev1.ConfigMap]{
+						&reconcilers.SyncReconciler[*corev1.ConfigMap]{
+							SyncWithResult: func(ctx context.Context, resource *corev1.ConfigMap) (reconcilers.Result, error) {
+								return reconcilers.Result { Requeue: true }, reconcilers.HaltSubReconcilers
+							},
+						},
+						&reconcilers.SyncReconciler[*corev1.ConfigMap]{
+							Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
+								return fmt.Errorf("test error")
+							},
+						},
+					}
+					return r
+				},
+			},
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(configMapGiven, scheme, corev1.EventTypeNormal, "Created",
+					`Created ConfigMap %q`, testName),
+			},
+			ExpectCreates: []client.Object{
+				configMapCreate.
+					AddData("foo", "bar"),
+			},
+			ExpectedResult: reconcilers.Result { Requeue: true },
+		},
 		"context is stashable": {
 			Request: request,
 			GivenObjects: []client.Object{
@@ -1478,6 +1549,20 @@ func TestSyncReconciler(t *testing.T) {
 				},
 			},
 		},
+		"sync with result halted": {
+			Resource: resource.DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
+						SyncWithResult: func(ctx context.Context, resource *resources.TestResource) (reconcilers.Result, error) {
+							return reconcilers.Result { Requeue: true }, reconcilers.HaltSubReconcilers
+						},
+					}
+				},
+			},
+			ExpectedResult: reconcilers.Result { Requeue: true },
+			ShouldErr: true,
+		},
 		"sync error": {
 			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
@@ -1540,6 +1625,29 @@ func TestSyncReconciler(t *testing.T) {
 				},
 			},
 			ExpectedResult: reconcile.Result{RequeueAfter: 3 * time.Hour},
+		},
+		"finalize can halt subreconcilers": {
+			Resource: resource.
+				MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+					d.DeletionTimestamp(&now)
+					d.Finalizers(testFinalizer)
+				}).
+				DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.SyncReconciler[*resources.TestResource]{
+						SyncWithResult: func(ctx context.Context, resource *resources.TestResource) (reconcilers.Result, error) {
+							t.Errorf("reconciler should not call sync for deleted resources")
+							return reconcilers.Result{RequeueAfter: 2 * time.Hour}, nil
+						},
+						FinalizeWithResult: func(ctx context.Context, resource *resources.TestResource) (reconcilers.Result, error) {
+							return reconcilers.Result{RequeueAfter: 3 * time.Hour}, reconcilers.HaltSubReconcilers
+						},
+					}
+				},
+			},
+			ExpectedResult: reconcile.Result{RequeueAfter: 3 * time.Hour},
+			ShouldErr: true,
 		},
 		"should finalize and sync deleted resources when asked to": {
 			Resource: resource.
@@ -3640,6 +3748,26 @@ func TestSequence(t *testing.T) {
 			},
 			ShouldErr: true,
 		},
+		"preserves result, sub reconciler halted": {
+			Resource: resource.DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return reconcilers.Sequence[*resources.TestResource]{
+						&reconcilers.SyncReconciler[*resources.TestResource]{
+							SyncWithResult: func(ctx context.Context, resource *resources.TestResource) (reconcilers.Result, error) {
+								return reconcilers.Result{RequeueAfter: 1 * time.Minute}, nil
+							},
+						},&reconcilers.SyncReconciler[*resources.TestResource]{
+							SyncWithResult: func(ctx context.Context, resource *resources.TestResource) (reconcilers.Result, error) {
+								return reconcilers.Result{RequeueAfter: 2 * time.Minute}, reconcilers.HaltSubReconcilers
+							},
+						},
+					}
+				},
+			},
+			ExpectedResult: reconcilers.Result{RequeueAfter: 1 * time.Minute},
+			ShouldErr: true,
+		},
 		"preserves result, Requeue": {
 			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
@@ -3941,19 +4069,20 @@ func TestCastResource(t *testing.T) {
 			},
 			ExpectedResult: reconcilers.Result{Requeue: true},
 		},
-		"return subreconciler err": {
+		"return subreconciler err, preserves result": {
 			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *appsv1.Deployment]{
 						Reconciler: &reconcilers.SyncReconciler[*appsv1.Deployment]{
-							Sync: func(ctx context.Context, resource *appsv1.Deployment) error {
-								return fmt.Errorf("subreconciler error")
+							SyncWithResult: func(ctx context.Context, resource *appsv1.Deployment) (reconcilers.Result, error) {
+								return reconcilers.Result{ Requeue: true }, fmt.Errorf("subreconciler error")
 							},
 						},
 					}
 				},
 			},
+			ExpectedResult: reconcilers.Result{Requeue: true},
 			ShouldErr: true,
 		},
 		"marshal error": {
