@@ -903,20 +903,20 @@ func (r *SyncReconciler[T]) Reconcile(ctx context.Context, resource T) (Result, 
 
 	if resource.GetDeletionTimestamp() == nil || r.SyncDuringFinalization {
 		syncResult, err := r.sync(ctx, resource)
+		result = AggregateResults(result, syncResult)
 		if err != nil {
 			log.Error(err, "unable to sync")
-			return Result{}, err
+			return result, err
 		}
-		result = AggregateResults(result, syncResult)
 	}
 
 	if resource.GetDeletionTimestamp() != nil {
 		finalizeResult, err := r.finalize(ctx, resource)
+		result = AggregateResults(result, finalizeResult)
 		if err != nil {
 			log.Error(err, "unable to finalize")
-			return Result{}, err
+			return result, err
 		}
-		result = AggregateResults(result, finalizeResult)
 	}
 
 	return result, nil
@@ -1299,10 +1299,10 @@ func (r Sequence[T]) Reconcile(ctx context.Context, resource T) (Result, error) 
 		ctx = logr.NewContext(ctx, log)
 
 		result, err := reconciler.Reconcile(ctx, resource)
-		if err != nil {
-			return Result{}, err
-		}
 		aggregateResult = AggregateResults(result, aggregateResult)
+		if err != nil {
+			return result, err
+		}
 	}
 
 	return aggregateResult, nil
@@ -1397,7 +1397,7 @@ func (r *CastResource[T, CT]) Reconcile(ctx context.Context, resource T) (Result
 	castOriginal := castResource.DeepCopyObject().(client.Object)
 	result, err := r.Reconciler.Reconcile(ctx, castResource)
 	if err != nil {
-		return Result{}, err
+		return result, err
 	}
 	if !equality.Semantic.DeepEqual(castResource, castOriginal) {
 		// patch the reconciled resource with the updated duck values
