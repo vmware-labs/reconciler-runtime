@@ -16,6 +16,7 @@ Within an existing Kubebuilder or controller-runtime project, reconciler-runtime
 	- [SubReconciler](#subreconciler)
 		- [SyncReconciler](#syncreconciler)
 		- [ChildReconciler](#childreconciler)
+		- [ChildSetReconciler](#childsetreconciler)
 	- [Higher-order Reconcilers](#higher-order-reconcilers)
 		- [CastResource](#castresource)
 		- [Sequence](#sequence)
@@ -235,7 +236,7 @@ func FunctionTargetImageReconciler(c reconcilers.Config) reconcilers.SubReconcil
 
 The [`ChildReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ChildReconciler) is a sub reconciler that is responsible for managing a single controlled resource. Within a child reconciler, the reconciled resource is referred to as the parent resource to avoid ambiguity with the child resource. A developer defines their desired state for the child resource (if any), and the reconciler creates/updates/deletes the resource to match the desired state. The child resource is also used to update the parent's status. Mutations and errors are recorded for the parent.
 
-The ChildReconciler is responsible for:
+The `ChildReconciler` is responsible for:
 - looking up an existing child
 - creating/updating/deleting the child resource based on the desired state
 - setting the owner reference on the child resource (when not using a finalizer)
@@ -253,9 +254,9 @@ The implementor is responsible for:
 
 When a finalizer is defined, the parent resource is patched to add the finalizer before creating the child; it is removed after the child is deleted. If the parent resource is pending deletion, the desired child method is not called, and existing children are deleted.
 
-Using a finalizer means that the child resource will not use an owner reference. The OurChild method must be implemented in a way that can uniquely and unambiguously identify the child that this parent resource is responsible for from any other resources of the same kind. The child resource is tracked explicitly.
+Using a finalizer means that the child resource will not use an owner reference. The `OurChild` method must be implemented in a way that can uniquely and unambiguously identify the child that this parent resource is responsible for from any other resources of the same kind. The child resource is tracked explicitly to watch for mutations triggering the parent resource to be reconciled.
 
-> Warning: It is crucial that each ChildReconciler using a finalizer have a unique and stable finalizer name. Two reconcilers that use the same finalizer, or a reconciler that changed the name of its finalizer, may leak the child resource when the parent is deleted, or the parent resource may never terminate.
+> Warning: It is crucial that each `ChildReconciler` using a finalizer have a unique and stable finalizer name. Two reconcilers that use the same finalizer, or a reconciler that changed the name of its finalizer, may leak the child resource when the parent is deleted, or the parent resource may never terminate.
 
 **Example:**
 
@@ -347,6 +348,38 @@ rules:
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 ```
 
+#### ChildSetReconciler
+
+The [`ChildSetReconciler`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ChildSetReconciler) is an orchestration of zero to many, dynamically defined [`ChildReconcilers`](#childreconciler). Concepts from `ChildReconciler` apply here unless noted otherwise.
+
+Unlike `ChildReconciler` where a single desired child is defined, the `ChildSetReconciler` returns zero to many desired children, each child resource must contain a stable identifier extracted from the child resource by `IdentifyChild`, which is used to correlate desired children with actual children within the cluster.
+
+Based on the combined set of identifiers for desired and actual children, a `ChildReconciler` is created for each identifier. Each `ChildReconciler` is reconciled in order, sorted by the identifier. The result from each `ChildReconciler` are aggregated and presented at once to be reflected onto the reconciled resource's status within `ReflectChildrenStatusOnParent`.
+
+As there is some overhead in the dynamic creation of reconcilers. When the number of children is limited and known in advance, it is preferable to statically construct many `ChildReconciler`.
+
+When a finalizer is defined, the dynamic reconciler is wrapped with [`WithFinalizer`](#withfinalizer). Using a finalizer means that the child resource will not use an owner reference. The `OurChild` method must be implemented in a way that can uniquely and unambiguously identify the children that this parent resource is responsible for from any other resources of the same kind. The child resources are tracked explicitly to watch for mutations triggering the parent resource to be reconciled.
+
+**Recommended RBAC:**
+
+Replace `<group>` and `<resource>` with values for the child type.
+
+```go
+// +kubebuilder:rbac:groups=<group>,resources=<resource>,verbs=get;list;watch;create;update;patch;delete
+```
+
+or
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: # any name that is bound to the ServiceAccount used by the client
+rules:
+- apiGroups: ["<group>"]
+  resources: ["<resource>"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+```
 
 ### Higher-order Reconcilers
 

@@ -1079,14 +1079,16 @@ func (r *ChildReconciler[T, CT, CLT]) init() {
 		if r.Name == "" {
 			r.Name = fmt.Sprintf("%sChildReconciler", typeName(r.ChildType))
 		}
-		r.stamp = &ResourceManager[CT]{
-			Name:                     r.Name,
-			Type:                     r.ChildType,
-			Finalizer:                r.Finalizer,
-			TrackDesired:             r.SkipOwnerReference,
-			HarmonizeImmutableFields: r.HarmonizeImmutableFields,
-			MergeBeforeUpdate:        r.MergeBeforeUpdate,
-			Sanitize:                 r.Sanitize,
+		if r.stamp == nil {
+			r.stamp = &ResourceManager[CT]{
+				Name:                     r.Name,
+				Type:                     r.ChildType,
+				Finalizer:                r.Finalizer,
+				TrackDesired:             r.SkipOwnerReference,
+				HarmonizeImmutableFields: r.HarmonizeImmutableFields,
+				MergeBeforeUpdate:        r.MergeBeforeUpdate,
+				Sanitize:                 r.Sanitize,
+			}
 		}
 	})
 }
@@ -1139,6 +1141,13 @@ func (r *ChildReconciler[T, CT, CLT]) validate(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (r *ChildReconciler[T, CT, CLT]) SetResourceManager(rm *ResourceManager[CT]) {
+	if r.stamp != nil {
+		panic(fmt.Errorf("cannot call SetResourceManager after a resource manager is defined"))
+	}
+	r.stamp = rm
 }
 
 func (r *ChildReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T) (Result, error) {
@@ -1241,13 +1250,10 @@ func (r *ChildReconciler[T, CT, CLT]) desiredChild(ctx context.Context, resource
 }
 
 func (r *ChildReconciler[T, CT, CLT]) filterChildren(resource T, children CLT) []CT {
-	childrenValue := reflect.ValueOf(children).Elem()
-	itemsValue := childrenValue.FieldByName("Items")
 	items := []CT{}
-	for i := 0; i < itemsValue.Len(); i++ {
-		obj := itemsValue.Index(i).Addr().Interface().(CT)
-		if r.ourChild(resource, obj) {
-			items = append(items, obj)
+	for _, child := range extractItems[CT](children) {
+		if r.ourChild(resource, child) {
+			items = append(items, child)
 		}
 	}
 	return items
@@ -1929,4 +1935,16 @@ func replaceWithEmpty(x interface{}) {
 func newEmpty(x interface{}) interface{} {
 	t := reflect.TypeOf(x).Elem()
 	return reflect.New(t).Interface()
+}
+
+// extractItems returns a typed slice of objects from an object list
+func extractItems[T client.Object](list client.ObjectList) []T {
+	items := []T{}
+	listValue := reflect.ValueOf(list).Elem()
+	itemsValue := listValue.FieldByName("Items")
+	for i := 0; i < itemsValue.Len(); i++ {
+		item := itemsValue.Index(i).Addr().Interface().(T)
+		items = append(items, item)
+	}
+	return items
 }
