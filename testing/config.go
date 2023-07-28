@@ -41,7 +41,8 @@ type ExpectConfig struct {
 	// StatusSubResourceTypes is a set of object types that support the status sub-resource. For
 	// these types, the only way to modify the resource's status is update or patch the status
 	// sub-resource. Patching or updating the main resource will not mutated the status field.
-	// Built-in Kubernetes types are already accounted for and do not need to be listed.
+	// Built-in Kubernetes types (e.g. Pod, Deployment, etc) are already accounted for and do not
+	// need to be listed.
 	//
 	// Interacting with a status sub-resource for a type not enumerated as having a status
 	// sub-resource will return a not found error.
