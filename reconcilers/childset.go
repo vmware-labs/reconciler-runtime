@@ -7,6 +7,7 @@ package reconcilers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -272,6 +273,9 @@ func (r *ChildSetReconciler[T, CT, CLT]) composeChildReconcilers(ctx context.Con
 
 	childIDs := sets.NewString()
 	desiredChildren, desiredChildrenErr := r.DesiredChildren(ctx, resource)
+	if desiredChildrenErr != nil && !errors.Is(desiredChildrenErr, OnlyReconcileChildStatus) {
+		return nil, desiredChildrenErr
+	}
 
 	desiredChildByID := map[string]CT{}
 	for _, child := range desiredChildren {

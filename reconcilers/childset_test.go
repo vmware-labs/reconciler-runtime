@@ -546,6 +546,59 @@ func TestChildSetReconciler(t *testing.T) {
 				configMapBlueCreate.DieReleasePtr(),
 			},
 		},
+		"skip resource manager operations when OnlyReconcileChildStatus is returned": {
+			Resource: resource.DieReleasePtr(),
+			GivenObjects: []client.Object{
+				configMapBlueGiven.DieReleasePtr(),
+				configMapGreenGiven.DieReleasePtr(),
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					r := defaultChildSetReconciler(c)
+					r.DesiredChildren = func(ctx context.Context, resource *resources.TestResource) ([]*corev1.ConfigMap, error) {
+						return nil, reconcilers.OnlyReconcileChildStatus
+					}
+					return r
+				},
+			},
+			ExpectResource: resourceReady.
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("blue.foo", "bar")
+					d.AddField("green.foo", "bar")
+				}).
+				DieReleasePtr(),
+		},
+		"skip resource manager operations when OnlyReconcileChildStatus is returned, even when there are no actual or desired children": {
+			Resource: resource.
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("blue.foo", "bar")
+					d.AddField("green.foo", "bar")
+				}).
+				DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					r := defaultChildSetReconciler(c)
+					r.DesiredChildren = func(ctx context.Context, resource *resources.TestResource) ([]*corev1.ConfigMap, error) {
+						return nil, reconcilers.OnlyReconcileChildStatus
+					}
+					return r
+				},
+			},
+			ExpectResource: resourceReady.DieReleasePtr(),
+		},
+		"errors when desired children returns an error": {
+			Resource: resourceReady.DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					r := defaultChildSetReconciler(c)
+					r.DesiredChildren = func(ctx context.Context, resource *resources.TestResource) ([]*corev1.ConfigMap, error) {
+						return nil, fmt.Errorf("test")
+					}
+					return r
+				},
+			},
+			ShouldErr: true,
+		},
 	}
 
 	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase[*resources.TestResource], c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
