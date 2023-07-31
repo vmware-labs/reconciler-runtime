@@ -1224,7 +1224,7 @@ func (r *ChildReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource T)
 		return nilCT, err
 	}
 	if !internal.IsNil(desired) {
-		if !r.SkipOwnerReference {
+		if !r.SkipOwnerReference && metav1.GetControllerOfNoCopy(desired) == nil {
 			if err := ctrl.SetControllerReference(resource, desired, c.Scheme()); err != nil {
 				return nilCT, err
 			}
