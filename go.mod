@@ -7,7 +7,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/go-logr/logr v1.2.4
 	github.com/google/go-cmp v0.5.9
-	golang.org/x/net v0.12.0
+	golang.org/x/net v0.13.0
 	gomodules.xyz/jsonpatch/v2 v2.3.0
 	gomodules.xyz/jsonpatch/v3 v3.0.1
 	k8s.io/api v0.27.4
