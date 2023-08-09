@@ -42,7 +42,7 @@ func (c Config) IsEmpty() bool {
 // WithCluster extends the config to access a new cluster.
 func (c Config) WithCluster(cluster cluster.Cluster) Config {
 	return Config{
-		Client:    duck.NewDuckAwareClientWrapper(cluster.GetClient().(client.WithWatch)),
+		Client:    duck.NewDuckAwareClientWrapper(cluster.GetClient()),
 		APIReader: duck.NewDuckAwareAPIReaderWrapper(cluster.GetAPIReader(), cluster.GetClient()),
 		Recorder:  cluster.GetEventRecorderFor("controller"),
 		Tracker:   c.Tracker,

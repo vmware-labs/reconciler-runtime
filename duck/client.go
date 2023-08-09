@@ -74,7 +74,7 @@ func (c *duckAwareAPIReaderWrapper) List(ctx context.Context, list client.Object
 	return runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, list)
 }
 
-func NewDuckAwareClientWrapper(client client.WithWatch) client.WithWatch {
+func NewDuckAwareClientWrapper(client client.Client) client.Client {
 	return &duckAwareClientWrapper{
 		Reader: NewDuckAwareAPIReaderWrapper(client, client),
 		client: client,
@@ -83,12 +83,17 @@ func NewDuckAwareClientWrapper(client client.WithWatch) client.WithWatch {
 
 type duckAwareClientWrapper struct {
 	client.Reader
-	client client.WithWatch
+	client client.Client
 }
 
 func (c *duckAwareClientWrapper) Watch(ctx context.Context, list client.ObjectList, opts ...client.ListOption) (watch.Interface, error) {
+	ww, ok := c.client.(client.WithWatch)
+	if !ok {
+		panic(fmt.Errorf("unable to call Watch with wrapped client that does not implement client.WithWatch"))
+	}
+
 	if !IsDuck(list, c.Scheme()) {
-		return c.client.Watch(ctx, list, opts...)
+		return ww.Watch(ctx, list, opts...)
 	}
 
 	uObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(list)
@@ -96,7 +101,7 @@ func (c *duckAwareClientWrapper) Watch(ctx context.Context, list client.ObjectLi
 		return nil, err
 	}
 	u := &unstructured.UnstructuredList{Object: uObj}
-	w, err := c.client.Watch(ctx, u, opts...)
+	w, err := ww.Watch(ctx, u, opts...)
 	if err != nil {
 		return nil, err
 	}
