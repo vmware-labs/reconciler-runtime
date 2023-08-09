@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
@@ -26,7 +27,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/vmware-labs/reconciler-runtime/duck"
 	"github.com/vmware-labs/reconciler-runtime/internal"
+	rtime "github.com/vmware-labs/reconciler-runtime/time"
 )
 
 var (
@@ -149,8 +152,10 @@ func (r *ResourceReconciler[T]) validate(ctx context.Context) error {
 	}
 
 	initializeConditionsMethod, hasInitializeConditions := reflect.PtrTo(statusType).MethodByName("InitializeConditions")
-	if !hasInitializeConditions || initializeConditionsMethod.Type.NumIn() != 1 || initializeConditionsMethod.Type.NumOut() != 0 {
-		log.Info("resource status missing InitializeConditions() method, conditions will not be auto-initialized")
+	if !hasInitializeConditions || initializeConditionsMethod.Type.NumIn() > 2 || initializeConditionsMethod.Type.NumOut() != 0 {
+		log.Info("resource status missing InitializeConditions(context.Context) method, conditions will not be auto-initialized")
+	} else if hasInitializeConditions && initializeConditionsMethod.Type.NumIn() == 1 {
+		log.Info("resource status InitializeConditions() method is deprecated, use InitializeConditions(context.Context)")
 	}
 
 	conditionsField, hasConditions := statusType.FieldByName("Conditions")
@@ -173,6 +178,7 @@ func (r *ResourceReconciler[T]) Reconcile(ctx context.Context, req Request) (Res
 		WithValues("resourceType", gvk(r.Type, c.Scheme()))
 	ctx = logr.NewContext(ctx, log)
 
+	ctx = rtime.StashNow(ctx, time.Now())
 	ctx = StashRequest(ctx, req)
 	ctx = StashConfig(ctx, c)
 	ctx = StashOriginalConfig(ctx, c)
@@ -197,7 +203,7 @@ func (r *ResourceReconciler[T]) Reconcile(ctx context.Context, req Request) (Res
 		defaulter.Default()
 	}
 
-	r.initializeConditions(resource)
+	r.initializeConditions(ctx, resource)
 	result, err := r.reconcile(ctx, resource)
 
 	if r.SkipStatusUpdate {
@@ -210,16 +216,29 @@ func (r *ResourceReconciler[T]) Reconcile(ctx context.Context, req Request) (Res
 	// check if status has changed before updating
 	resourceStatus, originalResourceStatus := r.status(resource), r.status(originalResource)
 	if !equality.Semantic.DeepEqual(resourceStatus, originalResourceStatus) && resource.GetDeletionTimestamp() == nil {
-		// update status
-		log.Info("updating status", "diff", cmp.Diff(originalResourceStatus, resourceStatus))
-		if updateErr := c.Status().Update(ctx, resource); updateErr != nil {
-			log.Error(updateErr, "unable to update status")
-			c.Recorder.Eventf(resource, corev1.EventTypeWarning, "StatusUpdateFailed",
-				"Failed to update status: %v", updateErr)
-			return Result{}, updateErr
+		if duck.IsDuck(resource, c.Scheme()) {
+			// patch status
+			log.Info("patching status", "diff", cmp.Diff(originalResourceStatus, resourceStatus))
+			if patchErr := c.Status().Patch(ctx, resource, client.MergeFrom(originalResource)); patchErr != nil {
+				log.Error(patchErr, "unable to patch status")
+				c.Recorder.Eventf(resource, corev1.EventTypeWarning, "StatusPatchFailed",
+					"Failed to patch status: %v", patchErr)
+				return Result{}, patchErr
+			}
+			c.Recorder.Eventf(resource, corev1.EventTypeNormal, "StatusPatched",
+				"Patched status")
+		} else {
+			// update status
+			log.Info("updating status", "diff", cmp.Diff(originalResourceStatus, resourceStatus))
+			if updateErr := c.Status().Update(ctx, resource); updateErr != nil {
+				log.Error(updateErr, "unable to update status")
+				c.Recorder.Eventf(resource, corev1.EventTypeWarning, "StatusUpdateFailed",
+					"Failed to update status: %v", updateErr)
+				return Result{}, updateErr
+			}
+			c.Recorder.Eventf(resource, corev1.EventTypeNormal, "StatusUpdated",
+				"Updated status")
 		}
-		c.Recorder.Eventf(resource, corev1.EventTypeNormal, "StatusUpdated",
-			"Updated status")
 	}
 
 	// return original reconcile result
@@ -241,7 +260,7 @@ func (r *ResourceReconciler[T]) reconcile(ctx context.Context, resource T) (Resu
 	return result, nil
 }
 
-func (r *ResourceReconciler[T]) initializeConditions(obj T) {
+func (r *ResourceReconciler[T]) initializeConditions(ctx context.Context, obj T) {
 	status := r.status(obj)
 	if status == nil {
 		return
@@ -250,10 +269,15 @@ func (r *ResourceReconciler[T]) initializeConditions(obj T) {
 	if !initializeConditions.IsValid() {
 		return
 	}
-	if t := initializeConditions.Type(); t.Kind() != reflect.Func || t.NumIn() != 0 || t.NumOut() != 0 {
+	t := initializeConditions.Type()
+	if t.Kind() != reflect.Func || t.NumOut() != 0 {
 		return
 	}
-	initializeConditions.Call([]reflect.Value{})
+	args := []reflect.Value{}
+	if t.NumIn() == 1 {
+		args = append(args, reflect.ValueOf(ctx))
+	}
+	initializeConditions.Call(args)
 }
 
 func (r *ResourceReconciler[T]) conditions(obj T) []metav1.Condition {

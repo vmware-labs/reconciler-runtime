@@ -6,6 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 package resources
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -122,38 +123,18 @@ type TestResourceStatus struct {
 	Fields      map[string]string `json:"fields,omitempty"`
 }
 
-func (rs *TestResourceStatus) InitializeConditions() {
-	rs.SetConditions([]metav1.Condition{
-		{
-			Type:               apis.ConditionReady,
-			Status:             metav1.ConditionUnknown,
-			Reason:             "Initializing",
-			LastTransitionTime: metav1.Now(),
-		},
-	})
+var condSet = apis.NewLivingConditionSet()
+
+func (rs *TestResourceStatus) InitializeConditions(ctx context.Context) {
+	condSet.ManageWithContext(ctx, rs).InitializeConditions()
 }
 
-func (rs *TestResourceStatus) MarkReady() {
-	rs.SetConditions([]metav1.Condition{
-		{
-			Type:               apis.ConditionReady,
-			Status:             metav1.ConditionTrue,
-			Reason:             "Ready",
-			LastTransitionTime: metav1.Now(),
-		},
-	})
+func (rs *TestResourceStatus) MarkReady(ctx context.Context) {
+	condSet.ManageWithContext(ctx, rs).MarkTrue(apis.ConditionReady, "Ready", "")
 }
 
-func (rs *TestResourceStatus) MarkNotReady(reason, message string, messageA ...interface{}) {
-	rs.SetConditions([]metav1.Condition{
-		{
-			Type:               apis.ConditionReady,
-			Status:             metav1.ConditionFalse,
-			Reason:             reason,
-			Message:            fmt.Sprintf(message, messageA...),
-			LastTransitionTime: metav1.Now(),
-		},
-	})
+func (rs *TestResourceStatus) MarkNotReady(ctx context.Context, reason, message string, messageA ...interface{}) {
+	condSet.ManageWithContext(ctx, rs).MarkFalse(apis.ConditionReady, reason, message, messageA...)
 }
 
 // +kubebuilder:object:root=true

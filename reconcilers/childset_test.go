@@ -122,7 +122,7 @@ func TestChildSetReconciler(t *testing.T) {
 				if err := result.AggregateError(); err != nil {
 					if apierrs.IsAlreadyExists(err) {
 						name := err.(apierrs.APIStatus).Status().Details.Name
-						parent.Status.MarkNotReady("NameConflict", "%q already exists", name)
+						parent.Status.MarkNotReady(ctx, "NameConflict", "%q already exists", name)
 					}
 					return
 				}
@@ -141,7 +141,7 @@ func TestChildSetReconciler(t *testing.T) {
 				if len(parent.Status.Fields) == 0 {
 					parent.Status.Fields = nil
 				}
-				parent.Status.MarkReady()
+				parent.Status.MarkReady(ctx)
 			},
 		}
 	}

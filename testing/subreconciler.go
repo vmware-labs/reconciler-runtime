@@ -8,6 +8,7 @@ package testing
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	logrtesting "github.com/go-logr/logr/testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/vmware-labs/reconciler-runtime/internal"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
+	rtime "github.com/vmware-labs/reconciler-runtime/time"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -110,6 +112,9 @@ type SubReconcilerTestCase[Type client.Object] struct {
 	// It is intended to clean up any state created in the Prepare step or during the test
 	// execution, or to make assertions for mocks.
 	CleanUp func(t *testing.T, ctx context.Context, tc *SubReconcilerTestCase[Type]) error
+	// Now is the time the test should run as, defaults to the current time. This value can be used
+	// by reconcilers via the reconcilers.RetireveNow(ctx) method.
+	Now time.Time
 }
 
 // SubReconcilerTests represents a map of reconciler test cases. The map key is the name of each
@@ -139,6 +144,10 @@ func (tc *SubReconcilerTestCase[T]) Run(t *testing.T, scheme *runtime.Scheme, fa
 	}
 
 	ctx := reconcilers.WithStash(context.Background())
+	if tc.Now == (time.Time{}) {
+		tc.Now = time.Now()
+	}
+	ctx = rtime.StashNow(ctx, tc.Now)
 	ctx = logr.NewContext(ctx, logrtesting.NewTestLogger(t))
 	if deadline, ok := t.Deadline(); ok {
 		var cancel context.CancelFunc

@@ -76,3 +76,26 @@ func (d *TestResourceNilableStatusDie) StatusDie(fn func(d *TestResourceStatusDi
 		r.Status = d.DieReleasePtr()
 	})
 }
+
+// +die:object=true
+type _ = resources.TestDuck
+
+func (d *TestDuckDie) StatusDie(fn func(d *TestResourceStatusDie)) *TestDuckDie {
+	return d.DieStamp(func(r *resources.TestDuck) {
+		d := TestResourceStatusBlank.DieImmutable(false).DieFeed(r.Status)
+		fn(d)
+		r.Status = d.DieRelease()
+	})
+}
+
+// +die
+type _ = resources.TestDuckSpec
+
+func (d *TestDuckSpecDie) AddField(key, value string) *TestDuckSpecDie {
+	return d.DieStamp(func(r *resources.TestDuckSpec) {
+		if r.Fields == nil {
+			r.Fields = map[string]string{}
+		}
+		r.Fields[key] = value
+	})
+}

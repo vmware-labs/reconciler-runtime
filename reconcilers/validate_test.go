@@ -112,7 +112,7 @@ func TestResourceReconciler_validate_TestResourceEmptyStatus(t *testing.T) {
 			},
 			expectedLogs: []string{
 				"resource status missing ObservedGeneration field of type int64, generation will not be managed",
-				"resource status missing InitializeConditions() method, conditions will not be auto-initialized",
+				"resource status missing InitializeConditions(context.Context) method, conditions will not be auto-initialized",
 				"resource status is missing field Conditions of type []metav1.Condition, condition timestamps will not be managed",
 			},
 		},

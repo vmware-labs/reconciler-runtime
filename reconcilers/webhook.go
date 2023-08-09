@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/vmware-labs/reconciler-runtime/internal"
+	rtime "github.com/vmware-labs/reconciler-runtime/time"
 	"gomodules.xyz/jsonpatch/v3"
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -124,6 +126,7 @@ func (r *AdmissionWebhookAdapter[T]) Handle(ctx context.Context, req admission.R
 		},
 	}
 
+	ctx = rtime.StashNow(ctx, time.Now())
 	ctx = StashAdmissionRequest(ctx, req)
 	ctx = StashAdmissionResponse(ctx, resp)
 

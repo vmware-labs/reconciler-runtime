@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/vmware-labs/reconciler-runtime/duck"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/fields"
@@ -126,7 +127,7 @@ func (c *ExpectConfig) createClient(objs []client.Object, statusSubResourceTypes
 		builder = c.WithClientBuilder(builder)
 	}
 
-	return NewFakeClientWrapper(builder.Build())
+	return NewFakeClientWrapper(duck.NewDuckAwareClientWrapper(builder.Build()))
 }
 
 // Config returns the Config object. This method should only be called once. Subsequent calls are

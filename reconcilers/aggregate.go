@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/go-logr/logr"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
@@ -20,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/vmware-labs/reconciler-runtime/internal"
+	rtime "github.com/vmware-labs/reconciler-runtime/time"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
 
@@ -196,6 +198,7 @@ func (r *AggregateReconciler[T]) Reconcile(ctx context.Context, req Request) (Re
 		WithValues("resourceType", gvk(r.Type, c.Scheme()))
 	ctx = logr.NewContext(ctx, log)
 
+	ctx = rtime.StashNow(ctx, time.Now())
 	ctx = StashRequest(ctx, req)
 	ctx = StashConfig(ctx, c)
 	ctx = StashOriginalConfig(ctx, r.Config)

@@ -8,11 +8,13 @@ package testing
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	logrtesting "github.com/go-logr/logr/testing"
 	"github.com/google/go-cmp/cmp"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
+	rtime "github.com/vmware-labs/reconciler-runtime/time"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -101,6 +103,9 @@ type ReconcilerTestCase struct {
 	// It is intended to clean up any state created in the Prepare step or during the test
 	// execution, or to make assertions for mocks.
 	CleanUp func(t *testing.T, ctx context.Context, tc *ReconcilerTestCase) error
+	// Now is the time the test should run as, defaults to the current time. This value can be used
+	// by reconcilers via the reconcilers.RetireveNow(ctx) method.
+	Now time.Time
 }
 
 // VerifyFunc is a verification function for a reconciler's result
@@ -135,6 +140,10 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	}
 
 	ctx := context.Background()
+	if tc.Now == (time.Time{}) {
+		tc.Now = time.Now()
+	}
+	ctx = rtime.StashNow(ctx, tc.Now)
 	ctx = logr.NewContext(ctx, logrtesting.NewTestLogger(t))
 	if deadline, ok := t.Deadline(); ok {
 		var cancel context.CancelFunc
