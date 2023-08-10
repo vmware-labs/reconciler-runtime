@@ -111,7 +111,20 @@ func (r *ResourceReconciler[T]) SetupWithManagerYieldingController(ctx context.C
 		return nil, err
 	}
 
-	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
+	bldr := ctrl.NewControllerManagedBy(mgr)
+	if !duck.IsDuck(r.Type, r.Config.Scheme()) {
+		bldr.For(r.Type)
+	} else {
+		gvk, err := r.Config.GroupVersionKindFor(r.Type)
+		if err != nil {
+			return nil, err
+		}
+		apiVersion, kind := gvk.ToAPIVersionAndKind()
+		u := &unstructured.Unstructured{}
+		u.SetAPIVersion(apiVersion)
+		u.SetKind(kind)
+		bldr.For(u)
+	}
 	if r.Setup != nil {
 		if err := r.Setup(ctx, mgr, bldr); err != nil {
 			return nil, err

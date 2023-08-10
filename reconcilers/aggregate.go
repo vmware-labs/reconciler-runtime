@@ -15,11 +15,13 @@ import (
 
 	"github.com/go-logr/logr"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/vmware-labs/reconciler-runtime/duck"
 	"github.com/vmware-labs/reconciler-runtime/internal"
 	rtime "github.com/vmware-labs/reconciler-runtime/time"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
@@ -152,7 +154,20 @@ func (r *AggregateReconciler[T]) SetupWithManagerYieldingController(ctx context.
 		return nil, err
 	}
 
-	bldr := ctrl.NewControllerManagedBy(mgr).For(r.Type)
+	bldr := ctrl.NewControllerManagedBy(mgr)
+	if !duck.IsDuck(r.Type, r.Config.Scheme()) {
+		bldr.For(r.Type)
+	} else {
+		gvk, err := r.Config.GroupVersionKindFor(r.Type)
+		if err != nil {
+			return nil, err
+		}
+		apiVersion, kind := gvk.ToAPIVersionAndKind()
+		u := &unstructured.Unstructured{}
+		u.SetAPIVersion(apiVersion)
+		u.SetKind(kind)
+		bldr.For(u)
+	}
 	if r.Setup != nil {
 		if err := r.Setup(ctx, mgr, bldr); err != nil {
 			return nil, err
