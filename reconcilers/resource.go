@@ -274,8 +274,10 @@ func (r *ResourceReconciler[T]) initializeConditions(ctx context.Context, obj T)
 		return
 	}
 	args := []reflect.Value{}
-	if t.NumIn() == 1 {
+	if t.NumIn() == 1 && t.In(0).AssignableTo(reflect.TypeOf((*context.Context)(nil)).Elem()) {
 		args = append(args, reflect.ValueOf(ctx))
+	} else if t.NumIn() != 0 {
+		return
 	}
 	initializeConditions.Call(args)
 }
