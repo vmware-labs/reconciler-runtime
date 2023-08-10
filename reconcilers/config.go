@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cluster"
 
 	"github.com/go-logr/logr"
+	"github.com/vmware-labs/reconciler-runtime/duck"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 )
 
@@ -41,8 +42,8 @@ func (c Config) IsEmpty() bool {
 // WithCluster extends the config to access a new cluster.
 func (c Config) WithCluster(cluster cluster.Cluster) Config {
 	return Config{
-		Client:    cluster.GetClient(),
-		APIReader: cluster.GetAPIReader(),
+		Client:    duck.NewDuckAwareClientWrapper(cluster.GetClient()),
+		APIReader: duck.NewDuckAwareAPIReaderWrapper(cluster.GetAPIReader(), cluster.GetClient()),
 		Recorder:  cluster.GetEventRecorderFor("controller"),
 		Tracker:   c.Tracker,
 	}

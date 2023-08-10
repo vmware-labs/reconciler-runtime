@@ -35,12 +35,27 @@ Within an existing Kubebuilder or controller-runtime project, reconciler-runtime
 	- [Status](#status)
 	- [Finalizers](#finalizers)
 	- [ResourceManager](#resourcemanager)
+	- [Time](#time)
 - [Breaking Changes](#breaking-changes)
+	- [Current Deprecations](#current-deprecations)
 - [Contributing](#contributing)
 - [Acknowledgements](#acknowledgements)
 - [License](#license)
 
 ## Reconcilers
+
+Reconcilers can operate on three different types of objects:
+- structured types (e.g. [`corev1.Pod`](https://pkg.go.dev/k8s.io/api/core/v1#Pod))
+- unstructured types (e.g. [`unstructured.Unstructured`](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1/unstructured#Unstructured))
+- semi-structured duck types (e.g. [`PodSpecable`](https://pkg.go.dev/knative.dev/pkg/apis/duck/v1#PodSpecable), [`ProvisionedService`](https://servicebinding.io/spec/core/1.0.0/#provisioned-service))
+
+Structured types are often the best choice as they allow easy interaction with the full object and have full client support. The type must be registered with the [`Scheme`](https://pkg.go.dev/k8s.io/apimachinery/pkg/runtime#Scheme). The type must be pre-defined and compiled into the controller.
+
+Unstructured types are useful when the resources are not known at compile time and full access to the resource and client methods is desired. Since the type is not known in advance, it cannot be registered with the scheme. Interacting with the object is difficult as traversing the object requires lots of casts or reflection. The [`TypeMeta`](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#TypeMeta) `APIVersion` and `Kind` fields must be defined for the client to operate on the object.
+
+Semi-structured duck types offer a middle ground. They are strongly typed, but only cover a subset of the full object. They are intended to facilitate normalized operations across a number of concrete types that share a common subset of their own schema. The concrete objects compatible with this type are not required to be known at compile time. Because duck types are not full objects, client operations for `Create` and `Update` are disallowed (`Patch` is available). Like unstructured objects, the duck type should not be registered in the scheme, and the [`TypeMeta`](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#TypeMeta) `APIVersion` and `Kind` fields must be defined for the client to operate on the object.
+
+The controller-runtime client is able to work with structured and unstructured objects natively, reconciler-runtime adds support for duck typed objects via the [`duck.NewDuckAwareClientWrapper`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/duck#NewDuckAwareClientWrapper).
 
 <a name="parentreconciler" />
 
@@ -566,7 +581,7 @@ The table test pattern is used to declare each test case in a test suite with th
 
 The tests make extensive use of given and mutated resources. It is recommended to use a library like [dies](https://dies.dev) to reduce boilerplate code and to highlight the delta unique to each test.
 
-There are two test suites, one for reconcilers and an optimized harness for testing sub reconcilers.
+There are three test suites: for [testing reconcilers](#reconcilertests), an optimized harness for [testing sub reconcilers](#subreconcilertests), and for [testing admission webhooks](#admissionwebhooktests).
 
 <a name="reconcilertestsuite" />
 
@@ -942,6 +957,12 @@ If configured, a [finalizer](#finalizers) can be managed on the resource which w
 
 If requested, the managed resource will be tracked for the resource.
 
+### Time
+
+Reconcilers that capture timestamps can be natoriously difficult to test, as the output will be different for every execution. While we don't have a time machine, reconciler-runtime provides an alterate API to fetch the current time within a reconciler. [`rtime.RetrieveTime(context.Context)`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/time#RetrieveTime) can be used within a reconciler to get the [`time.Time`](https://pkg.go.dev/time#Time) when the reconciler request started processing. The value returned is guarenteed to remain stable for the lifespan of the reconcile request. Calls to [`time.Now`](https://pkg.go.dev/time#Now) will continue to return an up to date timestamp.
+
+Reconciler tests can seed this timestamp by defining the [`Now`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestCase.Now) field on the test case. The reconciler will be run with the desired time instead of "now". The timestamp set on the test case can also be used in the expectations to pin values that would otherwise float.
+
 ## Breaking Changes
 
 Known breaking changes are captured in the [release notes](https://github.com/vmware-labs/reconciler-runtime/releases), it is strongly recomened to review the release notes before upgrading to a new version of reconciler-runtime. When possible, breaking changes are first marked as deprecations before full removal in a later release. Patch releases will be issued to fix significant bugs and unintentional breaking changes.
@@ -949,6 +970,11 @@ Known breaking changes are captured in the [release notes](https://github.com/vm
 We strive to release reconciler-runtime against the latest Kuberentes and controller-runtime releases. Upstream breaking changes in either dependency may also force changes in reconciler-runtime without a deprecation period.
 
 reconciler-runtime is rapidly evolving. While we strive for API compatability between releases, functionality that is better handled using a different API may be removed. Release version numbers follow semver.
+
+### Current Deprecations
+
+- status `InitiazeConditions()` is deprecated in favor of `InitializeConditions(context.Context)`. Support may be removed in a future release, users are encuraged to migrate.
+- `ConditionSet#Manage` is deprecated in favor of `ConditionSet#ManageWithContext`. Support may be removed in a future release, users are encuraged to migrate.
 
 ## Contributing
 

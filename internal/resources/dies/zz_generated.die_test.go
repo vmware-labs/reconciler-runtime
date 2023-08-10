@@ -77,3 +77,21 @@ func TestTestResourceNilableStatusDie_MissingMethods(t *testingx.T) {
 		t.Errorf("found missing fields for TestResourceNilableStatusDie: %s", diff.List())
 	}
 }
+
+func TestTestDuckDie_MissingMethods(t *testingx.T) {
+	die := TestDuckBlank
+	ignore := []string{"TypeMeta", "ObjectMeta"}
+	diff := testing.DieFieldDiff(die).Delete(ignore...)
+	if diff.Len() != 0 {
+		t.Errorf("found missing fields for TestDuckDie: %s", diff.List())
+	}
+}
+
+func TestTestDuckSpecDie_MissingMethods(t *testingx.T) {
+	die := TestDuckSpecBlank
+	ignore := []string{}
+	diff := testing.DieFieldDiff(die).Delete(ignore...)
+	if diff.Len() != 0 {
+		t.Errorf("found missing fields for TestDuckSpecDie: %s", diff.List())
+	}
+}

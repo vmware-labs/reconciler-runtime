@@ -21,12 +21,13 @@ SPDX-License-Identifier: Apache-2.0
 package apis
 
 import (
+	"context"
+	"fmt"
 	"reflect"
 	"sort"
 	"time"
 
-	"fmt"
-
+	rtime "github.com/vmware-labs/reconciler-runtime/time"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -45,8 +46,6 @@ type ConditionsAccessor interface {
 	GetConditions() []metav1.Condition
 	SetConditions([]metav1.Condition)
 }
-
-type NowFunc func() time.Time
 
 // ConditionSet is an abstract collection of the possible ConditionType values
 // that a particular resource might expose.  It also holds the "happy condition"
@@ -156,14 +155,23 @@ var _ ConditionManager = (*conditionsImpl)(nil)
 type conditionsImpl struct {
 	ConditionSet
 	accessor ConditionsAccessor
+	now      time.Time
+}
+
+// Deprecated: use ManageWithContext
+// Manage creates a ConditionManager from an accessor object using the original
+// ConditionSet as a reference. Status must be a pointer to a struct.
+func (r ConditionSet) Manage(status ConditionsAccessor) ConditionManager {
+	return r.ManageWithContext(context.TODO(), status)
 }
 
 // Manage creates a ConditionManager from an accessor object using the original
 // ConditionSet as a reference. Status must be a pointer to a struct.
-func (r ConditionSet) Manage(status ConditionsAccessor) ConditionManager {
+func (r ConditionSet) ManageWithContext(ctx context.Context, status ConditionsAccessor) ConditionManager {
 	return conditionsImpl{
 		accessor:     status,
 		ConditionSet: r,
+		now:          rtime.RetrieveNow(ctx),
 	}
 }
 
@@ -210,7 +218,7 @@ func (r conditionsImpl) SetCondition(new metav1.Condition) {
 			}
 		}
 	}
-	new.LastTransitionTime = metav1.NewTime(time.Now()).Rfc3339Copy()
+	new.LastTransitionTime = metav1.NewTime(r.now).Rfc3339Copy()
 	conditions = append(conditions, new)
 	// Sorted for convenience of the consumer, i.e. kubectl.
 	sort.Slice(conditions, func(i, j int) bool { return conditions[i].Type < conditions[j].Type })
@@ -266,6 +274,10 @@ func (r conditionsImpl) MarkTrue(t string, reason, messageFormat string, message
 		Message: fmt.Sprintf(messageFormat, messageA...),
 	})
 
+	if len(r.dependents) == 0 {
+		return
+	}
+
 	// check the dependents.
 	for _, cond := range r.dependents {
 		c := r.GetCondition(cond)
@@ -293,6 +305,10 @@ func (r conditionsImpl) MarkUnknown(t string, reason, messageFormat string, mess
 		Reason:  reason,
 		Message: fmt.Sprintf(messageFormat, messageA...),
 	})
+
+	if len(r.dependents) == 0 {
+		return
+	}
 
 	// check the dependents.
 	isDependent := false

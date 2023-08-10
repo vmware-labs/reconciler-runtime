@@ -20,6 +20,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+var (
+	_ SubReconciler[client.Object] = (*ChildSetReconciler[client.Object, client.Object, client.ObjectList])(nil)
+)
+
 // ChildSetReconciler is a sub reconciler that manages a set of child resources for a reconciled
 // resource. A correlation ID is used to track the desired state of each child resource across
 // reconcile requests. A ChildReconciler is created dynamically and reconciled for each desired
