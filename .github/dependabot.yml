@@ -11,6 +11,10 @@ updates:
   directory: "/"
   schedule:
     interval: daily
+  ignore:
+  - dependency-name: k8s.io/*
+    update-types:
+    - version-update:semver-patch
   open-pull-requests-limit: 10
   reviewers:
   - scothis
