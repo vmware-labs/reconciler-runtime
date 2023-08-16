@@ -165,11 +165,18 @@ func (d *TestResourceDie) DieStamp(fn func(r *resources.TestResource)) *TestReso
 	return d.DieFeed(r)
 }
 
-// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
 //
 // Future iterations will improve type coercion from the resource to the callback argument.
 func (d *TestResourceDie) DieStampAt(jp string, fn interface{}) *TestResourceDie {
 	return d.DieStamp(func(r *resources.TestResource) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
 		cp := jsonpath.New("")
 		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
 			panic(err)
@@ -180,10 +187,31 @@ func (d *TestResourceDie) DieStampAt(jp string, fn interface{}) *TestResourceDie
 			return
 		}
 		for _, cv := range cr[0] {
-			args := []reflectx.Value{cv}
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
 			reflectx.ValueOf(fn).Call(args)
 		}
 	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestResourceDie) DieWith(fns ...func(d *TestResourceDie)) *TestResourceDie {
+	nd := TestResourceBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -401,11 +429,18 @@ func (d *TestResourceSpecDie) DieStamp(fn func(r *resources.TestResourceSpec)) *
 	return d.DieFeed(r)
 }
 
-// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
 //
 // Future iterations will improve type coercion from the resource to the callback argument.
 func (d *TestResourceSpecDie) DieStampAt(jp string, fn interface{}) *TestResourceSpecDie {
 	return d.DieStamp(func(r *resources.TestResourceSpec) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
 		cp := jsonpath.New("")
 		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
 			panic(err)
@@ -416,10 +451,31 @@ func (d *TestResourceSpecDie) DieStampAt(jp string, fn interface{}) *TestResourc
 			return
 		}
 		for _, cv := range cr[0] {
-			args := []reflectx.Value{cv}
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
 			reflectx.ValueOf(fn).Call(args)
 		}
 	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestResourceSpecDie) DieWith(fns ...func(d *TestResourceSpecDie)) *TestResourceSpecDie {
+	nd := TestResourceSpecBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -579,11 +635,18 @@ func (d *TestResourceStatusDie) DieStamp(fn func(r *resources.TestResourceStatus
 	return d.DieFeed(r)
 }
 
-// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
 //
 // Future iterations will improve type coercion from the resource to the callback argument.
 func (d *TestResourceStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceStatusDie {
 	return d.DieStamp(func(r *resources.TestResourceStatus) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
 		cp := jsonpath.New("")
 		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
 			panic(err)
@@ -594,10 +657,31 @@ func (d *TestResourceStatusDie) DieStampAt(jp string, fn interface{}) *TestResou
 			return
 		}
 		for _, cv := range cr[0] {
-			args := []reflectx.Value{cv}
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
 			reflectx.ValueOf(fn).Call(args)
 		}
 	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestResourceStatusDie) DieWith(fns ...func(d *TestResourceStatusDie)) *TestResourceStatusDie {
+	nd := TestResourceStatusBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -760,11 +844,18 @@ func (d *TestResourceEmptyStatusDie) DieStamp(fn func(r *resources.TestResourceE
 	return d.DieFeed(r)
 }
 
-// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
 //
 // Future iterations will improve type coercion from the resource to the callback argument.
 func (d *TestResourceEmptyStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceEmptyStatusDie {
 	return d.DieStamp(func(r *resources.TestResourceEmptyStatus) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
 		cp := jsonpath.New("")
 		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
 			panic(err)
@@ -775,10 +866,31 @@ func (d *TestResourceEmptyStatusDie) DieStampAt(jp string, fn interface{}) *Test
 			return
 		}
 		for _, cv := range cr[0] {
-			args := []reflectx.Value{cv}
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
 			reflectx.ValueOf(fn).Call(args)
 		}
 	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestResourceEmptyStatusDie) DieWith(fns ...func(d *TestResourceEmptyStatusDie)) *TestResourceEmptyStatusDie {
+	nd := TestResourceEmptyStatusBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -996,11 +1108,18 @@ func (d *TestResourceEmptyStatusStatusDie) DieStamp(fn func(r *resources.TestRes
 	return d.DieFeed(r)
 }
 
-// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
 //
 // Future iterations will improve type coercion from the resource to the callback argument.
 func (d *TestResourceEmptyStatusStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceEmptyStatusStatusDie {
 	return d.DieStamp(func(r *resources.TestResourceEmptyStatusStatus) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
 		cp := jsonpath.New("")
 		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
 			panic(err)
@@ -1011,10 +1130,31 @@ func (d *TestResourceEmptyStatusStatusDie) DieStampAt(jp string, fn interface{})
 			return
 		}
 		for _, cv := range cr[0] {
-			args := []reflectx.Value{cv}
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
 			reflectx.ValueOf(fn).Call(args)
 		}
 	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestResourceEmptyStatusStatusDie) DieWith(fns ...func(d *TestResourceEmptyStatusStatusDie)) *TestResourceEmptyStatusStatusDie {
+	nd := TestResourceEmptyStatusStatusBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -1165,11 +1305,18 @@ func (d *TestResourceNoStatusDie) DieStamp(fn func(r *resources.TestResourceNoSt
 	return d.DieFeed(r)
 }
 
-// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
 //
 // Future iterations will improve type coercion from the resource to the callback argument.
 func (d *TestResourceNoStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceNoStatusDie {
 	return d.DieStamp(func(r *resources.TestResourceNoStatus) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
 		cp := jsonpath.New("")
 		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
 			panic(err)
@@ -1180,10 +1327,31 @@ func (d *TestResourceNoStatusDie) DieStampAt(jp string, fn interface{}) *TestRes
 			return
 		}
 		for _, cv := range cr[0] {
-			args := []reflectx.Value{cv}
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
 			reflectx.ValueOf(fn).Call(args)
 		}
 	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestResourceNoStatusDie) DieWith(fns ...func(d *TestResourceNoStatusDie)) *TestResourceNoStatusDie {
+	nd := TestResourceNoStatusBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -1401,11 +1569,18 @@ func (d *TestResourceNilableStatusDie) DieStamp(fn func(r *resources.TestResourc
 	return d.DieFeed(r)
 }
 
-// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
 //
 // Future iterations will improve type coercion from the resource to the callback argument.
 func (d *TestResourceNilableStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceNilableStatusDie {
 	return d.DieStamp(func(r *resources.TestResourceNilableStatus) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
 		cp := jsonpath.New("")
 		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
 			panic(err)
@@ -1416,10 +1591,31 @@ func (d *TestResourceNilableStatusDie) DieStampAt(jp string, fn interface{}) *Te
 			return
 		}
 		for _, cv := range cr[0] {
-			args := []reflectx.Value{cv}
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
 			reflectx.ValueOf(fn).Call(args)
 		}
 	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestResourceNilableStatusDie) DieWith(fns ...func(d *TestResourceNilableStatusDie)) *TestResourceNilableStatusDie {
+	nd := TestResourceNilableStatusBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -1643,11 +1839,18 @@ func (d *TestDuckDie) DieStamp(fn func(r *resources.TestDuck)) *TestDuckDie {
 	return d.DieFeed(r)
 }
 
-// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
 //
 // Future iterations will improve type coercion from the resource to the callback argument.
 func (d *TestDuckDie) DieStampAt(jp string, fn interface{}) *TestDuckDie {
 	return d.DieStamp(func(r *resources.TestDuck) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
 		cp := jsonpath.New("")
 		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
 			panic(err)
@@ -1658,10 +1861,31 @@ func (d *TestDuckDie) DieStampAt(jp string, fn interface{}) *TestDuckDie {
 			return
 		}
 		for _, cv := range cr[0] {
-			args := []reflectx.Value{cv}
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
 			reflectx.ValueOf(fn).Call(args)
 		}
 	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestDuckDie) DieWith(fns ...func(d *TestDuckDie)) *TestDuckDie {
+	nd := TestDuckBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
@@ -1870,11 +2094,18 @@ func (d *TestDuckSpecDie) DieStamp(fn func(r *resources.TestDuckSpec)) *TestDuck
 	return d.DieFeed(r)
 }
 
-// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type as found on the resource at the target location.
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
 //
 // Future iterations will improve type coercion from the resource to the callback argument.
 func (d *TestDuckSpecDie) DieStampAt(jp string, fn interface{}) *TestDuckSpecDie {
 	return d.DieStamp(func(r *resources.TestDuckSpec) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
 		cp := jsonpath.New("")
 		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
 			panic(err)
@@ -1885,10 +2116,31 @@ func (d *TestDuckSpecDie) DieStampAt(jp string, fn interface{}) *TestDuckSpecDie
 			return
 		}
 		for _, cv := range cr[0] {
-			args := []reflectx.Value{cv}
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
 			reflectx.ValueOf(fn).Call(args)
 		}
 	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestDuckSpecDie) DieWith(fns ...func(d *TestDuckSpecDie)) *TestDuckSpecDie {
+	nd := TestDuckSpecBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
 }
 
 // DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
