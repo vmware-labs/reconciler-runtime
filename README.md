@@ -83,13 +83,12 @@ Resource reconcilers tend to be quite simple, as they delegate their work to sub
 
 ```go
 func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler[*buildv1alpha1.Function] {
-	return &reconcilers.ResourceReconciler{
+	return &reconcilers.ResourceReconciler[*buildv1alpha1.Function]{
 		Name: "Function",
 		Reconciler: reconcilers.Sequence[*buildv1alpha1.Function]{
 			FunctionTargetImageReconciler(c),
 			FunctionChildImageReconciler(c),
 		},
-
 		Config: c,
 	}
 }
@@ -157,7 +156,7 @@ The resulting `ValidatingWebhookConfiguration` will have the current desired rul
 // dynamically be notified of resource mutations. A less reliable, but potentially more
 // efficient than an informer watching each tracked resource.
 func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReconciler[*admissionregistrationv1.ValidatingWebhookConfiguration] {
-	return &reconcilers.AggregateReconciler{
+	return &reconcilers.AggregateReconciler[*admissionregistrationv1.ValidatingWebhookConfiguration]{
 		Name:     "AdmissionTrigger",
 		Request:  reconcilers.Request{
 			NamesspacedName: types.NamesspacedName{
@@ -181,7 +180,6 @@ func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReco
 		Sanitize: func(resource *admissionregistrationv1.ValidatingWebhookConfiguration) interface{} {
 			return resource.Webhooks[0].Rules
 		},
-
 		Config: c,
 	}
 }
@@ -310,7 +308,7 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 			actual.Labels = desired.Labels
 			actual.Spec = desired.Spec
 		},
-		ReflectChildStatusOnParent: func(parent *buildv1alpha1.Function, child *kpackbuildv1alpha1.Image, err error) {
+		ReflectChildStatusOnParent: func(ctx context.Context, parent *buildv1alpha1.Function, child *kpackbuildv1alpha1.Image, err error) {
 			// child is the value of the freshly created/updated/deleted child
 			// resource as returned from the api server
 
@@ -428,7 +426,6 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler[*b
 			},
 			FunctionChildImageReconciler(c),
 		},
-
 		Config: c,
 	}
 }
@@ -450,7 +447,6 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler[*b
 			FunctionTargetImageReconciler(c),
 			FunctionChildImageReconciler(c),
 		},
-
 		Config: c,
 	}
 }
@@ -472,7 +468,6 @@ func SwapRESTConfig(rc *rest.Config) *reconcilers.SubReconciler[*resources.MyRes
 			LookupReferenceDataReconciler(),
 			DoSomethingChildReconciler(),
 		},
-
 		Config: func(ctx context.Context, c reconciler.Config) (reconciler.Config, error ) {
 			// the rest config could also be stashed from a lookup in a SyncReconciler based on a dynamic value
 			cl, err := clusters.New(rc)
@@ -635,7 +630,7 @@ rts := rtesting.ReconcilerTests{
 	...
 }}
 
-rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase[*streamingv1alpha1.InMemoryGateway], c reconcilers.Config) reconcile.Reconciler[*streamingv1alpha1.InMemoryGateway] {
 	return streaming.InMemoryGatewayReconciler(c, testSystemNamespace)
 })
 ```
@@ -786,8 +781,8 @@ For testing, given stashed values can be defined in a [SubReconcilerTests](#subr
 ```go
 const exampleStashKey reconcilers.StashKey = "example"
 
-func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	return &reconcilers.SyncReconciler{
+func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler[*examplev1.MyExample] {
+	return &reconcilers.SyncReconciler[*examplev1.MyExample]{
 		Name: "StashExample",
 		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
 			value := Example{} // something we want to expose to a sub reconciler later in this chain
@@ -798,8 +793,8 @@ func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
 }
 
 
-func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	return &reconcilers.SyncReconciler{
+func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler[*examplev1.MyExample] {
+	return &reconcilers.SyncReconciler[*examplev1.MyExample]{
 		Name: "StashExample",
 		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
 			value, ok := reconcilers.RetrieveValue(ctx, exampleStashKey).(Example)
@@ -856,7 +851,7 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 			// events to watch for changes of the target resource. When the
 			// informer emits an event, the tracking resources are looked up
 			// from the tracker and enqueded for reconciliation.
-			bldr.Watches(&source.Kind{Type: &corev1.ConfigMap{}}, reconcilers.EnqueueTracked(ctx, &corev1.ConfigMap{}))
+			bldr.Watches(&corev1.ConfigMap{}}, reconcilers.EnqueueTracked(ctx))
 			return nil
 		},
 	}
