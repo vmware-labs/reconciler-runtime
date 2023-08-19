@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/vmware-labs/reconciler-runtime)](https://goreportcard.com/report/github.com/vmware-labs/reconciler-runtime)
 [![codecov](https://codecov.io/gh/vmware-labs/reconciler-runtime/branch/main/graph/badge.svg)](https://codecov.io/gh/vmware-labs/reconciler-runtime)
 
-`reconciler-runtime` is an opinionated framework for authoring and testing Kubernetes reconcilers using [`controller-runtime`](https://github.com/kubernetes-sigs/controller-runtime) project. `controller-runtime` provides infrastructure for creating and operating controllers, but provides little support for the business logic of implementing a reconciler within the controller. The [`Reconciler` interface](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/reconcile#Reconciler) provided by `controller-runtime` is the primary handoff point with `reconciler-runtime`.
+`reconciler-runtime` is an opinionated framework for authoring and testing Kubernetes reconcilers using [`controller-runtime`](https://github.com/kubernetes-sigs/controller-runtime) project. `controller-runtime` provides infrastructure for creating and operating controllers, but provides little support for the business logic of implementing a reconciler within the controller. The [`Reconciler` interface](https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/reconcile#Reconciler) provided by `controller-runtime` is the primary hand-off point with `reconciler-runtime`.
 
 Within an existing Kubebuilder or controller-runtime project, reconciler-runtime may be adopted incrementally without disrupting existing controllers. A common approach for adopting reconciler-runtime to use the [testing](#testing) support to test existing reconcilers in a project. If there is a use case reconciler-runtime does not handle well, you may drop down to the controller-runtime APIs directly, or use any other library that is compatible with controller-runtime.
 
@@ -83,13 +83,12 @@ Resource reconcilers tend to be quite simple, as they delegate their work to sub
 
 ```go
 func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler[*buildv1alpha1.Function] {
-	return &reconcilers.ResourceReconciler{
+	return &reconcilers.ResourceReconciler[*buildv1alpha1.Function]{
 		Name: "Function",
 		Reconciler: reconcilers.Sequence[*buildv1alpha1.Function]{
 			FunctionTargetImageReconciler(c),
 			FunctionChildImageReconciler(c),
 		},
-
 		Config: c,
 	}
 }
@@ -157,7 +156,7 @@ The resulting `ValidatingWebhookConfiguration` will have the current desired rul
 // dynamically be notified of resource mutations. A less reliable, but potentially more
 // efficient than an informer watching each tracked resource.
 func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReconciler[*admissionregistrationv1.ValidatingWebhookConfiguration] {
-	return &reconcilers.AggregateReconciler{
+	return &reconcilers.AggregateReconciler[*admissionregistrationv1.ValidatingWebhookConfiguration]{
 		Name:     "AdmissionTrigger",
 		Request:  reconcilers.Request{
 			NamesspacedName: types.NamesspacedName{
@@ -181,7 +180,6 @@ func AdmissionTriggerReconciler(c reconcilers.Config) *reconcilers.AggregateReco
 		Sanitize: func(resource *admissionregistrationv1.ValidatingWebhookConfiguration) interface{} {
 			return resource.Webhooks[0].Rules
 		},
-
 		Config: c,
 	}
 }
@@ -310,7 +308,7 @@ func FunctionChildImageReconciler(c reconcilers.Config) reconcilers.SubReconcile
 			actual.Labels = desired.Labels
 			actual.Spec = desired.Spec
 		},
-		ReflectChildStatusOnParent: func(parent *buildv1alpha1.Function, child *kpackbuildv1alpha1.Image, err error) {
+		ReflectChildStatusOnParent: func(ctx context.Context, parent *buildv1alpha1.Function, child *kpackbuildv1alpha1.Image, err error) {
 			// child is the value of the freshly created/updated/deleted child
 			// resource as returned from the api server
 
@@ -428,7 +426,6 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler[*b
 			},
 			FunctionChildImageReconciler(c),
 		},
-
 		Config: c,
 	}
 }
@@ -450,7 +447,6 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler[*b
 			FunctionTargetImageReconciler(c),
 			FunctionChildImageReconciler(c),
 		},
-
 		Config: c,
 	}
 }
@@ -472,7 +468,6 @@ func SwapRESTConfig(rc *rest.Config) *reconcilers.SubReconciler[*resources.MyRes
 			LookupReferenceDataReconciler(),
 			DoSomethingChildReconciler(),
 		},
-
 		Config: func(ctx context.Context, c reconciler.Config) (reconciler.Config, error ) {
 			// the rest config could also be stashed from a lookup in a SyncReconciler based on a dynamic value
 			cl, err := clusters.New(rc)
@@ -635,7 +630,7 @@ rts := rtesting.ReconcilerTests{
 	...
 }}
 
-rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase[*streamingv1alpha1.InMemoryGateway], c reconcilers.Config) reconcile.Reconciler[*streamingv1alpha1.InMemoryGateway] {
 	return streaming.InMemoryGatewayReconciler(c, testSystemNamespace)
 })
 ```
@@ -786,8 +781,8 @@ For testing, given stashed values can be defined in a [SubReconcilerTests](#subr
 ```go
 const exampleStashKey reconcilers.StashKey = "example"
 
-func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	return &reconcilers.SyncReconciler{
+func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler[*examplev1.MyExample] {
+	return &reconcilers.SyncReconciler[*examplev1.MyExample]{
 		Name: "StashExample",
 		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
 			value := Example{} // something we want to expose to a sub reconciler later in this chain
@@ -798,8 +793,8 @@ func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
 }
 
 
-func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler {
-	return &reconcilers.SyncReconciler{
+func StashExampleSubReconciler(c reconcilers.Config) reconcilers.SubReconciler[*examplev1.MyExample] {
+	return &reconcilers.SyncReconciler[*examplev1.MyExample]{
 		Name: "StashExample",
 		Sync: func(ctx context.Context, resource *examplev1.MyExample) error {
 			value, ok := reconcilers.RetrieveValue(ctx, exampleStashKey).(Example)
@@ -856,7 +851,7 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 			// events to watch for changes of the target resource. When the
 			// informer emits an event, the tracking resources are looked up
 			// from the tracker and enqueded for reconciliation.
-			bldr.Watches(&source.Kind{Type: &corev1.ConfigMap{}}, reconcilers.EnqueueTracked(ctx, &corev1.ConfigMap{}))
+			bldr.Watches(&corev1.ConfigMap{}}, reconcilers.EnqueueTracked(ctx))
 			return nil
 		},
 	}
@@ -903,7 +898,7 @@ type MyResource struct {
 
 Deleting a resource that uses finalizers requires the controller to be running.
 
-> Note: [WithFinalizer](#withfinalizer) can be used in lieu of, or in conjunction with, [ChildReconciler](#childreconciler)#Finalizer. The distinction is the scope within the reconciler tree where a finalizer is applied. While a reconciler can define as many finalizer on the resource as it desires, in practice, it's best to minimize the number of finalizers as setting and clearing each finalizer makes a request to the API Server. 
+> Note: [WithFinalizer](#withfinalizer) can be used in lieu of, or in conjunction with, [ChildReconciler](#childreconciler)#Finalizer. The distinction is the scope within the reconciler tree where a finalizer is applied. While a reconciler can define as many finalizers on the resource as it desires, in practice, it's best to minimize the number of finalizers as setting and clearing each finalizer makes a request to the API Server. 
 >
 > A single WithFinalizer will always add a finalizer to the reconciled resource. It can then compose multiple ChildReconcilers, as well as other reconcilers that do not natively support managing finalizers (e.g. SyncReconciler). On the other hand, the ChildReconciler will only set the finalizer when it is required potentially reducing the number of finalizers, but only covers that exact sub-reconciler. It's important the external state that needs to be cleaned up be covered by a finalizer, it does not matter which finalizer is used.
 
@@ -943,7 +938,7 @@ A minimal test case for a sub reconciler that adds a finalizer may look like:
 
 ### ResourceManager
 
-The [`ResourceManager`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ResourceManager) provides a means to mange a single resource by sychronizing the current and desired state. The resource will be created if it does not exist, deleted if no longer desired and updated when not semantically equivlent. The same resource manager should be reused to manage multiple resource and must be reused when managing the same resource over time in order to take full effect. This utility is used by the [ChildReconciler](#childreconciler) and [AggregateReconciler](#aggregatereconciler).
+The [`ResourceManager`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#ResourceManager) provides a means to manage a single resource by synchronizing the current and desired state. The resource will be created if it does not exist, deleted if no longer desired and updated when semantically different. The same resource manager should be reused to manage multiple resources and must be reused when managing the same resource over time in order to take full effect. This utility is used by the [ChildReconciler](#childreconciler) and [AggregateReconciler](#aggregatereconciler).
 
 The `Manage(ctx context.Context, resource, actual, desired client.Object) (client.Object, error)` method take three objects and returns another object:
 - `resource` is the reconciled resource, events, tracks and finalizer are against this object. May be an object of any underlaying type.
@@ -959,7 +954,7 @@ If requested, the managed resource will be tracked for the resource.
 
 ### Time
 
-Reconcilers that capture timestamps can be natoriously difficult to test, as the output will be different for every execution. While we don't have a time machine, reconciler-runtime provides an alterate API to fetch the current time within a reconciler. [`rtime.RetrieveTime(context.Context)`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/time#RetrieveTime) can be used within a reconciler to get the [`time.Time`](https://pkg.go.dev/time#Time) when the reconciler request started processing. The value returned is guarenteed to remain stable for the lifespan of the reconcile request. Calls to [`time.Now`](https://pkg.go.dev/time#Now) will continue to return an up to date timestamp.
+Reconcilers that capture timestamps can be notoriously difficult to test, as the output will be different for every execution. While we don't have a time machine, reconciler-runtime provides an alterate API to fetch the current time within a reconciler. [`rtime.RetrieveTime(context.Context)`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/time#RetrieveTime) can be used within a reconciler to get the [`time.Time`](https://pkg.go.dev/time#Time) when the reconciler request started processing. The value returned is guaranteed to remain stable for the lifespan of the reconcile request. Calls to [`time.Now`](https://pkg.go.dev/time#Now) will continue to return an up to date timestamp.
 
 Reconciler tests can seed this timestamp by defining the [`Now`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/testing#ReconcilerTestCase.Now) field on the test case. The reconciler will be run with the desired time instead of "now". The timestamp set on the test case can also be used in the expectations to pin values that would otherwise float.
 
@@ -967,13 +962,13 @@ Reconciler tests can seed this timestamp by defining the [`Now`](https://pkg.go.
 
 Known breaking changes are captured in the [release notes](https://github.com/vmware-labs/reconciler-runtime/releases), it is strongly recomened to review the release notes before upgrading to a new version of reconciler-runtime. When possible, breaking changes are first marked as deprecations before full removal in a later release. Patch releases will be issued to fix significant bugs and unintentional breaking changes.
 
-We strive to release reconciler-runtime against the latest Kuberentes and controller-runtime releases. Upstream breaking changes in either dependency may also force changes in reconciler-runtime without a deprecation period.
+We strive to release reconciler-runtime against the latest Kubernetes and controller-runtime releases. Upstream breaking changes in either dependency may also force changes in reconciler-runtime without a deprecation period.
 
-reconciler-runtime is rapidly evolving. While we strive for API compatability between releases, functionality that is better handled using a different API may be removed. Release version numbers follow semver.
+reconciler-runtime is rapidly evolving. While we strive for API compatability between releases, functionality that is better handled using a different API may be removed. Release version numbers follow [semver](https://semver.org/).
 
 ### Current Deprecations
 
-- status `InitiazeConditions()` is deprecated in favor of `InitializeConditions(context.Context)`. Support may be removed in a future release, users are encuraged to migrate.
+- status `InitializeConditions()` is deprecated in favor of `InitializeConditions(context.Context)`. Support may be removed in a future release, users are encouraged to migrate.
 - `ConditionSet#Manage` is deprecated in favor of `ConditionSet#ManageWithContext`. Support may be removed in a future release, users are encuraged to migrate.
 
 ## Contributing
