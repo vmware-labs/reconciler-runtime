@@ -851,7 +851,7 @@ func InMemoryGatewaySyncConfigReconciler(c reconcilers.Config, namespace string)
 			// events to watch for changes of the target resource. When the
 			// informer emits an event, the tracking resources are looked up
 			// from the tracker and enqueded for reconciliation.
-			bldr.Watches(&corev1.ConfigMap{}}, reconcilers.EnqueueTracked(ctx))
+			bldr.Watches(&corev1.ConfigMap{}, reconcilers.EnqueueTracked(ctx))
 			return nil
 		},
 	}
