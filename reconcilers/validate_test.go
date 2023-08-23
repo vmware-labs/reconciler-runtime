@@ -17,7 +17,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func TestResourceReconciler_validate_TestResource(t *testing.T) {
@@ -875,6 +878,235 @@ func TestResourceManager_validate(t *testing.T) {
 				MergeBeforeUpdate: func(current, desired *resources.TestResource) {},
 				Sanitize:          func(child *resources.TestResource) interface{} { return child.Spec },
 			},
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &bufferedSink{}
+			ctx := logr.NewContext(context.TODO(), logr.New(sink))
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+			if diff := cmp.Diff(c.expectedLogs, sink.Lines); diff != "" {
+				t.Errorf("%s: unexpected logs (-expected, +actual): %s", c.name, diff)
+			}
+		})
+	}
+}
+
+func TestIfThen_validate(t *testing.T) {
+	tests := []struct {
+		name         string
+		reconciler   *IfThen[*resources.TestResource]
+		shouldErr    string
+		expectedLogs []string
+	}{
+		{
+			name: "valid",
+			reconciler: &IfThen[*resources.TestResource]{
+				If: func(ctx context.Context, resource *resources.TestResource) bool {
+					return false
+				},
+				Then: Sequence[*resources.TestResource]{},
+			},
+		},
+		{
+			name: "missing if",
+			reconciler: &IfThen[*resources.TestResource]{
+				Name: "missing if",
+				Then: Sequence[*resources.TestResource]{},
+			},
+			shouldErr: `IfThen "missing if" must implement If`,
+		},
+		{
+			name: "missing then",
+			reconciler: &IfThen[*resources.TestResource]{
+				Name: "missing then",
+				If: func(ctx context.Context, resource *resources.TestResource) bool {
+					return false
+				},
+			},
+			shouldErr: `IfThen "missing then" must implement Then`,
+		},
+		{
+			name: "with else",
+			reconciler: &IfThen[*resources.TestResource]{
+				If: func(ctx context.Context, resource *resources.TestResource) bool {
+					return false
+				},
+				Then: Sequence[*resources.TestResource]{},
+				Else: Sequence[*resources.TestResource]{},
+			},
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &bufferedSink{}
+			ctx := logr.NewContext(context.TODO(), logr.New(sink))
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+			if diff := cmp.Diff(c.expectedLogs, sink.Lines); diff != "" {
+				t.Errorf("%s: unexpected logs (-expected, +actual): %s", c.name, diff)
+			}
+		})
+	}
+}
+
+func TestWhile_validate(t *testing.T) {
+	tests := []struct {
+		name         string
+		reconciler   *While[*resources.TestResource]
+		shouldErr    string
+		expectedLogs []string
+	}{
+		{
+			name: "valid",
+			reconciler: &While[*resources.TestResource]{
+				Condition: func(ctx context.Context, resource *resources.TestResource) bool {
+					return false
+				},
+				Reconciler: Sequence[*resources.TestResource]{},
+			},
+		},
+		{
+			name: "missing condition",
+			reconciler: &While[*resources.TestResource]{
+				Name:       "missing condition",
+				Reconciler: Sequence[*resources.TestResource]{},
+			},
+			shouldErr: `While "missing condition" must implement Condition`,
+		},
+		{
+			name: "missing reconciler",
+			reconciler: &While[*resources.TestResource]{
+				Name: "missing reconciler",
+				Condition: func(ctx context.Context, resource *resources.TestResource) bool {
+					return false
+				},
+			},
+			shouldErr: `While "missing reconciler" must implement Reconciler`,
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &bufferedSink{}
+			ctx := logr.NewContext(context.TODO(), logr.New(sink))
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+			if diff := cmp.Diff(c.expectedLogs, sink.Lines); diff != "" {
+				t.Errorf("%s: unexpected logs (-expected, +actual): %s", c.name, diff)
+			}
+		})
+	}
+}
+
+func TestTryCatch_validate(t *testing.T) {
+	tests := []struct {
+		name         string
+		reconciler   *TryCatch[*resources.TestResource]
+		shouldErr    string
+		expectedLogs []string
+	}{
+		{
+			name: "valid",
+			reconciler: &TryCatch[*resources.TestResource]{
+				Try: Sequence[*resources.TestResource]{},
+			},
+		},
+		{
+			name: "with catch",
+			reconciler: &TryCatch[*resources.TestResource]{
+				Try: Sequence[*resources.TestResource]{},
+				Catch: func(ctx context.Context, resource *resources.TestResource, result reconcile.Result, err error) (reconcile.Result, error) {
+					return result, err
+				},
+			},
+		},
+		{
+			name: "with finally",
+			reconciler: &TryCatch[*resources.TestResource]{
+				Try:     Sequence[*resources.TestResource]{},
+				Finally: Sequence[*resources.TestResource]{},
+			},
+		},
+		{
+			name: "with catch and finally",
+			reconciler: &TryCatch[*resources.TestResource]{
+				Try: Sequence[*resources.TestResource]{},
+				Catch: func(ctx context.Context, resource *resources.TestResource, result reconcile.Result, err error) (reconcile.Result, error) {
+					return result, err
+				},
+				Finally: Sequence[*resources.TestResource]{},
+			},
+		},
+		{
+			name: "missing try",
+			reconciler: &TryCatch[*resources.TestResource]{
+				Name: "missing try",
+			},
+			shouldErr: `TryCatch "missing try" must implement Try`,
+		},
+	}
+
+	for _, c := range tests {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &bufferedSink{}
+			ctx := logr.NewContext(context.TODO(), logr.New(sink))
+			err := c.reconciler.validate(ctx)
+			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err, c.shouldErr)
+			}
+			if diff := cmp.Diff(c.expectedLogs, sink.Lines); diff != "" {
+				t.Errorf("%s: unexpected logs (-expected, +actual): %s", c.name, diff)
+			}
+		})
+	}
+}
+
+func TestOverrideSetup_validate(t *testing.T) {
+	tests := []struct {
+		name         string
+		reconciler   *OverrideSetup[*resources.TestResource]
+		shouldErr    string
+		expectedLogs []string
+	}{
+		{
+			name: "with reconciler",
+			reconciler: &OverrideSetup[*resources.TestResource]{
+				Reconciler: Sequence[*resources.TestResource]{},
+			},
+		},
+		{
+			name: "with setup",
+			reconciler: &OverrideSetup[*resources.TestResource]{
+				Setup: func(ctx context.Context, mgr manager.Manager, bldr *builder.Builder) error {
+					return nil
+				},
+			},
+		},
+		{
+			name: "with reconciler and setup",
+			reconciler: &OverrideSetup[*resources.TestResource]{
+				Reconciler: Sequence[*resources.TestResource]{},
+				Setup: func(ctx context.Context, mgr manager.Manager, bldr *builder.Builder) error {
+					return nil
+				},
+			},
+		},
+		{
+			name: "missing reconciler or setup",
+			reconciler: &OverrideSetup[*resources.TestResource]{
+				Name: "missing reconciler or setup",
+			},
+			shouldErr: `OverrideSetup "missing reconciler or setup" must implement at least one of Setup or Reconciler`,
 		},
 	}
 
