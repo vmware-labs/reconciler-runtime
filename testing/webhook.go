@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	logrtesting "github.com/go-logr/logr/testing"
+	"github.com/go-logr/logr/testr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	rtime "github.com/vmware-labs/reconciler-runtime/time"
@@ -137,7 +137,7 @@ func (tc *AdmissionWebhookTestCase) Run(t *testing.T, scheme *runtime.Scheme, fa
 		tc.Now = time.Now()
 	}
 	ctx = rtime.StashNow(ctx, tc.Now)
-	ctx = logr.NewContext(ctx, logrtesting.NewTestLogger(t))
+	ctx = logr.NewContext(ctx, testr.New(t))
 	if deadline, ok := t.Deadline(); ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithDeadline(ctx, deadline)
