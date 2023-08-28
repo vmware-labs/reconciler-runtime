@@ -1,8 +1,4 @@
 version: 2
-groups:
-  kubernetes:
-    patterns:
-    - "k8s.io/*"
 updates:
 - package-ecosystem: github-actions
   directory: "/"
