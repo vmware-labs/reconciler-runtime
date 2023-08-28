@@ -1,4 +1,8 @@
 version: 2
+groups:
+  kubernetes:
+    patterns:
+    - "k8s.io/*"
 updates:
 - package-ecosystem: github-actions
   directory: "/"
@@ -11,10 +15,6 @@ updates:
   directory: "/"
   schedule:
     interval: daily
-  ignore:
-  - dependency-name: k8s.io/*
-    update-types:
-    - version-update:semver-patch
   open-pull-requests-limit: 10
   reviewers:
   - scothis
