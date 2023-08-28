@@ -13,6 +13,10 @@ updates:
   - scothis
 - package-ecosystem: gomod
   directory: "/"
+  groups:
+    kubernetes:
+      patterns:
+      - "k8s.io/*"
   schedule:
     interval: daily
   open-pull-requests-limit: 10
