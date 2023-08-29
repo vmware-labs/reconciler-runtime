@@ -103,6 +103,7 @@ type ChildReconciler[Type, ChildType client.Object, ChildListType client.ObjectL
 	// ReflectChildStatusOnParent updates the reconciled resource's status with values from the
 	// child. Select types of errors are passed, including:
 	//   - apierrs.IsAlreadyExists
+	//   - apierrs.IsInvalid
 	//
 	// Most errors are returned directly, skipping this method. The set of handled error types
 	// may grow, implementations should be defensive rather than assuming the error type.
@@ -164,6 +165,9 @@ func (r *ChildReconciler[T, CT, CLT]) init() {
 		}
 		if r.Name == "" {
 			r.Name = fmt.Sprintf("%sChildReconciler", typeName(r.ChildType))
+		}
+		if r.Sanitize == nil {
+			r.Sanitize = func(child CT) interface{} { return child }
 		}
 		if r.stamp == nil {
 			r.stamp = &ResourceManager[CT]{
@@ -251,7 +255,8 @@ func (r *ChildReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T)
 		return Result{}, err
 	}
 	if err != nil {
-		if apierrs.IsAlreadyExists(err) {
+		switch {
+		case apierrs.IsAlreadyExists(err):
 			// check if the resource blocking create is owned by the reconciled resource.
 			// the created child from a previous turn may be slow to appear in the informer cache, but shouldn't appear
 			// on the reconciled resource as being not ready.
@@ -263,6 +268,9 @@ func (r *ChildReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T)
 				return Result{}, err
 			}
 			log.Info("unable to reconcile child, not owned", "child", namespaceName(conflicted), "ownerRefs", conflicted.GetOwnerReferences())
+			r.ReflectChildStatusOnParent(ctx, resource, child, err)
+			return Result{}, nil
+		case apierrs.IsInvalid(err):
 			r.ReflectChildStatusOnParent(ctx, resource, child, err)
 			return Result{}, nil
 		}
