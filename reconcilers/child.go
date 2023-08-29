@@ -269,7 +269,7 @@ func (r *ChildReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T)
 		log.Error(err, "unable to reconcile child")
 		return Result{}, err
 	}
-	r.ReflectChildStatusOnParent(ctx, resource, child, err)
+	r.ReflectChildStatusOnParent(ctx, resource, child, nil)
 
 	return Result{}, nil
 }
