@@ -480,9 +480,9 @@ func GatedReconciler() *reconcilers.SubReconciler[*buildv1alpha1.Function] {
 
 #### While
 
-A [`While`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#While) calls the reconciler so long as the condition is true, up to the maximum number of iterations (defaults to 100). The current iteration index can be retried with [`RetrieveIteration`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveIteration).
+A [`While`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#While) calls the reconciler so long as the condition is true, up to the maximum number of iterations (defaults to 100). The current iteration index can be retrieved with [`RetrieveIteration`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveIteration).
 
-This reconciler must not be used to wait for an external to change, or for polling as this will block the reconciler queue. It to return with the result requesting to be requeued, or to watch the external state for changes that enqueue the reconcile request.
+This reconciler must not be used to wait for external state to change, or for polling as this will block the reconciler queue. It is best to return with the result requesting to be requeued, or to watch the external state for changes that enqueue the reconcile request.
 
 **Example:**
 
@@ -508,18 +508,18 @@ func TenTimesReconciler() *reconcilers.SubReconciler[*buildv1alpha1.Function] {
 
 A [`TryCatch`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#TryCatch) is used to recover from errors returned by a reconciler. The `Catch` method is called with the result and error from the `Try` reconciler, giving it the option to either continue the existing results, or replace them with new results.
 
-The `Finally` reconciler is always called before returning, but does not alter the results unless it errors. The finally reconciler should avoid complex logic and be limited to cleaning up common state from the try reconciler.
+The `Finally` reconciler is always called before returning, but does not alter the existing result and err values unless it itself errors. The `Finally` reconciler should avoid complex logic and be limited to cleaning up common state from the `Try` reconciler.
 
 **Example:**
 
-An While can be used to fan out. 
+A `TryCatch` can be used to handle errors.
 
 ```go
 func IgnoreErrorsReconciler() *reconcilers.SubReconciler[*buildv1alpha1.Function] {
 	return &reconcilers.TryCatch[*buildv1alpha1.Function]{
 		Try: &reconcilers.SyncReconciler[*buildv1alpha1.Function]{
 			Sync: func(ctx context.Context, resource *buildv1alpha1.Function) error {
-				return fmt.Errorf("alway error?")
+				return fmt.Errorf("always error")
 			}
 		},
 		Catch: func(ctx context.Context, resource *buildv1alpha1.Function, result reconcile.Result, err error) (reconcile.Result,  error) {
