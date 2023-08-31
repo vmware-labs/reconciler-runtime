@@ -89,6 +89,7 @@ type ChildSetReconciler[Type, ChildType client.Object, ChildListType client.Obje
 	// ReflectChildrenStatusOnParent updates the reconciled resource's status with values from the
 	// child reconciliations. Select types of errors are captured, including:
 	//   - apierrs.IsAlreadyExists
+	//   - apierrs.IsInvalid
 	//
 	// Most errors are returned directly, skipping this method. The set of handled error types
 	// may grow, implementations should be defensive rather than assuming the error type.

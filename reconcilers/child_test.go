@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -89,9 +90,13 @@ func TestChildReconciler(t *testing.T) {
 			},
 			ReflectChildStatusOnParent: func(ctx context.Context, parent *resources.TestResource, child *corev1.ConfigMap, err error) {
 				if err != nil {
-					if apierrs.IsAlreadyExists(err) {
+					switch {
+					case apierrs.IsAlreadyExists(err):
 						name := err.(apierrs.APIStatus).Status().Details.Name
 						parent.Status.MarkNotReady(ctx, "NameConflict", "%q already exists", name)
+					case apierrs.IsInvalid(err):
+						name := err.(apierrs.APIStatus).Status().Details.Name
+						parent.Status.MarkNotReady(ctx, "InvalidChild", "%q was rejected by the api server", name)
 					}
 					return
 				}
@@ -655,6 +660,43 @@ func TestChildReconciler(t *testing.T) {
 					r.OurChild = func(parent *resources.TestResource, child *corev1.ConfigMap) bool { return true }
 					return r
 				},
+			},
+		},
+		"invalid child": {
+			Resource: resourceReady.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.AddField("foo", "bar")
+				}).
+				DieReleasePtr(),
+			WithReactors: []rtesting.ReactionFunc{
+				rtesting.InduceFailure("create", "ConfigMap", rtesting.InduceFailureOpts{
+					Error: apierrs.NewInvalid(schema.GroupKind{}, testName, field.ErrorList{
+						field.Invalid(field.NewPath("metadata", "name"), testName, ""),
+					}),
+				}),
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return defaultChildReconciler(c)
+				},
+			},
+			ExpectResource: resourceReady.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.AddField("foo", "bar")
+				}).
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.ConditionsDie(
+						diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionFalse).
+							Reason("InvalidChild").Message(`"test-resource" was rejected by the api server`),
+					)
+				}).
+				DieReleasePtr(),
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(resource, scheme, corev1.EventTypeWarning, "CreationFailed",
+					"Failed to create ConfigMap %q:  %q is invalid: metadata.name: Invalid value: %q", testName, testName, testName),
+			},
+			ExpectCreates: []client.Object{
+				configMapCreate,
 			},
 		},
 		"child name collision": {
