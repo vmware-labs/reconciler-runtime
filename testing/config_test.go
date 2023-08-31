@@ -203,7 +203,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Tracker.TrackObject(r2, r1)
 			},
 			failedAssertions: []string{
-				`Unexpected tracking request for config "test" (-expected, +actual): `,
+				`ExpectTracks[0] differs for config "test" (-expected, +actual):`,
 			},
 		},
 		"extra track": {
@@ -214,7 +214,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Tracker.TrackObject(r2, r1)
 			},
 			failedAssertions: []string{
-				`Extra tracking request for config "test": {my-namespace/resource-1 { /} {testing.reconciler.runtime TestResource my-namespace resource-2 <nil>}}`,
+				`Unexpected Track observed for config "test": {my-namespace/resource-1 { /} {testing.reconciler.runtime TestResource my-namespace resource-2 <nil>}}`,
 			},
 		},
 		"missing track": {
@@ -225,7 +225,7 @@ func TestExpectConfig(t *testing.T) {
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
-				`Missing tracking request for config "test": {my-namespace/resource-1 { /} {testing.reconciler.runtime TestResource my-namespace resource-2 <nil>}}`,
+				`ExpectTracks[0] not observed for config "test": {my-namespace/resource-1 { /} {testing.reconciler.runtime TestResource my-namespace resource-2 <nil>}}`,
 			},
 		},
 
@@ -250,7 +250,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Recorder.Eventf(r2, corev1.EventTypeNormal, "TheReason", "the message")
 			},
 			failedAssertions: []string{
-				`Unexpected recorded event for config "test" (-expected, +actual): `,
+				`ExpectEvents[0] differs for config "test" (-expected, +actual):`,
 			},
 		},
 		"extra event": {
@@ -261,7 +261,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Recorder.Eventf(r1, corev1.EventTypeNormal, "TheReason", "the message")
 			},
 			failedAssertions: []string{
-				`Extra recorded event for config "test": `,
+				`Unexpected Event observed for config "test": `,
 			},
 		},
 		"missing event": {
@@ -272,7 +272,7 @@ func TestExpectConfig(t *testing.T) {
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
-				`Missing recorded event for config "test": `,
+				`ExpectEvents[0] not observed for config "test": `,
 			},
 		},
 
@@ -297,7 +297,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Create(ctx, r1.DeepCopy())
 			},
 			failedAssertions: []string{
-				`Unexpected create for config "test" (-expected, +actual): `,
+				`ExpectCreates[0] differs for config "test" (-expected, +actual):`,
 			},
 		},
 		"extra create": {
@@ -308,7 +308,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Create(ctx, r1.DeepCopy())
 			},
 			failedAssertions: []string{
-				`Extra create for config "test": `,
+				`Unexpected Create observed for config "test": `,
 			},
 		},
 		"missing create": {
@@ -319,7 +319,7 @@ func TestExpectConfig(t *testing.T) {
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
-				`Missing create for config "test": `,
+				`ExpectCreates[0] not observed for config "test": `,
 			},
 		},
 		"generate name": {
@@ -391,7 +391,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Update(ctx, r1.DeepCopy())
 			},
 			failedAssertions: []string{
-				`Unexpected update for config "test" (-expected, +actual): `,
+				`ExpectUpdates[0] differs for config "test" (-expected, +actual):`,
 			},
 		},
 		"extra update": {
@@ -402,7 +402,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Update(ctx, r1.DeepCopy())
 			},
 			failedAssertions: []string{
-				`Extra update for config "test": `,
+				`Unexpected Update observed for config "test": `,
 			},
 		},
 		"missing update": {
@@ -413,7 +413,7 @@ func TestExpectConfig(t *testing.T) {
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
-				`Missing update for config "test": `,
+				`ExpectUpdates[0] not observed for config "test": `,
 			},
 		},
 
@@ -438,7 +438,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Patch(ctx, r1patch.DeepCopy(), client.MergeFrom(r1))
 			},
 			failedAssertions: []string{
-				`Unexpected patch for config "test" (-expected, +actual): `,
+				`ExpectPatches[0] differs for config "test" (-expected, +actual):`,
 			},
 		},
 		"extra patch": {
@@ -449,7 +449,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Patch(ctx, r1patch.DeepCopy(), client.MergeFrom(r1))
 			},
 			failedAssertions: []string{
-				`Extra patch for config "test": `,
+				`Unexpected Patch observed for config "test": `,
 			},
 		},
 		"missing patch": {
@@ -460,7 +460,7 @@ func TestExpectConfig(t *testing.T) {
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
-				`Missing patch for config "test": `,
+				`ExpectPatches[0] not observed for config "test": `,
 			},
 		},
 
@@ -485,7 +485,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Delete(ctx, r1.DeepCopy())
 			},
 			failedAssertions: []string{
-				`Unexpected delete for config "test" (-expected, +actual): `,
+				`ExpectDeletes[0] differs for config "test" (-expected, +actual):`,
 			},
 		},
 		"extra delete": {
@@ -496,7 +496,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Delete(ctx, r1.DeepCopy())
 			},
 			failedAssertions: []string{
-				`Extra delete for config "test": `,
+				`Unexpected Delete observed for config "test": `,
 			},
 		},
 		"missing delete": {
@@ -507,7 +507,7 @@ func TestExpectConfig(t *testing.T) {
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
-				`Missing delete for config "test": `,
+				`ExpectDeletes[0] not observed for config "test": `,
 			},
 		},
 
@@ -554,7 +554,7 @@ func TestExpectConfig(t *testing.T) {
 				c.DeleteAllOf(ctx, &resources.TestResourceNoStatus{})
 			},
 			failedAssertions: []string{
-				`Unexpected delete collection for config "test" (-expected, +actual): `,
+				`ExpectDeleteCollections[0] differs for config "test" (-expected, +actual):`,
 			},
 		},
 		"extra delete collection": {
@@ -565,7 +565,7 @@ func TestExpectConfig(t *testing.T) {
 				c.DeleteAllOf(ctx, &resources.TestResource{})
 			},
 			failedAssertions: []string{
-				`Extra delete collection for config "test": `,
+				`Unexpected DeleteCollection observed for config "test": `,
 			},
 		},
 		"missing delete collection": {
@@ -576,7 +576,7 @@ func TestExpectConfig(t *testing.T) {
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
-				`Missing delete collection for config "test": `,
+				`ExpectDeleteCollections[0] not observed for config "test": `,
 			},
 		},
 
@@ -601,7 +601,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Status().Update(ctx, r1.DeepCopy())
 			},
 			failedAssertions: []string{
-				`Unexpected status update for config "test" (-expected, +actual): `,
+				`ExpectStatusUpdates[0] differs for config "test" (-expected, +actual):`,
 			},
 		},
 		"extra status update": {
@@ -612,7 +612,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Status().Update(ctx, r1.DeepCopy())
 			},
 			failedAssertions: []string{
-				`Extra status update for config "test": `,
+				`Unexpected StatusUpdate observed for config "test": `,
 			},
 		},
 		"missing status update": {
@@ -623,7 +623,7 @@ func TestExpectConfig(t *testing.T) {
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
-				`Missing status update for config "test": `,
+				`ExpectStatusUpdates[0] not observed for config "test": `,
 			},
 		},
 
@@ -648,7 +648,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Status().Patch(ctx, r1patch.DeepCopy(), client.MergeFrom(r1))
 			},
 			failedAssertions: []string{
-				`Unexpected status patch for config "test" (-expected, +actual): `,
+				`ExpectStatusPatches[0] differs for config "test" (-expected, +actual):`,
 			},
 		},
 		"extra status patch": {
@@ -659,7 +659,7 @@ func TestExpectConfig(t *testing.T) {
 				c.Status().Patch(ctx, r1patch.DeepCopy(), client.MergeFrom(r1))
 			},
 			failedAssertions: []string{
-				`Extra status patch for config "test": `,
+				`Unexpected StatusPatch observed for config "test": `,
 			},
 		},
 		"missing status patch": {
@@ -670,7 +670,7 @@ func TestExpectConfig(t *testing.T) {
 			},
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
-				`Missing status patch for config "test": `,
+				`ExpectStatusPatches[0] not observed for config "test": `,
 			},
 		},
 	}

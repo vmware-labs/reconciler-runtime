@@ -117,6 +117,13 @@ func (c *ExpectConfig) init() {
 	})
 }
 
+func (c *ExpectConfig) configNameMsg() string {
+	if c.Name == "" || c.Name == "default" {
+		return ""
+	}
+	return fmt.Sprintf(" for config %q", c.Name)
+}
+
 func (c *ExpectConfig) createClient(objs []client.Object, statusSubResourceTypes []client.Object) *clientWrapper {
 	builder := fake.NewClientBuilder()
 
@@ -184,7 +191,7 @@ func (c *ExpectConfig) AssertClientCreateExpectations(t *testing.T) {
 	}
 	c.init()
 
-	c.compareActions(t, "create", c.ExpectCreates, c.client.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
+	c.compareActions(t, "Create", c.ExpectCreates, c.client.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
 }
 
 // AssertClientUpdateExpectations asserts observed reconciler client update behavior matches the expected client update behavior
@@ -194,7 +201,7 @@ func (c *ExpectConfig) AssertClientUpdateExpectations(t *testing.T) {
 	}
 	c.init()
 
-	c.compareActions(t, "update", c.ExpectUpdates, c.client.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
+	c.compareActions(t, "Update", c.ExpectUpdates, c.client.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
 }
 
 // AssertClientPatchExpectations asserts observed reconciler client patch behavior matches the expected client patch behavior
@@ -206,18 +213,18 @@ func (c *ExpectConfig) AssertClientPatchExpectations(t *testing.T) {
 
 	for i, exp := range c.ExpectPatches {
 		if i >= len(c.client.PatchActions) {
-			c.errorf(t, "Missing patch for config %q: %#v", c.Name, exp)
+			c.errorf(t, "ExpectPatches[%d] not observed%s: %#v", i, c.configNameMsg(), exp)
 			continue
 		}
 		actual := NewPatchRef(c.client.PatchActions[i])
 
 		if diff := cmp.Diff(exp, actual); diff != "" {
-			c.errorf(t, "Unexpected patch for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "ExpectPatches[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
 	if actual, expected := len(c.client.PatchActions), len(c.ExpectPatches); actual > expected {
 		for _, extra := range c.client.PatchActions[expected:] {
-			c.errorf(t, "Extra patch for config %q: %#v", c.Name, extra)
+			c.errorf(t, "Unexpected Patch observed%s: %#v", c.configNameMsg(), extra)
 		}
 	}
 }
@@ -231,18 +238,18 @@ func (c *ExpectConfig) AssertClientDeleteExpectations(t *testing.T) {
 
 	for i, exp := range c.ExpectDeletes {
 		if i >= len(c.client.DeleteActions) {
-			c.errorf(t, "Missing delete for config %q: %#v", c.Name, exp)
+			c.errorf(t, "ExpectDeletes[%d] not observed%s: %#v", i, c.configNameMsg(), exp)
 			continue
 		}
 		actual := NewDeleteRef(c.client.DeleteActions[i])
 
 		if diff := cmp.Diff(exp, actual); diff != "" {
-			c.errorf(t, "Unexpected delete for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "ExpectDeletes[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
 	if actual, expected := len(c.client.DeleteActions), len(c.ExpectDeletes); actual > expected {
 		for _, extra := range c.client.DeleteActions[expected:] {
-			c.errorf(t, "Extra delete for config %q: %#v", c.Name, extra)
+			c.errorf(t, "Unexpected Delete observed%s: %#v", c.configNameMsg(), extra)
 		}
 	}
 }
@@ -256,18 +263,18 @@ func (c *ExpectConfig) AssertClientDeleteCollectionExpectations(t *testing.T) {
 
 	for i, exp := range c.ExpectDeleteCollections {
 		if i >= len(c.client.DeleteCollectionActions) {
-			c.errorf(t, "Missing delete collection for config %q: %#v", c.Name, exp)
+			c.errorf(t, "ExpectDeleteCollections[%d] not observed%s: %#v", i, c.configNameMsg(), exp)
 			continue
 		}
 		actual := NewDeleteCollectionRef(c.client.DeleteCollectionActions[i])
 
 		if diff := cmp.Diff(exp, actual, NormalizeLabelSelector, NormalizeFieldSelector); diff != "" {
-			c.errorf(t, "Unexpected delete collection for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "ExpectDeleteCollections[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
 	if actual, expected := len(c.client.DeleteCollectionActions), len(c.ExpectDeleteCollections); actual > expected {
 		for _, extra := range c.client.DeleteCollectionActions[expected:] {
-			c.errorf(t, "Extra delete collection for config %q: %#v", c.Name, extra)
+			c.errorf(t, "Unexpected DeleteCollection observed%s: %#v", c.configNameMsg(), extra)
 		}
 	}
 }
@@ -279,7 +286,7 @@ func (c *ExpectConfig) AssertClientStatusUpdateExpectations(t *testing.T) {
 	}
 	c.init()
 
-	c.compareActions(t, "status update", c.ExpectStatusUpdates, c.client.StatusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, SafeDeployDiff, cmpopts.EquateEmpty())
+	c.compareActions(t, "StatusUpdate", c.ExpectStatusUpdates, c.client.StatusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, SafeDeployDiff, cmpopts.EquateEmpty())
 }
 
 // AssertClientStatusPatchExpectations asserts observed reconciler client status patch behavior matches the expected client status patch behavior
@@ -291,18 +298,18 @@ func (c *ExpectConfig) AssertClientStatusPatchExpectations(t *testing.T) {
 
 	for i, exp := range c.ExpectStatusPatches {
 		if i >= len(c.client.StatusPatchActions) {
-			c.errorf(t, "Missing status patch for config %q: %#v", c.Name, exp)
+			c.errorf(t, "ExpectStatusPatches[%d] not observed%s: %#v", i, c.configNameMsg(), exp)
 			continue
 		}
 		actual := NewPatchRef(c.client.StatusPatchActions[i])
 
 		if diff := cmp.Diff(exp, actual); diff != "" {
-			c.errorf(t, "Unexpected status patch for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "ExpectStatusPatches[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
 	if actual, expected := len(c.client.StatusPatchActions), len(c.ExpectStatusPatches); actual > expected {
 		for _, extra := range c.client.StatusPatchActions[expected:] {
-			c.errorf(t, "Extra status patch for config %q: %#v", c.Name, extra)
+			c.errorf(t, "Unexpected StatusPatch observed%s: %#v", c.configNameMsg(), extra)
 		}
 	}
 }
@@ -317,17 +324,17 @@ func (c *ExpectConfig) AssertRecorderExpectations(t *testing.T) {
 	actualEvents := c.recorder.events
 	for i, exp := range c.ExpectEvents {
 		if i >= len(actualEvents) {
-			c.errorf(t, "Missing recorded event for config %q: %s", c.Name, exp)
+			c.errorf(t, "ExpectEvents[%d] not observed%s: %s", i, c.configNameMsg(), exp)
 			continue
 		}
 
 		if diff := cmp.Diff(exp, actualEvents[i]); diff != "" {
-			c.errorf(t, "Unexpected recorded event for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "ExpectEvents[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
 	if actual, exp := len(actualEvents), len(c.ExpectEvents); actual > exp {
 		for _, extra := range actualEvents[exp:] {
-			c.errorf(t, "Extra recorded event for config %q: %s", c.Name, extra)
+			c.errorf(t, "Unexpected Event observed%s: %s", c.configNameMsg(), extra)
 		}
 	}
 }
@@ -344,17 +351,17 @@ func (c *ExpectConfig) AssertTrackerExpectations(t *testing.T) {
 		exp.normalize()
 
 		if i >= len(actualTracks) {
-			c.errorf(t, "Missing tracking request for config %q: %v", c.Name, exp)
+			c.errorf(t, "ExpectTracks[%d] not observed%s: %v", i, c.configNameMsg(), exp)
 			continue
 		}
 
 		if diff := cmp.Diff(exp, actualTracks[i], NormalizeLabelSelector); diff != "" {
-			c.errorf(t, "Unexpected tracking request for config %q (-expected, +actual): %s", c.Name, diff)
+			c.errorf(t, "ExpectTracks[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
 	if actual, exp := len(actualTracks), len(c.ExpectTracks); actual > exp {
 		for _, extra := range actualTracks[exp:] {
-			c.errorf(t, "Extra tracking request for config %q: %v", c.Name, extra)
+			c.errorf(t, "Unexpected Track observed%s: %v", c.configNameMsg(), extra)
 		}
 	}
 }
@@ -367,18 +374,18 @@ func (c *ExpectConfig) compareActions(t *testing.T, actionName string, expectedA
 
 	for i, exp := range expectedActionFactories {
 		if i >= len(actualActions) {
-			c.errorf(t, "Missing %s for config %q: %#v", actionName, c.Name, exp.DeepCopyObject())
+			c.errorf(t, "Expect%ss[%d] not observed%s: %#v", actionName, i, c.configNameMsg(), exp.DeepCopyObject())
 			continue
 		}
 		actual := actualActions[i].GetObject()
 
 		if diff := cmp.Diff(exp.DeepCopyObject(), actual, diffOptions...); diff != "" {
-			c.errorf(t, "Unexpected %s for config %q (-expected, +actual): %s", actionName, c.Name, diff)
+			c.errorf(t, "Expect%ss[%d] differs%s (%s, %s):\n%s", actionName, i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
 	if actual, expected := len(actualActions), len(expectedActionFactories); actual > expected {
 		for _, extra := range actualActions[expected:] {
-			c.errorf(t, "Extra %s for config %q: %#v", actionName, c.Name, extra)
+			c.errorf(t, "Unexpected %s observed%s: %#v", actionName, c.configNameMsg(), extra)
 		}
 	}
 }
