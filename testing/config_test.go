@@ -18,6 +18,7 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -319,6 +320,53 @@ func TestExpectConfig(t *testing.T) {
 			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {},
 			failedAssertions: []string{
 				`Missing create for config "test": `,
+			},
+		},
+		"generate name": {
+			config: ExpectConfig{
+				ExpectCreates: []client.Object{
+					&resources.TestResource{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace:    ns,
+							GenerateName: "resource-",
+						},
+					},
+				},
+			},
+			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {
+				r := &resources.TestResource{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:    ns,
+						GenerateName: "resource-",
+					},
+				}
+
+				c.Create(ctx, r)
+			},
+		},
+		"generate name unstructured": {
+			config: ExpectConfig{
+				ExpectCreates: []client.Object{
+					&unstructured.Unstructured{
+						Object: map[string]interface{}{
+							"apiVersion": "testing.reconciler.runtime/v1",
+							"kind":       "TestResource",
+							"metadata": map[string]interface{}{
+								"namespace":    ns,
+								"generateName": "resource-",
+							},
+						},
+					},
+				},
+			},
+			operation: func(t *testing.T, ctx context.Context, c reconcilers.Config) {
+				u := &unstructured.Unstructured{}
+				u.SetAPIVersion("testing.reconciler.runtime/v1")
+				u.SetKind("TestResource")
+				u.SetNamespace(ns)
+				u.SetGenerateName("resource-")
+
+				c.Create(ctx, u)
 			},
 		},
 

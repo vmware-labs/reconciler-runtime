@@ -51,8 +51,7 @@ func NewFakeClientWrapper(client client.Client) *clientWrapper {
 	c.AddReactor("create", "*", func(action Action) (bool, runtime.Object, error) {
 		if createAction, ok := action.(CreateAction); ok && action.GetSubresource() == "" {
 			obj := createAction.GetObject()
-			if accessor, ok := obj.(metav1.ObjectMetaAccessor); ok {
-				objmeta := accessor.GetObjectMeta()
+			if objmeta, ok := obj.(metav1.Object); ok {
 				if objmeta.GetName() == "" && objmeta.GetGenerateName() != "" {
 					c.genCount++
 					// mutate the existing obj
