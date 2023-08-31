@@ -20,6 +20,10 @@ Within an existing Kubebuilder or controller-runtime project, reconciler-runtime
 	- [Higher-order Reconcilers](#higher-order-reconcilers)
 		- [CastResource](#castresource)
 		- [Sequence](#sequence)
+		- [IfThen](#ifthen)
+		- [While](#while)
+		- [TryCatch](#trycatch)
+		- [OverrideSetup](#overridesetup)
 		- [WithConfig](#withconfig)
 		- [WithFinalizer](#withfinalizer)
 	- [AdmissionWebhookAdapter](#admissionwebhookadapter)
@@ -452,6 +456,108 @@ func FunctionReconciler(c reconcilers.Config) *reconcilers.ResourceReconciler[*b
 }
 ```
 [full source](https://github.com/projectriff/system/blob/4c3b75327bf99cc37b57ba14df4c65d21dc79d28/pkg/controllers/build/function_reconciler.go#L39-L51)
+
+#### IfThen
+
+An [`IfThen`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#IfThen) branches execution of the current reconcile request based on a condition. The false `Else` branch is optional and ignored if not defined.
+
+**Example:**
+
+An IfThen can be used to gate a capability of the reconciler only for a resource that opts-in to the behavior. 
+
+```go
+func GatedReconciler() *reconcilers.SubReconciler[*buildv1alpha1.Function] {
+	return &reconcilers.IfThen[*buildv1alpha1.Function]{
+		If: func(ctx context.Context, resource *buildv1alpha1.Function) bool {
+			return resource.Labels["capability-gate.example/enabled"] == "true"
+		}
+		Then: reconcilers.Sequence[*buildv1alpha1.Function]{
+			// use the gated feature
+		},
+	}
+}
+```
+
+#### While
+
+A [`While`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#While) calls the reconciler so long as the condition is true, up to the maximum number of iterations (defaults to 100). The current iteration index can be retrieved with [`RetrieveIteration`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#RetrieveIteration).
+
+This reconciler must not be used to wait for external state to change, or for polling as this will block the reconciler queue. It is best to return with the result requesting to be requeued, or to watch the external state for changes that enqueue the reconcile request.
+
+**Example:**
+
+An While can be used to fan out. 
+
+```go
+func TenTimesReconciler() *reconcilers.SubReconciler[*buildv1alpha1.Function] {
+	return &reconcilers.While[*buildv1alpha1.Function]{
+		Condition: func(ctx context.Context, resource *buildv1alpha1.Function) bool {
+			return reconcilers.RetrieveIteration(ctx) < 10
+		}
+		Reconciler: reconcilers.SyncReconciler[*buildv1alpha1.Function]{
+			Sync: func(ctx context.Context, resource *buildv1alpha1.Function) error {
+				// called ten times
+				return nil
+			}
+		},
+	}
+}
+```
+
+#### TryCatch
+
+A [`TryCatch`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#TryCatch) is used to recover from errors returned by a reconciler. The `Catch` method is called with the result and error from the `Try` reconciler, giving it the option to either continue the existing results, or replace them with new results.
+
+The `Finally` reconciler is always called before returning, but does not alter the existing result and err values unless it itself errors. The `Finally` reconciler should avoid complex logic and be limited to cleaning up common state from the `Try` reconciler.
+
+**Example:**
+
+A `TryCatch` can be used to handle errors.
+
+```go
+func IgnoreErrorsReconciler() *reconcilers.SubReconciler[*buildv1alpha1.Function] {
+	return &reconcilers.TryCatch[*buildv1alpha1.Function]{
+		Try: &reconcilers.SyncReconciler[*buildv1alpha1.Function]{
+			Sync: func(ctx context.Context, resource *buildv1alpha1.Function) error {
+				return fmt.Errorf("always error")
+			}
+		},
+		Catch: func(ctx context.Context, resource *buildv1alpha1.Function, result reconcile.Result, err error) (reconcile.Result,  error) {
+			// suppress error
+			return result, nil
+		},
+	}
+}
+```
+
+#### OverrideSetup
+
+An [`OverrideSetup`](https://pkg.go.dev/github.com/vmware-labs/reconciler-runtime/reconcilers#OverrideSetup) is used to suppress or replace the setup behavior for a reconciler.
+
+**Example:**
+
+OverrideSetup is useful when the default setup behavior for a reconciler is problematic in a particular context.
+
+```go
+func CustomSetupReconciler() *reconcilers.SubReconciler[*buildv1alpha1.Function] {
+	return &reconcilers.OverrideSetup[*buildv1alpha1.Function]{
+		Reconciler: &reconciler.SyncReconciler[*buildv1alpha1.Function]{
+			Setup: func(ctx context.Context, mgr Manager, bldr *Builder) error {
+				// not called
+				panic()
+			}
+			Sync: func(ctx context.Context, resource *buildv1alpha1.Function) error {
+				// called normally
+				return nil
+			}
+		},
+		Setup: func(ctx context.Context, mgr Manager, bldr *Builder) error {
+			// custom setup behavior, optional
+			return nil
+		},
+	}
+}
+```
 
 #### WithConfig
 
