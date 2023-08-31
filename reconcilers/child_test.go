@@ -138,6 +138,36 @@ func TestChildReconciler(t *testing.T) {
 				},
 			},
 		},
+		"child is in sync, and tracked": {
+			Resource: resourceReady.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.AddField("foo", "bar")
+				}).
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("foo", "bar")
+				}).
+				DieReleasePtr(),
+			GivenObjects: []client.Object{
+				configMapGiven.
+					MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+						// clear default owner ref since this is tracked
+						d.OwnerReferences()
+					}),
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					r := defaultChildReconciler(c)
+					r.SkipOwnerReference = true
+					r.OurChild = func(resource *resources.TestResource, child *corev1.ConfigMap) bool {
+						return true
+					}
+					return r
+				},
+			},
+			ExpectTracks: []rtesting.TrackRequest{
+				rtesting.NewTrackRequest(configMapGiven, resourceReady, scheme),
+			},
+		},
 		"child is in sync, in a different namespace": {
 			Resource: resourceReady.
 				SpecDie(func(d *dies.TestResourceSpecDie) {

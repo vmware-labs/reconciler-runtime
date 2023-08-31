@@ -187,6 +187,11 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 
 	// update resource with desired changes
 	current := actual.DeepCopyObject().(T)
+	if r.TrackDesired {
+		if err := c.Tracker.TrackObject(current, resource); err != nil {
+			return nilT, err
+		}
+	}
 	r.MergeBeforeUpdate(current, desiredPatched)
 	if equality.Semantic.DeepEqual(current, actual) {
 		// resource is unchanged
@@ -194,11 +199,6 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 		return actual, nil
 	}
 	log.Info("updating resource", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
-	if r.TrackDesired {
-		if err := c.Tracker.TrackObject(current, resource); err != nil {
-			return nilT, err
-		}
-	}
 	if err := c.Update(ctx, current); err != nil {
 		log.Error(err, "unable to update resource", "resource", namespaceName(current))
 		pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "UpdateFailed",
