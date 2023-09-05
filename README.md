@@ -684,6 +684,8 @@ The tests make extensive use of given and mutated resources. It is recommended t
 
 There are three test suites: for [testing reconcilers](#reconcilertests), an optimized harness for [testing sub reconcilers](#subreconcilertests), and for [testing admission webhooks](#admissionwebhooktests).
 
+Colorized diffs are available in assertion error messages by setting the environment variable `COLOR_DIFF=true`
+
 <a name="reconcilertestsuite" />
 
 ### ReconcilerTests
