@@ -8,6 +8,7 @@ package reconcilers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -139,7 +140,9 @@ func (r *AdmissionWebhookAdapter[T]) Handle(ctx context.Context, req admission.R
 	})
 
 	if err := r.reconcile(ctx, req, resp); err != nil {
-		log.Error(err, "reconcile error")
+		if !errors.Is(err, ErrQuiet) {
+			log.Error(err, "reconcile error")
+		}
 		resp.Allowed = false
 		if resp.Result == nil {
 			resp.Result = &metav1.Status{

@@ -68,7 +68,7 @@ type ResourceReconciler[Type client.Object] struct {
 	// Reconciler is called for each reconciler request with the resource being reconciled.
 	// Typically, Reconciler is a Sequence of multiple SubReconcilers.
 	//
-	// When HaltSubReconcilers is returned as an error, execution continues as if no error was
+	// When ErrHaltSubReconcilers is returned as an error, execution continues as if no error was
 	// returned.
 	Reconciler SubReconciler[Type]
 
@@ -206,7 +206,9 @@ func (r *ResourceReconciler[T]) Reconcile(ctx context.Context, req Request) (Res
 			// on deleted requests.
 			return Result{}, nil
 		}
-		log.Error(err, "unable to fetch resource")
+		if !errors.Is(err, ErrQuiet) {
+			log.Error(err, "unable to fetch resource")
+		}
 		return Result{}, err
 	}
 	resource := originalResource.DeepCopyObject().(T)
@@ -233,9 +235,11 @@ func (r *ResourceReconciler[T]) Reconcile(ctx context.Context, req Request) (Res
 			// patch status
 			log.Info("patching status", "diff", cmp.Diff(originalResourceStatus, resourceStatus))
 			if patchErr := c.Status().Patch(ctx, resource, client.MergeFrom(originalResource)); patchErr != nil {
-				log.Error(patchErr, "unable to patch status")
-				c.Recorder.Eventf(resource, corev1.EventTypeWarning, "StatusPatchFailed",
-					"Failed to patch status: %v", patchErr)
+				if !errors.Is(patchErr, ErrQuiet) {
+					log.Error(patchErr, "unable to patch status")
+					c.Recorder.Eventf(resource, corev1.EventTypeWarning, "StatusPatchFailed",
+						"Failed to patch status: %v", patchErr)
+				}
 				return Result{}, patchErr
 			}
 			c.Recorder.Eventf(resource, corev1.EventTypeNormal, "StatusPatched",
@@ -244,9 +248,11 @@ func (r *ResourceReconciler[T]) Reconcile(ctx context.Context, req Request) (Res
 			// update status
 			log.Info("updating status", "diff", cmp.Diff(originalResourceStatus, resourceStatus))
 			if updateErr := c.Status().Update(ctx, resource); updateErr != nil {
-				log.Error(updateErr, "unable to update status")
-				c.Recorder.Eventf(resource, corev1.EventTypeWarning, "StatusUpdateFailed",
-					"Failed to update status: %v", updateErr)
+				if !errors.Is(updateErr, ErrQuiet) {
+					log.Error(updateErr, "unable to update status")
+					c.Recorder.Eventf(resource, corev1.EventTypeWarning, "StatusUpdateFailed",
+						"Failed to update status: %v", updateErr)
+				}
 				return Result{}, updateErr
 			}
 			c.Recorder.Eventf(resource, corev1.EventTypeNormal, "StatusUpdated",
@@ -265,7 +271,7 @@ func (r *ResourceReconciler[T]) reconcile(ctx context.Context, resource T) (Resu
 	}
 
 	result, err := r.Reconciler.Reconcile(ctx, resource)
-	if err != nil && !errors.Is(err, HaltSubReconcilers) {
+	if err != nil && !errors.Is(err, ErrHaltSubReconcilers) {
 		return Result{}, err
 	}
 

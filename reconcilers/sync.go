@@ -7,6 +7,7 @@ package reconcilers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -118,7 +119,9 @@ func (r *SyncReconciler[T]) Reconcile(ctx context.Context, resource T) (Result, 
 		syncResult, err := r.sync(ctx, resource)
 		result = AggregateResults(result, syncResult)
 		if err != nil {
-			log.Error(err, "unable to sync")
+			if !errors.Is(err, ErrQuiet) {
+				log.Error(err, "unable to sync")
+			}
 			return result, err
 		}
 	}
@@ -127,7 +130,9 @@ func (r *SyncReconciler[T]) Reconcile(ctx context.Context, resource T) (Result, 
 		finalizeResult, err := r.finalize(ctx, resource)
 		result = AggregateResults(result, finalizeResult)
 		if err != nil {
-			log.Error(err, "unable to finalize")
+			if !errors.Is(err, ErrQuiet) {
+				log.Error(err, "unable to finalize")
+			}
 			return result, err
 		}
 	}

@@ -274,7 +274,9 @@ func (r *ChildReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T)
 			r.ReflectChildStatusOnParent(ctx, resource, child, err)
 			return Result{}, nil
 		}
-		log.Error(err, "unable to reconcile child")
+		if !errors.Is(err, ErrQuiet) {
+			log.Error(err, "unable to reconcile child")
+		}
 		return Result{}, err
 	}
 	r.ReflectChildStatusOnParent(ctx, resource, child, nil)
@@ -301,8 +303,10 @@ func (r *ChildReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource T)
 		for _, extra := range items {
 			log.Info("deleting extra child", "child", namespaceName(extra))
 			if err := c.Delete(ctx, extra); err != nil {
-				pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "DeleteFailed",
-					"Failed to delete %s %q: %v", typeName(r.ChildType), extra.GetName(), err)
+				if !errors.Is(err, ErrQuiet) {
+					pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "DeleteFailed",
+						"Failed to delete %s %q: %v", typeName(r.ChildType), extra.GetName(), err)
+				}
 				return nilCT, err
 			}
 			pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Deleted",

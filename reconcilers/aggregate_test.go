@@ -342,7 +342,7 @@ func TestAggregateReconciler(t *testing.T) {
 					r.Reconciler = reconcilers.Sequence[*corev1.ConfigMap]{
 						&reconcilers.SyncReconciler[*corev1.ConfigMap]{
 							Sync: func(ctx context.Context, resource *corev1.ConfigMap) error {
-								return reconcilers.HaltSubReconcilers
+								return reconcilers.ErrHaltSubReconcilers
 							},
 						},
 						&reconcilers.SyncReconciler[*corev1.ConfigMap]{
@@ -371,7 +371,7 @@ func TestAggregateReconciler(t *testing.T) {
 					r.Reconciler = reconcilers.Sequence[*corev1.ConfigMap]{
 						&reconcilers.SyncReconciler[*corev1.ConfigMap]{
 							SyncWithResult: func(ctx context.Context, resource *corev1.ConfigMap) (reconcilers.Result, error) {
-								return reconcilers.Result{Requeue: true}, reconcilers.HaltSubReconcilers
+								return reconcilers.Result{Requeue: true}, reconcilers.ErrHaltSubReconcilers
 							},
 						},
 						&reconcilers.SyncReconciler[*corev1.ConfigMap]{

@@ -62,7 +62,7 @@ func TestSyncReconciler(t *testing.T) {
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.SyncReconciler[*resources.TestResource]{
 						SyncWithResult: func(ctx context.Context, resource *resources.TestResource) (reconcilers.Result, error) {
-							return reconcilers.Result{Requeue: true}, reconcilers.HaltSubReconcilers
+							return reconcilers.Result{Requeue: true}, reconcilers.ErrHaltSubReconcilers
 						},
 					}
 				},
@@ -148,7 +148,7 @@ func TestSyncReconciler(t *testing.T) {
 							return reconcilers.Result{RequeueAfter: 2 * time.Hour}, nil
 						},
 						FinalizeWithResult: func(ctx context.Context, resource *resources.TestResource) (reconcilers.Result, error) {
-							return reconcilers.Result{RequeueAfter: 3 * time.Hour}, reconcilers.HaltSubReconcilers
+							return reconcilers.Result{RequeueAfter: 3 * time.Hour}, reconcilers.ErrHaltSubReconcilers
 						},
 					}
 				},
