@@ -131,9 +131,11 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 		if !actual.GetCreationTimestamp().Time.IsZero() && actual.GetDeletionTimestamp() == nil {
 			log.Info("deleting unwanted resource", "resource", namespaceName(actual))
 			if err := c.Delete(ctx, actual); err != nil {
-				log.Error(err, "unable to delete unwanted resource", "resource", namespaceName(actual))
-				pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "DeleteFailed",
-					"Failed to delete %s %q: %v", typeName(actual), actual.GetName(), err)
+				if !errors.Is(err, ErrQuiet) {
+					log.Error(err, "unable to delete unwanted resource", "resource", namespaceName(actual))
+					pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "DeleteFailed",
+						"Failed to delete %s %q: %v", typeName(actual), actual.GetName(), err)
+				}
 				return nilT, err
 			}
 			pc.Recorder.Eventf(resource, corev1.EventTypeNormal, "Deleted",
@@ -151,9 +153,11 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 	if internal.IsNil(actual) || actual.GetCreationTimestamp().Time.IsZero() {
 		log.Info("creating resource", "resource", r.sanitize(desired))
 		if err := c.Create(ctx, desired); err != nil {
-			log.Error(err, "unable to create resource", "resource", namespaceName(desired))
-			pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "CreationFailed",
-				"Failed to create %s %q: %v", typeName(desired), desired.GetName(), err)
+			if !errors.Is(err, ErrQuiet) {
+				log.Error(err, "unable to create resource", "resource", namespaceName(desired))
+				pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "CreationFailed",
+					"Failed to create %s %q: %v", typeName(desired), desired.GetName(), err)
+			}
 			return nilT, err
 		}
 		if r.TrackDesired {
@@ -200,9 +204,11 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 	}
 	log.Info("updating resource", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
 	if err := c.Update(ctx, current); err != nil {
-		log.Error(err, "unable to update resource", "resource", namespaceName(current))
-		pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "UpdateFailed",
-			"Failed to update %s %q: %v", typeName(current), current.GetName(), err)
+		if !errors.Is(err, ErrQuiet) {
+			log.Error(err, "unable to update resource", "resource", namespaceName(current))
+			pc.Recorder.Eventf(resource, corev1.EventTypeWarning, "UpdateFailed",
+				"Failed to update %s %q: %v", typeName(current), current.GetName(), err)
+		}
 		return nilT, err
 	}
 
@@ -211,7 +217,9 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 	r.MergeBeforeUpdate(base, desired)
 	patch, err := NewPatch(base, current)
 	if err != nil {
-		log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base))
+		if !errors.Is(err, ErrQuiet) {
+			log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base))
+		}
 	} else {
 		r.mutationCache.Set(current.GetUID(), patch, 1*time.Hour)
 	}

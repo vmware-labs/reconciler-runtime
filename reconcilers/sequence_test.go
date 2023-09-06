@@ -66,7 +66,7 @@ func TestSequence(t *testing.T) {
 							},
 						}, &reconcilers.SyncReconciler[*resources.TestResource]{
 							SyncWithResult: func(ctx context.Context, resource *resources.TestResource) (reconcilers.Result, error) {
-								return reconcilers.Result{RequeueAfter: 2 * time.Minute}, reconcilers.HaltSubReconcilers
+								return reconcilers.Result{RequeueAfter: 2 * time.Minute}, reconcilers.ErrHaltSubReconcilers
 							},
 						},
 					}

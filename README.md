@@ -1076,8 +1076,11 @@ reconciler-runtime is rapidly evolving. While we strive for API compatability be
 
 ### Current Deprecations
 
-- status `InitializeConditions()` is deprecated in favor of `InitializeConditions(context.Context)`. Support may be removed in a future release, users are encouraged to migrate.
-- `ConditionSet#Manage` is deprecated in favor of `ConditionSet#ManageWithContext`. Support may be removed in a future release, users are encuraged to migrate.
+Backwards support may be removed in a future release, users are encouraged to migrate.
+
+- status `InitializeConditions()` is deprecated in favor of `InitializeConditions(context.Context)`.
+- `ConditionSet#Manage` is deprecated in favor of `ConditionSet#ManageWithContext`.
+- `HaltSubReconcilers` is deprecated in favor of `ErrHaltSubReconcilers`.
 
 ## Contributing
 

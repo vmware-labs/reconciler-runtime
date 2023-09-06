@@ -29,12 +29,23 @@ type SubReconciler[Type client.Object] interface {
 }
 
 var (
-	// HaltSubReconcilers is an error that instructs SubReconcilers to stop processing the request,
-	// while the root reconciler proceeds as if there was no error. HaltSubReconcilers may be
+	// ErrQuiet are not logged or recorded as events within reconciler-runtime.
+	// They are propagated as errors unless otherwise defined.
+	//
+	// Test for ErrQuiet with errors.Is(err, ErrQuiet)
+	ErrQuiet = fmt.Errorf("quiet errors are returned as errors, but not logged or recorded")
+
+	// ErrHaltSubReconcilers is an error that instructs SubReconcilers to stop processing the request,
+	// while the root reconciler proceeds as if there was no error. ErrHaltSubReconcilers may be
 	// wrapped by other errors.
 	//
+	// ErrHaltSubReconcilers wraps ErrQuiet to suppress spurious logs.
+	//
 	// See documentation for the specific SubReconciler caller to see how they handle this case.
-	HaltSubReconcilers = errors.New("stop processing SubReconcilers, without returning an error")
+	ErrHaltSubReconcilers = fmt.Errorf("stop processing SubReconcilers, without returning an error: %w", ErrQuiet)
+
+	// Deprecated HaltSubReconcilers use ErrHaltSubReconcilers instead
+	HaltSubReconcilers = ErrHaltSubReconcilers
 )
 
 const requestStashKey StashKey = "reconciler-runtime:request"
@@ -211,7 +222,9 @@ func EnqueueTracked(ctx context.Context) handler.EventHandler {
 
 			items, err := c.Tracker.GetObservers(obj)
 			if err != nil {
-				log.Error(err, "unable to get tracked requests")
+				if !errors.Is(err, ErrQuiet) {
+					log.Error(err, "unable to get tracked requests")
+				}
 				return nil
 			}
 

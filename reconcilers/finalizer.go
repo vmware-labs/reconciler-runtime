@@ -7,6 +7,7 @@ package reconcilers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
@@ -142,9 +143,11 @@ func ensureFinalizer(ctx context.Context, resource client.Object, finalizer stri
 
 				patch := client.MergeFromWithOptions(current, client.MergeFromWithOptimisticLock{})
 				if err := config.Patch(ctx, desired, patch); err != nil {
-					log.Error(err, "unable to patch finalizers", "finalizer", finalizer)
-					config.Recorder.Eventf(current, corev1.EventTypeWarning, "FinalizerPatchFailed",
-						"Failed to patch finalizer %q: %s", finalizer, err)
+					if !errors.Is(err, ErrQuiet) {
+						log.Error(err, "unable to patch finalizers", "finalizer", finalizer)
+						config.Recorder.Eventf(current, corev1.EventTypeWarning, "FinalizerPatchFailed",
+							"Failed to patch finalizer %q: %s", finalizer, err)
+					}
 					return err
 				}
 				config.Recorder.Eventf(current, corev1.EventTypeNormal, "FinalizerPatched",

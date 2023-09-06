@@ -596,7 +596,7 @@ func TestResourceReconciler_Duck(t *testing.T) {
 								resource.Status.Fields = map[string]string{
 									"want": "this to run",
 								}
-								return reconcilers.HaltSubReconcilers
+								return reconcilers.ErrHaltSubReconcilers
 							},
 						},
 						&reconcilers.SyncReconciler[*resources.TestDuck]{
@@ -642,7 +642,7 @@ func TestResourceReconciler_Duck(t *testing.T) {
 								resource.Status.Fields = map[string]string{
 									"want": "this to run",
 								}
-								return reconcilers.Result{Requeue: true}, reconcilers.HaltSubReconcilers
+								return reconcilers.Result{Requeue: true}, reconcilers.ErrHaltSubReconcilers
 							},
 						},
 						&reconcilers.SyncReconciler[*resources.TestDuck]{
@@ -1104,7 +1104,7 @@ func TestResourceReconciler(t *testing.T) {
 								resource.Status.Fields = map[string]string{
 									"want": "this to run",
 								}
-								return reconcilers.Result{Requeue: true}, reconcilers.HaltSubReconcilers
+								return reconcilers.Result{Requeue: true}, reconcilers.ErrHaltSubReconcilers
 							},
 						},
 						&reconcilers.SyncReconciler[*resources.TestResource]{

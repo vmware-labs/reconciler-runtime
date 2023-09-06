@@ -62,7 +62,7 @@ type AggregateReconciler[Type client.Object] struct {
 	// Reconciler is called for each reconciler request with the resource being reconciled.
 	// Typically, Reconciler is a Sequence of multiple SubReconcilers.
 	//
-	// When HaltSubReconcilers is returned as an error, execution continues as if no error was
+	// When ErrHaltSubReconcilers is returned as an error, execution continues as if no error was
 	// returned.
 	//
 	// +optional
@@ -227,7 +227,9 @@ func (r *AggregateReconciler[T]) Reconcile(ctx context.Context, req Request) (Re
 			resource.SetNamespace(r.Request.Namespace)
 			resource.SetName(r.Request.Name)
 		} else {
-			log.Error(err, "unable to fetch resource")
+			if !errors.Is(err, ErrQuiet) {
+				log.Error(err, "unable to fetch resource")
+			}
 			return Result{}, err
 		}
 	}
@@ -238,7 +240,7 @@ func (r *AggregateReconciler[T]) Reconcile(ctx context.Context, req Request) (Re
 	}
 
 	result, err := r.Reconciler.Reconcile(ctx, resource)
-	if err != nil && !errors.Is(err, HaltSubReconcilers) {
+	if err != nil && !errors.Is(err, ErrHaltSubReconcilers) {
 		return result, err
 	}
 
