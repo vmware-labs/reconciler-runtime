@@ -144,7 +144,7 @@ func (r *CastResource[T, CT]) cast(ctx context.Context, resource T) (context.Con
 	if kind := castResource.GetObjectKind(); kind.GroupVersionKind().Empty() {
 		// default the apiVersion/kind with the real value from the resource if not already defined
 		c := RetrieveConfigOrDie(ctx)
-		kind.SetGroupVersionKind(gvk(resource, c.Scheme()))
+		kind.SetGroupVersionKind(gvk(c, resource))
 	}
 	ctx = StashResourceType(ctx, castResource)
 	return ctx, castResource, nil

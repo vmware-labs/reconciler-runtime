@@ -180,7 +180,7 @@ func (r *ChildSetReconciler[T, CT, CLT]) SetupWithManager(ctx context.Context, m
 
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
-		WithValues("childType", gvk(r.ChildType, c.Scheme()))
+		WithValues("childType", gvk(c, r.ChildType))
 	ctx = logr.NewContext(ctx, log)
 
 	if err := r.validate(ctx); err != nil {

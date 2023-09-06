@@ -159,12 +159,12 @@ func typeName(i interface{}) string {
 	return t.Name()
 }
 
-func gvk(obj client.Object, scheme *runtime.Scheme) schema.GroupVersionKind {
-	gvks, _, err := scheme.ObjectKinds(obj)
+func gvk(c client.Client, obj runtime.Object) schema.GroupVersionKind {
+	gvk, err := c.GroupVersionKindFor(obj)
 	if err != nil {
 		return schema.GroupVersionKind{}
 	}
-	return gvks[0]
+	return gvk
 }
 
 func namespaceName(obj client.Object) types.NamespacedName {
