@@ -190,7 +190,7 @@ func (r *ChildReconciler[T, CT, CLT]) SetupWithManager(ctx context.Context, mgr 
 
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
-		WithValues("childType", gvk(r.ChildType, c.Scheme()))
+		WithValues("childType", gvk(c, r.ChildType))
 	ctx = logr.NewContext(ctx, log)
 
 	if err := r.validate(ctx); err != nil {
@@ -247,7 +247,7 @@ func (r *ChildReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T)
 
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
-		WithValues("childType", gvk(r.ChildType, c.Scheme()))
+		WithValues("childType", gvk(c, r.ChildType))
 	ctx = logr.NewContext(ctx, log)
 
 	child, err := r.reconcile(ctx, resource)

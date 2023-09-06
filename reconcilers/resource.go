@@ -99,7 +99,7 @@ func (r *ResourceReconciler[T]) SetupWithManagerYieldingController(ctx context.C
 
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
-		WithValues("resourceType", gvk(r.Type, r.Config.Scheme()))
+		WithValues("resourceType", gvk(r.Config, r.Type))
 	ctx = logr.NewContext(ctx, log)
 
 	ctx = StashConfig(ctx, r.Config)
@@ -188,7 +188,7 @@ func (r *ResourceReconciler[T]) Reconcile(ctx context.Context, req Request) (Res
 
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
-		WithValues("resourceType", gvk(r.Type, c.Scheme()))
+		WithValues("resourceType", gvk(c, r.Type))
 	ctx = logr.NewContext(ctx, log)
 
 	ctx = rtime.StashNow(ctx, time.Now())
