@@ -110,59 +110,40 @@ func ClearFinalizer(ctx context.Context, resource client.Object, finalizer strin
 	return ensureFinalizer(ctx, resource, finalizer, false)
 }
 
-func ensureFinalizer(ctx context.Context, resource client.Object, finalizer string, add bool) error {
-	config := RetrieveOriginalConfigOrDie(ctx)
-	if config.IsEmpty() {
-		panic(fmt.Errorf("resource config must exist on the context. Check that the context from a ResourceReconciler"))
-	}
-	resourceType := RetrieveOriginalResourceType(ctx)
-	if resourceType == nil {
-		panic(fmt.Errorf("resource type must exist on the context. Check that the context from a ResourceReconciler"))
-	}
-
-	if finalizer == "" || controllerutil.ContainsFinalizer(resource, finalizer) == add {
+func ensureFinalizer(ctx context.Context, current client.Object, finalizer string, add bool) error {
+	if finalizer == "" || controllerutil.ContainsFinalizer(current, finalizer) == add {
 		// nothing to do
 		return nil
 	}
 
-	// cast the current object back to the resource so scheme-aware, typed client can operate on it
-	cast := &CastResource[client.Object, client.Object]{
-		Reconciler: &SyncReconciler[client.Object]{
-			SyncDuringFinalization: true,
-			Sync: func(ctx context.Context, current client.Object) error {
-				log := logr.FromContextOrDiscard(ctx)
+	config := RetrieveOriginalConfigOrDie(ctx)
+	log := logr.FromContextOrDiscard(ctx)
 
-				desired := current.DeepCopyObject().(client.Object)
-				if add {
-					log.Info("adding finalizer", "finalizer", finalizer)
-					controllerutil.AddFinalizer(desired, finalizer)
-				} else {
-					log.Info("removing finalizer", "finalizer", finalizer)
-					controllerutil.RemoveFinalizer(desired, finalizer)
-				}
-
-				patch := client.MergeFromWithOptions(current, client.MergeFromWithOptimisticLock{})
-				if err := config.Patch(ctx, desired, patch); err != nil {
-					if !errors.Is(err, ErrQuiet) {
-						log.Error(err, "unable to patch finalizers", "finalizer", finalizer)
-						config.Recorder.Eventf(current, corev1.EventTypeWarning, "FinalizerPatchFailed",
-							"Failed to patch finalizer %q: %s", finalizer, err)
-					}
-					return err
-				}
-				config.Recorder.Eventf(current, corev1.EventTypeNormal, "FinalizerPatched",
-					"Patched finalizer %q", finalizer)
-
-				// update current object with values from the api server after patching
-				current.SetFinalizers(desired.GetFinalizers())
-				current.SetResourceVersion(desired.GetResourceVersion())
-				current.SetGeneration(desired.GetGeneration())
-
-				return nil
-			},
-		},
+	desired := current.DeepCopyObject().(client.Object)
+	if add {
+		log.Info("adding finalizer", "finalizer", finalizer)
+		controllerutil.AddFinalizer(desired, finalizer)
+	} else {
+		log.Info("removing finalizer", "finalizer", finalizer)
+		controllerutil.RemoveFinalizer(desired, finalizer)
 	}
 
-	_, err := cast.Reconcile(ctx, resource)
-	return err
+	patch := client.MergeFromWithOptions(current, client.MergeFromWithOptimisticLock{})
+	if err := config.Patch(ctx, desired, patch); err != nil {
+		if !errors.Is(err, ErrQuiet) {
+			log.Error(err, "unable to patch finalizers", "finalizer", finalizer)
+			config.Recorder.Eventf(current, corev1.EventTypeWarning, "FinalizerPatchFailed",
+				"Failed to patch finalizer %q: %s", finalizer, err)
+		}
+		return err
+	}
+	config.Recorder.Eventf(current, corev1.EventTypeNormal, "FinalizerPatched",
+		"Patched finalizer %q", finalizer)
+
+	// update current object with values from the api server after patching
+	current.SetFinalizers(desired.GetFinalizers())
+	current.SetResourceVersion(desired.GetResourceVersion())
+	current.SetGeneration(desired.GetGeneration())
+
+	return nil
 }
