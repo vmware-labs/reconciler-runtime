@@ -8,7 +8,7 @@ require (
 	github.com/fatih/color v1.15.0
 	github.com/go-logr/logr v1.2.4
 	github.com/google/go-cmp v0.5.9
-	golang.org/x/net v0.16.0
+	golang.org/x/net v0.17.0
 	gomodules.xyz/jsonpatch/v2 v2.4.0
 	gomodules.xyz/jsonpatch/v3 v3.0.1
 	k8s.io/api v0.28.0
