@@ -13,9 +13,10 @@ import (
 	"sync"
 	"time"
 
-	jsonpatch "github.com/evanphx/json-patch/v5"
+	jsonmergepatch "github.com/evanphx/json-patch/v5"
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	jsonpatch "gomodules.xyz/jsonpatch/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/util/cache"
@@ -184,8 +185,8 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 		// the only object added to the cache is *Patch
 		err := patch.(*Patch).Apply(desiredPatched)
 		if err != nil {
-			// there's not much we can do, but let the normal update proceed
-			log.Info("unable to patch desired child from mutation cache")
+			// there's not much we can do, let the normal update proceed
+			log.Info("unable to patch desired child from mutation cache, this error is usually benign", "error", err.Error())
 		}
 	}
 
@@ -218,7 +219,7 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 	patch, err := NewPatch(base, current)
 	if err != nil {
 		if !errors.Is(err, ErrQuiet) {
-			log.Error(err, "unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base))
+			log.Info("unable to generate mutation patch", "snapshot", r.sanitize(desired), "base", r.sanitize(base), "error", err.Error())
 		}
 	} else {
 		r.mutationCache.Set(current.GetUID(), patch, 1*time.Hour)
@@ -253,14 +254,18 @@ func NewPatch(base, update client.Object) (*Patch, error) {
 	if err != nil {
 		return nil, err
 	}
-	patch, err := jsonpatch.CreateMergePatch(baseBytes, updateBytes)
+	patch, err := jsonpatch.CreatePatch(baseBytes, updateBytes)
+	if err != nil {
+		return nil, err
+	}
+	patchBytes, err := json.Marshal(patch)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Patch{
 		generation: base.GetGeneration(),
-		bytes:      patch,
+		bytes:      patchBytes,
 	}, nil
 }
 
@@ -280,7 +285,11 @@ func (p *Patch) Apply(rebase client.Object) error {
 	if err != nil {
 		return err
 	}
-	patchedBytes, err := jsonpatch.MergePatch(rebaseBytes, p.bytes)
+	merge, err := jsonmergepatch.DecodePatch(p.bytes)
+	if err != nil {
+		return err
+	}
+	patchedBytes, err := merge.Apply(rebaseBytes)
 	if err != nil {
 		return err
 	}
