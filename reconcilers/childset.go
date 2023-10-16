@@ -93,6 +93,9 @@ type ChildSetReconciler[Type, ChildType client.Object, ChildListType client.Obje
 	//
 	// Most errors are returned directly, skipping this method. The set of handled error types
 	// may grow, implementations should be defensive rather than assuming the error type.
+	//
+	// Results contain the union of desired and actual child resources, in the order they were
+	// reconciled, (sorted by identifier).
 	ReflectChildrenStatusOnParent func(ctx context.Context, parent Type, result ChildSetResult[ChildType])
 
 	// HarmonizeImmutableFields allows fields that are immutable on the current
