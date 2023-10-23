@@ -738,7 +738,7 @@ rts := rtesting.ReconcilerTests{
 	...
 }}
 
-rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase[*streamingv1alpha1.InMemoryGateway], c reconcilers.Config) reconcile.Reconciler[*streamingv1alpha1.InMemoryGateway] {
+rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
 	return streaming.InMemoryGatewayReconciler(c, testSystemNamespace)
 })
 ```
