@@ -116,7 +116,12 @@ func (c *duckAwareClientWrapper) Create(ctx context.Context, obj client.Object, 
 		return c.client.Create(ctx, obj, opts...)
 	}
 
-	return fmt.Errorf("Create is not supported for the duck typed objects")
+	uObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return err
+	}
+	u := &unstructured.Unstructured{Object: uObj}
+	return c.client.Create(ctx, u, opts...)
 }
 
 func (c *duckAwareClientWrapper) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
