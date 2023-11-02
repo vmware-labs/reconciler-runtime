@@ -13,9 +13,12 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/vmware-labs/reconciler-runtime/duck"
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -197,10 +200,24 @@ func (r *ChildReconciler[T, CT, CLT]) SetupWithManager(ctx context.Context, mgr 
 		return err
 	}
 
-	if r.SkipOwnerReference {
-		bldr.Watches(r.ChildType, EnqueueTracked(ctx))
+	if duck.IsDuck(r.ChildType, c.Scheme()) {
+		uns, err := runtime.DefaultUnstructuredConverter.ToUnstructured(r.ChildType)
+		if err != nil {
+			return err
+		}
+		funs := &unstructured.Unstructured{Object: uns}
+		if r.SkipOwnerReference {
+			bldr.Watches(funs, EnqueueTracked(ctx))
+		} else {
+			bldr.Owns(funs)
+		}
+
 	} else {
-		bldr.Owns(r.ChildType)
+		if r.SkipOwnerReference {
+			bldr.Watches(r.ChildType, EnqueueTracked(ctx))
+		} else {
+			bldr.Owns(r.ChildType)
+		}
 	}
 
 	if r.Setup == nil {
