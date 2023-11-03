@@ -439,6 +439,19 @@ func TestChildReconciler_validate(t *testing.T) {
 			shouldErr: `ChildReconciler "ReflectChildStatusOnParent missing" must implement ReflectChildStatusOnParent`,
 		},
 		{
+			name:   "MergeBeforeUpdate missing",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
+				Name:                       "MergeBeforeUpdate missing",
+				ChildType:                  &corev1.Pod{},
+				ChildListType:              &corev1.PodList{},
+				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
+				ReflectChildStatusOnParent: func(ctx context.Context, parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
+				//MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
+			},
+			shouldErr: `ChildReconciler "MergeBeforeUpdate missing" must implement MergeBeforeUpdate`,
+		},
+		{
 			name:   "ListOptions",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
