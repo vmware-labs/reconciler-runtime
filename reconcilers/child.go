@@ -230,6 +230,11 @@ func (r *ChildReconciler[T, CT, CLT]) validate(ctx context.Context) error {
 		return fmt.Errorf("ChildReconciler %q must implement OurChild since owner references are not used", r.Name)
 	}
 
+	// require MergeBeforeUpdate
+	if r.MergeBeforeUpdate == nil {
+		return fmt.Errorf("ChildReconciler %q must implement MergeBeforeUpdate", r.Name)
+	}
+
 	return nil
 }
 
