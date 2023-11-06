@@ -14,11 +14,13 @@ import (
 	"github.com/vmware-labs/reconciler-runtime/internal/resources"
 	"github.com/vmware-labs/reconciler-runtime/tracker"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -365,6 +367,8 @@ func TestSyncReconciler_validate(t *testing.T) {
 }
 
 func TestChildReconciler_validate(t *testing.T) {
+	scheme := runtime.NewScheme()
+
 	tests := []struct {
 		name       string
 		parent     *corev1.ConfigMap
@@ -505,18 +509,82 @@ func TestChildReconciler_validate(t *testing.T) {
 		},
 	}
 
-	for _, c := range tests {
-		t.Run(c.name, func(t *testing.T) {
-			ctx := StashResourceType(context.TODO(), c.parent)
-			err := c.reconciler.validate(ctx)
-			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
-				t.Errorf("validate() error = %q, shouldErr %q", err.Error(), c.shouldErr)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Config{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			ctx := context.TODO()
+			ctx = StashResourceType(ctx, tc.parent)
+			ctx = StashConfig(ctx, c)
+			err := tc.reconciler.validate(ctx)
+			if (err != nil) != (tc.shouldErr != "") || (tc.shouldErr != "" && tc.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err.Error(), tc.shouldErr)
+			}
+		})
+	}
+}
+
+func TestChildReconciler_validate_DuckTypedChild(t *testing.T) {
+	scheme := runtime.NewScheme()
+
+	tests := []struct {
+		name       string
+		parent     *corev1.ConfigMap
+		reconciler *ChildReconciler[*corev1.ConfigMap, *resources.TestDuck, *resources.TestDuckList]
+		shouldErr  string
+	}{
+		{
+			name:   "DangerouslyAllowDuckTypedChildren disabled",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *resources.TestDuck, *resources.TestDuckList]{
+				Name:                       "DangerouslyAllowDuckTypedChildren disabled",
+				ChildType:                  &resources.TestDuck{TypeMeta: metav1.TypeMeta{APIVersion: resources.GroupVersion.String(), Kind: "TestResource"}},
+				ChildListType:              &resources.TestDuckList{TypeMeta: metav1.TypeMeta{APIVersion: resources.GroupVersion.String(), Kind: "TestResourceList"}},
+				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*resources.TestDuck, error) { return nil, nil },
+				ReflectChildStatusOnParent: func(ctx context.Context, parent *corev1.ConfigMap, child *resources.TestDuck, err error) {},
+				MergeBeforeUpdate:          func(current, desired *resources.TestDuck) {},
+				OurChild:                   func(parent *corev1.ConfigMap, child *resources.TestDuck) bool { return false },
+
+				DangerouslyAllowDuckTypedChildren: false,
+			},
+			shouldErr: `ChildReconciler "DangerouslyAllowDuckTypedChildren disabled" must enable DangerouslyAllowDuckTypedChildren to use a child duck type`,
+		},
+		{
+			name:   "DangerouslyAllowDuckTypedChildren enabled",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *resources.TestDuck, *resources.TestDuckList]{
+				ChildType:                  &resources.TestDuck{TypeMeta: metav1.TypeMeta{APIVersion: resources.GroupVersion.String(), Kind: "TestResource"}},
+				ChildListType:              &resources.TestDuckList{TypeMeta: metav1.TypeMeta{APIVersion: resources.GroupVersion.String(), Kind: "TestResourceList"}},
+				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*resources.TestDuck, error) { return nil, nil },
+				ReflectChildStatusOnParent: func(ctx context.Context, parent *corev1.ConfigMap, child *resources.TestDuck, err error) {},
+				MergeBeforeUpdate:          func(current, desired *resources.TestDuck) {},
+				OurChild:                   func(parent *corev1.ConfigMap, child *resources.TestDuck) bool { return false },
+
+				DangerouslyAllowDuckTypedChildren: true,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Config{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			ctx := context.TODO()
+			ctx = StashResourceType(ctx, tc.parent)
+			ctx = StashConfig(ctx, c)
+			err := tc.reconciler.validate(ctx)
+			if (err != nil) != (tc.shouldErr != "") || (tc.shouldErr != "" && tc.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err.Error(), tc.shouldErr)
 			}
 		})
 	}
 }
 
 func TestChildSetReconciler_validate(t *testing.T) {
+	scheme := runtime.NewScheme()
+
 	tests := []struct {
 		name       string
 		parent     *corev1.ConfigMap
@@ -667,12 +735,76 @@ func TestChildSetReconciler_validate(t *testing.T) {
 		},
 	}
 
-	for _, c := range tests {
-		t.Run(c.name, func(t *testing.T) {
-			ctx := StashResourceType(context.TODO(), c.parent)
-			err := c.reconciler.validate(ctx)
-			if (err != nil) != (c.shouldErr != "") || (c.shouldErr != "" && c.shouldErr != err.Error()) {
-				t.Errorf("validate() error = %q, shouldErr %q", err.Error(), c.shouldErr)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Config{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			ctx := context.TODO()
+			ctx = StashResourceType(ctx, tc.parent)
+			ctx = StashConfig(ctx, c)
+			err := tc.reconciler.validate(ctx)
+			if (err != nil) != (tc.shouldErr != "") || (tc.shouldErr != "" && tc.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err.Error(), tc.shouldErr)
+			}
+		})
+	}
+}
+
+func TestChildSetReconciler_validate_DuckTypedChild(t *testing.T) {
+	scheme := runtime.NewScheme()
+
+	tests := []struct {
+		name       string
+		parent     *corev1.ConfigMap
+		reconciler *ChildSetReconciler[*corev1.ConfigMap, *resources.TestDuck, *resources.TestDuckList]
+		shouldErr  string
+	}{
+		{
+			name:   "DangerouslyAllowDuckTypedChildren disabled",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ChildSetReconciler[*corev1.ConfigMap, *resources.TestDuck, *resources.TestDuckList]{
+				Name:                          "DangerouslyAllowDuckTypedChildren disabled",
+				ChildType:                     &resources.TestDuck{TypeMeta: metav1.TypeMeta{APIVersion: resources.GroupVersion.String(), Kind: "TestResource"}},
+				ChildListType:                 &resources.TestDuckList{TypeMeta: metav1.TypeMeta{APIVersion: resources.GroupVersion.String(), Kind: "TestResourceList"}},
+				DesiredChildren:               func(ctx context.Context, resource *corev1.ConfigMap) ([]*resources.TestDuck, error) { return nil, nil },
+				ReflectChildrenStatusOnParent: func(ctx context.Context, parent *corev1.ConfigMap, result ChildSetResult[*resources.TestDuck]) {},
+				MergeBeforeUpdate:             func(current, desired *resources.TestDuck) {},
+				OurChild:                      func(parent *corev1.ConfigMap, child *resources.TestDuck) bool { return false },
+				IdentifyChild:                 func(child *resources.TestDuck) string { return "" },
+
+				DangerouslyAllowDuckTypedChildren: false,
+			},
+			shouldErr: `ChildSetReconciler "DangerouslyAllowDuckTypedChildren disabled" must enable DangerouslyAllowDuckTypedChildren to use a child duck type`,
+		},
+		{
+			name:   "DangerouslyAllowDuckTypedChildren enabled",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ChildSetReconciler[*corev1.ConfigMap, *resources.TestDuck, *resources.TestDuckList]{
+				ChildType:                     &resources.TestDuck{TypeMeta: metav1.TypeMeta{APIVersion: resources.GroupVersion.String(), Kind: "TestResource"}},
+				ChildListType:                 &resources.TestDuckList{TypeMeta: metav1.TypeMeta{APIVersion: resources.GroupVersion.String(), Kind: "TestResourceList"}},
+				DesiredChildren:               func(ctx context.Context, resource *corev1.ConfigMap) ([]*resources.TestDuck, error) { return nil, nil },
+				ReflectChildrenStatusOnParent: func(ctx context.Context, parent *corev1.ConfigMap, result ChildSetResult[*resources.TestDuck]) {},
+				MergeBeforeUpdate:             func(current, desired *resources.TestDuck) {},
+				OurChild:                      func(parent *corev1.ConfigMap, child *resources.TestDuck) bool { return false },
+				IdentifyChild:                 func(child *resources.TestDuck) string { return "" },
+
+				DangerouslyAllowDuckTypedChildren: true,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := Config{
+				Client: fake.NewClientBuilder().WithScheme(scheme).Build(),
+			}
+			ctx := context.TODO()
+			ctx = StashResourceType(ctx, tc.parent)
+			ctx = StashConfig(ctx, c)
+			err := tc.reconciler.validate(ctx)
+			if (err != nil) != (tc.shouldErr != "") || (tc.shouldErr != "" && tc.shouldErr != err.Error()) {
+				t.Errorf("validate() error = %q, shouldErr %q", err.Error(), tc.shouldErr)
 			}
 		})
 	}
