@@ -271,3 +271,64 @@ func TestSyncReconciler(t *testing.T) {
 		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource])(t, c)
 	})
 }
+
+func TestSyncReconcilerDuck(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+
+	scheme := runtime.NewScheme()
+	// _ = resources.AddToScheme(scheme)
+
+	resource := dies.TestDuckBlank.
+		APIVersion(resources.GroupVersion.String()).
+		Kind("TestResource").
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+		}).
+		SpecDie(func(d *dies.TestDuckSpecDie) {
+			d.AddField("mutation", "false")
+		}).
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionUnknown).Reason("Initializing"),
+			)
+		})
+
+	rts := rtesting.SubReconcilerTests[*resources.TestDuck]{
+		"sync no mutation": {
+			Resource: resource.DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestDuck] {
+					return &reconcilers.SyncReconciler[*resources.TestDuck]{
+						Sync: func(ctx context.Context, resource *resources.TestDuck) error {
+							return nil
+						},
+					}
+				},
+			},
+		},
+		"sync with mutation": {
+			Resource: resource.DieReleasePtr(),
+			ExpectResource: resource.
+				SpecDie(func(d *dies.TestDuckSpecDie) {
+					d.AddField("mutation", "true")
+				}).
+				DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestDuck] {
+					return &reconcilers.SyncReconciler[*resources.TestDuck]{
+						Sync: func(ctx context.Context, resource *resources.TestDuck) error {
+							resource.Spec.Fields["mutation"] = "true"
+							return nil
+						},
+					}
+				},
+			},
+		},
+	}
+
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase[*resources.TestDuck], c reconcilers.Config) reconcilers.SubReconciler[*resources.TestDuck] {
+		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler[*resources.TestDuck])(t, c)
+	})
+}

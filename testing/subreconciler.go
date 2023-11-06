@@ -14,9 +14,11 @@ import (
 	"github.com/go-logr/logr/testr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/vmware-labs/reconciler-runtime/duck"
 	"github.com/vmware-labs/reconciler-runtime/internal"
 	"github.com/vmware-labs/reconciler-runtime/reconcilers"
 	rtime "github.com/vmware-labs/reconciler-runtime/time"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -182,12 +184,22 @@ func (tc *SubReconcilerTestCase[T]) Run(t *testing.T, scheme *runtime.Scheme, fa
 		}()
 	}
 
+	var givenResource client.Object = tc.Resource
+	if duck.IsDuck(givenResource, scheme) {
+		// convert the given resource duck to Unstructured so that it can be created on the fake client
+		uobj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(tc.Resource)
+		if err != nil {
+			t.Fatalf("unable to convert Resource to Unstructured: %s", err)
+		}
+		givenResource = &unstructured.Unstructured{Object: uobj}
+	}
+
 	expectConfig := &ExpectConfig{
 		Name:                    "default",
 		Scheme:                  scheme,
 		StatusSubResourceTypes:  tc.StatusSubResourceTypes,
-		GivenObjects:            append(tc.GivenObjects, tc.Resource),
-		APIGivenObjects:         append(tc.APIGivenObjects, tc.Resource),
+		GivenObjects:            append(tc.GivenObjects, givenResource),
+		APIGivenObjects:         append(tc.APIGivenObjects, givenResource),
 		WithClientBuilder:       tc.WithClientBuilder,
 		WithReactors:            tc.WithReactors,
 		GivenTracks:             tc.GivenTracks,
