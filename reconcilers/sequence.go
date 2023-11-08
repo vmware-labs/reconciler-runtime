@@ -42,9 +42,9 @@ func (r Sequence[T]) Reconcile(ctx context.Context, resource T) (Result, error) 
 	for i, reconciler := range r {
 		log := logr.FromContextOrDiscard(ctx).
 			WithName(fmt.Sprintf("%d", i))
-		ctx := logr.NewContext(ctx, log)
+		subCtx := logr.NewContext(ctx, log)
 
-		result, err := reconciler.Reconcile(ctx, resource)
+		result, err := reconciler.Reconcile(subCtx, resource)
 		aggregateResult = AggregateResults(result, aggregateResult)
 		if err != nil {
 			return result, err
