@@ -8,6 +8,7 @@ package reconcilers_test
 import (
 	"context"
 	"fmt"
+	"sort"
 	"testing"
 	"time"
 
@@ -99,7 +100,7 @@ func TestChildSetReconciler(t *testing.T) {
 		})
 	configMapGreenGiven := configMapGreenCreate.
 		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
-			d.CreationTimestamp(now)
+			d.CreationTimestamp(metav1.NewTime(now.Add(-1 * time.Hour)))
 			d.UID(types.UID("62af4b9a-767a-4f32-b62c-e4bccbfa8ef0"))
 		})
 
@@ -177,6 +178,66 @@ func TestChildSetReconciler(t *testing.T) {
 					}
 					return r
 				},
+			},
+		},
+		"preserve existing children": {
+			Resource: resourceReady.
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("blue.foo", "bar")
+					d.AddField("green.foo", "bar")
+				}).
+				DieReleasePtr(),
+			GivenObjects: []client.Object{
+				configMapBlueGiven.DieReleasePtr(),
+				configMapGreenGiven.DieReleasePtr(),
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					r := defaultChildSetReconciler(c)
+					r.DesiredChildren = func(ctx context.Context, resource *resources.TestResource) ([]*corev1.ConfigMap, error) {
+						children := reconcilers.RetrieveKnownChildren[*corev1.ConfigMap](ctx)
+						return children, nil
+					}
+					return r
+				},
+			},
+		},
+		"garbage collect all but oldest child": {
+			Resource: resourceReady.
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("blue.foo", "bar")
+					d.AddField("green.foo", "bar")
+				}).
+				DieReleasePtr(),
+			GivenObjects: []client.Object{
+				configMapBlueGiven.DieReleasePtr(),
+				configMapGreenGiven.DieReleasePtr(),
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					r := defaultChildSetReconciler(c)
+					r.DesiredChildren = func(ctx context.Context, resource *resources.TestResource) ([]*corev1.ConfigMap, error) {
+						children := reconcilers.RetrieveKnownChildren[*corev1.ConfigMap](ctx)
+						sort.Slice(children, func(i, j int) bool {
+							iDate := children[i].CreationTimestamp
+							jDate := children[j].CreationTimestamp
+							return iDate.Before(&jDate)
+						})
+						return children[0:1], nil
+					}
+					return r
+				},
+			},
+			ExpectResource: resourceReady.
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("green.foo", "bar")
+				}).
+				DieReleasePtr(),
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Deleted", "Deleted ConfigMap %q", configMapBlueGiven.GetName()),
+			},
+			ExpectDeletes: []rtesting.DeleteRef{
+				rtesting.NewDeleteRefFromObject(configMapBlueGiven, scheme),
 			},
 		},
 		"ignores resources that are not ours": {
