@@ -82,6 +82,11 @@ type ChildSetReconciler[Type, ChildType client.Object, ChildListType client.Obje
 	// by the OurChild method with a stable, unique identifier returned. The identifier is used to
 	// correlate desired and actual child resources.
 	//
+	// Current known children can be obtained via RetrieveKnownChildren[ChildType](ctx). This can
+	// be used to keep existing children while stamping out new resources, or for garbage
+	// collecting resources based on some criteria. Return the children that should be kept and
+	// omit children to delete.
+	//
 	// To skip reconciliation of the child resources while still reflecting an existing child's
 	// status on the reconciled resource, return OnlyReconcileChildStatus as an error.
 	DesiredChildren func(ctx context.Context, resource Type) ([]ChildType, error)
@@ -280,6 +285,20 @@ func (r *ChildSetReconciler[T, CT, CLT]) composeChildReconcilers(ctx context.Con
 	c := RetrieveConfigOrDie(ctx)
 
 	childIDs := sets.NewString()
+
+	children := r.ChildListType.DeepCopyObject().(CLT)
+	ourChildren := []CT{}
+	if err := c.List(ctx, children, r.voidReconciler.listOptions(ctx, resource)...); err != nil {
+		return nil, err
+	}
+	for _, child := range extractItems[CT](children) {
+		if !r.voidReconciler.ourChild(resource, child) {
+			continue
+		}
+		ourChildren = append(ourChildren, child.DeepCopyObject().(CT))
+	}
+
+	ctx = stashKnownChildren(ctx, ourChildren)
 	desiredChildren, desiredChildrenErr := r.DesiredChildren(ctx, resource)
 	if desiredChildrenErr != nil && !errors.Is(desiredChildrenErr, OnlyReconcileChildStatus) {
 		return nil, desiredChildrenErr
@@ -298,14 +317,7 @@ func (r *ChildSetReconciler[T, CT, CLT]) composeChildReconcilers(ctx context.Con
 		desiredChildByID[id] = child
 	}
 
-	children := r.ChildListType.DeepCopyObject().(CLT)
-	if err := c.List(ctx, children, r.voidReconciler.listOptions(ctx, resource)...); err != nil {
-		return nil, err
-	}
-	for _, child := range extractItems[CT](children) {
-		if !r.voidReconciler.ourChild(resource, child) {
-			continue
-		}
+	for _, child := range ourChildren {
 		id := r.IdentifyChild(child)
 		childIDs.Insert(id)
 	}
@@ -370,4 +382,25 @@ func clearChildSetResult[T client.Object](ctx context.Context) ChildSetResult[T]
 		return result
 	}
 	return ChildSetResult[T]{}
+}
+
+const knownChildrenStashKey StashKey = "reconciler-runtime:knownChildren"
+
+// RetrieveKnownChildren returns the children managed by current ChildSetReconciler. The known
+// children can be returned from the DesiredChildren method to preserve existing children, or to
+// mutate/delete an existing child.
+//
+// For example, a child stamper could be implemented by returning existing children from
+// DesiredChildren and appending an addition child when a new resource should be created. Likewise
+// existing children can be garbage collected by omitting a known child.
+func RetrieveKnownChildren[T client.Object](ctx context.Context) []T {
+	value := ctx.Value(knownChildrenStashKey)
+	if result, ok := value.([]T); ok {
+		return result
+	}
+	return nil
+}
+
+func stashKnownChildren[T client.Object](ctx context.Context, children []T) context.Context {
+	return context.WithValue(ctx, knownChildrenStashKey, children)
 }
