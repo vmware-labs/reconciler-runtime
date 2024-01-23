@@ -183,6 +183,46 @@ func TestCastResource(t *testing.T) {
 			},
 			ShouldErr: true,
 		},
+		"cast mutation patch error": {
+			Resource: resource.DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.CastResource[*resources.TestResource, *resources.TestResource]{
+						Reconciler: &reconcilers.SyncReconciler[*resources.TestResource]{
+							Sync: func(ctx context.Context, r *resources.TestResource) error {
+								r.Spec.ErrOnMarshal = true
+								return fmt.Errorf("subreconciler error")
+							},
+						},
+					}
+				},
+			},
+			ShouldErr: true,
+		},
+		"cast mutation patch apply error": {
+			Resource: resource.DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.CastResource[*resources.TestResource, *resources.TestResource]{
+						Reconciler: &reconcilers.SyncReconciler[*resources.TestResource]{
+							Sync: func(ctx context.Context, r *resources.TestResource) error {
+								r.Spec.ErrOnUnmarshal = true
+								return fmt.Errorf("subreconciler error")
+							},
+						},
+					}
+				},
+			},
+			ExpectResource: resource.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.ErrOnUnmarshal(true)
+				}).
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.ConditionsDie() // The unmarshal error would result in losing the initializing Ready condition during applying the patch
+				}).
+				DieReleasePtr(),
+			ShouldErr: true,
+		},
 	}
 
 	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase[*resources.TestResource], c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
