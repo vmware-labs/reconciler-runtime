@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"k8s.io/apimachinery/pkg/util/errors"
 	"reflect"
 	"sync"
 
@@ -111,22 +112,25 @@ func (r *CastResource[T, CT]) Reconcile(ctx context.Context, resource T) (Result
 	}
 	castOriginal := castResource.DeepCopyObject().(client.Object)
 	result, err := r.Reconciler.Reconcile(ctx, castResource)
+	var errs []error
 	if err != nil {
-		return result, err
+		errs = append(errs, err)
 	}
 	if !equality.Semantic.DeepEqual(castResource, castOriginal) {
 		// patch the reconciled resource with the updated duck values
 		patch, err := NewPatch(castOriginal, castResource)
 		if err != nil {
-			return Result{}, err
+			errs = append(errs, err)
+			return result, errors.NewAggregate(errs)
 		}
 		err = patch.Apply(resource)
 		if err != nil {
-			return Result{}, err
+			errs = append(errs, err)
+			return result, errors.NewAggregate(errs)
 		}
 
 	}
-	return result, nil
+	return result, errors.NewAggregate(errs)
 }
 
 func (r *CastResource[T, CT]) cast(ctx context.Context, resource T) (context.Context, CT, error) {
