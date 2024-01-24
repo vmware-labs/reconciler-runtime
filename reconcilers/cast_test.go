@@ -114,13 +114,19 @@ func TestCastResource(t *testing.T) {
 			},
 			ExpectedResult: reconcilers.Result{Requeue: true},
 		},
-		"return subreconciler err, preserves result": {
+		"return subreconciler err, preserves result and status update": {
 			Resource: resource.DieReleasePtr(),
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					return &reconcilers.CastResource[*resources.TestResource, *appsv1.Deployment]{
 						Reconciler: &reconcilers.SyncReconciler[*appsv1.Deployment]{
 							SyncWithResult: func(ctx context.Context, resource *appsv1.Deployment) (reconcilers.Result, error) {
+								resource.Status.Conditions[0] = appsv1.DeploymentCondition{
+									Type:    apis.ConditionReady,
+									Status:  corev1.ConditionFalse,
+									Reason:  "Failed",
+									Message: "expected error",
+								}
 								return reconcilers.Result{Requeue: true}, fmt.Errorf("subreconciler error")
 							},
 						},
@@ -128,7 +134,14 @@ func TestCastResource(t *testing.T) {
 				},
 			},
 			ExpectedResult: reconcilers.Result{Requeue: true},
-			ShouldErr:      true,
+			ExpectResource: resource.
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.ConditionsDie(
+						diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionFalse).Reason("Failed").Message("expected error"),
+					)
+				}).
+				DieReleasePtr(),
+			ShouldErr: true,
 		},
 		"marshal error": {
 			Resource: resource.
@@ -168,6 +181,46 @@ func TestCastResource(t *testing.T) {
 					}
 				},
 			},
+			ShouldErr: true,
+		},
+		"cast mutation patch error": {
+			Resource: resource.DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.CastResource[*resources.TestResource, *resources.TestResource]{
+						Reconciler: &reconcilers.SyncReconciler[*resources.TestResource]{
+							Sync: func(ctx context.Context, r *resources.TestResource) error {
+								r.Spec.ErrOnMarshal = true
+								return fmt.Errorf("subreconciler error")
+							},
+						},
+					}
+				},
+			},
+			ShouldErr: true,
+		},
+		"cast mutation patch apply error": {
+			Resource: resource.DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return &reconcilers.CastResource[*resources.TestResource, *resources.TestResource]{
+						Reconciler: &reconcilers.SyncReconciler[*resources.TestResource]{
+							Sync: func(ctx context.Context, r *resources.TestResource) error {
+								r.Spec.ErrOnUnmarshal = true
+								return fmt.Errorf("subreconciler error")
+							},
+						},
+					}
+				},
+			},
+			ExpectResource: resource.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.ErrOnUnmarshal(true)
+				}).
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.ConditionsDie() // The unmarshal error would result in losing the initializing Ready condition during applying the patch
+				}).
+				DieReleasePtr(),
 			ShouldErr: true,
 		},
 	}
