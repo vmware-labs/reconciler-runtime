@@ -9,7 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -380,16 +379,4 @@ func (r *ChildReconciler[T, CT, CLT]) ourChild(resource T, obj CT) bool {
 		return true
 	}
 	return r.OurChild(resource, obj)
-}
-
-// extractItems returns a typed slice of objects from an object list
-func extractItems[T client.Object](list client.ObjectList) []T {
-	items := []T{}
-	listValue := reflect.ValueOf(list).Elem()
-	itemsValue := listValue.FieldByName("Items")
-	for i := 0; i < itemsValue.Len(); i++ {
-		item := itemsValue.Index(i).Addr().Interface().(T)
-		items = append(items, item)
-	}
-	return items
 }
