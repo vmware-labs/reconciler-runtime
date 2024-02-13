@@ -16,8 +16,9 @@ import (
 
 func TestExtractItems(t *testing.T) {
 	tests := map[string]struct {
-		list     client.ObjectList
-		expected []*resources.TestResource
+		list        client.ObjectList
+		expected    []*resources.TestResource
+		shouldPanic bool
 	}{
 		"empty": {
 			list: &resources.TestResourceList{
@@ -81,11 +82,57 @@ func TestExtractItems(t *testing.T) {
 				},
 			},
 		},
+		"interface items": {
+			list: &resources.TestResourceInterfaceList{
+				Items: []client.Object{
+					&resources.TestResource{
+						ObjectMeta: corev1.ObjectMeta{
+							Name: "obj1",
+						},
+					},
+					&resources.TestResource{
+						ObjectMeta: corev1.ObjectMeta{
+							Name: "obj2",
+						},
+					},
+				},
+			},
+			expected: []*resources.TestResource{
+				{
+					ObjectMeta: corev1.ObjectMeta{
+						Name: "obj1",
+					},
+				},
+				{
+					ObjectMeta: corev1.ObjectMeta{
+						Name: "obj2",
+					},
+				},
+			},
+		},
+		"invalid items": {
+			list: &resources.TestResourceInvalidList{
+				Items: []string{
+					"boom",
+				},
+			},
+			shouldPanic: true,
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					if !tc.shouldPanic {
+						t.Errorf("unexpected panic: %s", r)
+					}
+				}
+			}()
 			actual := extractItems[*resources.TestResource](tc.list)
+			if tc.shouldPanic {
+				t.Errorf("expected to panic")
+			}
 			expected := tc.expected
 			if diff := cmp.Diff(expected, actual); diff != "" {
 				t.Errorf("expected items to match actual items: %s", diff)

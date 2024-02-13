@@ -28,7 +28,7 @@ func extractItems[T client.Object](list client.ObjectList) []T {
 		case reflect.Struct:
 			item = itemValue.Addr().Interface().(T)
 		default:
-			panic(fmt.Errorf("unknown type %s, expected Pointer or Struct", itemValue.Kind().String()))
+			panic(fmt.Errorf("unknown type %s for Items slice, expected Pointer or Struct", itemValue.Kind().String()))
 		}
 		items = append(items, item)
 	}
