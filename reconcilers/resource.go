@@ -34,6 +34,8 @@ import (
 
 var (
 	_ reconcile.Reconciler = (*ResourceReconciler[client.Object])(nil)
+
+	CmpOptions = make([]cmp.Option, 0)
 )
 
 // ResourceReconciler is a controller-runtime reconciler that reconciles a given
@@ -233,7 +235,7 @@ func (r *ResourceReconciler[T]) Reconcile(ctx context.Context, req Request) (Res
 	if !equality.Semantic.DeepEqual(resourceStatus, originalResourceStatus) && resource.GetDeletionTimestamp() == nil {
 		if duck.IsDuck(resource, c.Scheme()) {
 			// patch status
-			log.Info("patching status", "diff", cmp.Diff(originalResourceStatus, resourceStatus))
+			log.Info("patching status", "diff", cmp.Diff(originalResourceStatus, resourceStatus, CmpOptions...))
 			if patchErr := c.Status().Patch(ctx, resource, client.MergeFrom(originalResource)); patchErr != nil {
 				if !errors.Is(patchErr, ErrQuiet) {
 					log.Error(patchErr, "unable to patch status")
@@ -246,7 +248,7 @@ func (r *ResourceReconciler[T]) Reconcile(ctx context.Context, req Request) (Res
 				"Patched status")
 		} else {
 			// update status
-			log.Info("updating status", "diff", cmp.Diff(originalResourceStatus, resourceStatus))
+			log.Info("updating status", "diff", cmp.Diff(originalResourceStatus, resourceStatus, CmpOptions...))
 			if updateErr := c.Status().Update(ctx, resource); updateErr != nil {
 				if !errors.Is(updateErr, ErrQuiet) {
 					log.Error(updateErr, "unable to update status")

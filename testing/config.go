@@ -218,7 +218,7 @@ func (c *ExpectConfig) AssertClientPatchExpectations(t *testing.T) {
 		}
 		actual := NewPatchRef(c.client.PatchActions[i])
 
-		if diff := cmp.Diff(exp, actual); diff != "" {
+		if diff := cmp.Diff(exp, actual, CmpOptions...); diff != "" {
 			c.errorf(t, "ExpectPatches[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
@@ -243,7 +243,7 @@ func (c *ExpectConfig) AssertClientDeleteExpectations(t *testing.T) {
 		}
 		actual := NewDeleteRef(c.client.DeleteActions[i])
 
-		if diff := cmp.Diff(exp, actual); diff != "" {
+		if diff := cmp.Diff(exp, actual, CmpOptions...); diff != "" {
 			c.errorf(t, "ExpectDeletes[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
@@ -268,7 +268,7 @@ func (c *ExpectConfig) AssertClientDeleteCollectionExpectations(t *testing.T) {
 		}
 		actual := NewDeleteCollectionRef(c.client.DeleteCollectionActions[i])
 
-		if diff := cmp.Diff(exp, actual, NormalizeLabelSelector, NormalizeFieldSelector); diff != "" {
+		if diff := cmp.Diff(exp, actual, append(CmpOptions, NormalizeLabelSelector, NormalizeFieldSelector)...); diff != "" {
 			c.errorf(t, "ExpectDeleteCollections[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
@@ -303,7 +303,7 @@ func (c *ExpectConfig) AssertClientStatusPatchExpectations(t *testing.T) {
 		}
 		actual := NewPatchRef(c.client.StatusPatchActions[i])
 
-		if diff := cmp.Diff(exp, actual); diff != "" {
+		if diff := cmp.Diff(exp, actual, CmpOptions...); diff != "" {
 			c.errorf(t, "ExpectStatusPatches[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
@@ -328,7 +328,7 @@ func (c *ExpectConfig) AssertRecorderExpectations(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(exp, actualEvents[i]); diff != "" {
+		if diff := cmp.Diff(exp, actualEvents[i], CmpOptions...); diff != "" {
 			c.errorf(t, "ExpectEvents[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
@@ -355,7 +355,7 @@ func (c *ExpectConfig) AssertTrackerExpectations(t *testing.T) {
 			continue
 		}
 
-		if diff := cmp.Diff(exp, actualTracks[i], NormalizeLabelSelector); diff != "" {
+		if diff := cmp.Diff(exp, actualTracks[i], append(CmpOptions, NormalizeLabelSelector)...); diff != "" {
 			c.errorf(t, "ExpectTracks[%d] differs%s (%s, %s):\n%s", i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
@@ -379,7 +379,7 @@ func (c *ExpectConfig) compareActions(t *testing.T, actionName string, expectedA
 		}
 		actual := actualActions[i].GetObject()
 
-		if diff := cmp.Diff(exp.DeepCopyObject(), actual, diffOptions...); diff != "" {
+		if diff := cmp.Diff(exp.DeepCopyObject(), actual, append(CmpOptions, diffOptions...)...); diff != "" {
 			c.errorf(t, "Expect%ss[%d] differs%s (%s, %s):\n%s", actionName, i, c.configNameMsg(), DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
@@ -441,6 +441,8 @@ var (
 		}
 		return pointer.String(s.String())
 	})
+
+	CmpOptions = make([]cmp.Option, 0)
 )
 
 type PatchRef struct {

@@ -206,7 +206,7 @@ func (tc *ReconcilerTestCase) Run(t *testing.T, scheme *runtime.Scheme, factory 
 	}
 	if err == nil {
 		// result is only significant if there wasn't an error
-		if diff := cmp.Diff(normalizeResult(tc.ExpectedResult), normalizeResult(result)); diff != "" {
+		if diff := cmp.Diff(normalizeResult(tc.ExpectedResult), normalizeResult(result), CmpOptions...); diff != "" {
 			t.Errorf("ExpectedResult differs (%s, %s): %s", DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 		}
 	}
