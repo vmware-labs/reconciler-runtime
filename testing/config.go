@@ -191,7 +191,7 @@ func (c *ExpectConfig) AssertClientCreateExpectations(t *testing.T) {
 	}
 	c.init()
 
-	c.compareActions(t, "Create", c.ExpectCreates, c.client.CreateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
+	c.compareActions(t, "Create", c.ExpectCreates, c.client.CreateActions, reconcilers.IgnoreAllUnexported, IgnoreLastTransitionTime, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
 }
 
 // AssertClientUpdateExpectations asserts observed reconciler client update behavior matches the expected client update behavior
@@ -201,7 +201,7 @@ func (c *ExpectConfig) AssertClientUpdateExpectations(t *testing.T) {
 	}
 	c.init()
 
-	c.compareActions(t, "Update", c.ExpectUpdates, c.client.UpdateActions, IgnoreLastTransitionTime, SafeDeployDiff, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
+	c.compareActions(t, "Update", c.ExpectUpdates, c.client.UpdateActions, reconcilers.IgnoreAllUnexported, IgnoreLastTransitionTime, IgnoreTypeMeta, IgnoreCreationTimestamp, IgnoreResourceVersion, cmpopts.EquateEmpty())
 }
 
 // AssertClientPatchExpectations asserts observed reconciler client patch behavior matches the expected client patch behavior
@@ -286,7 +286,7 @@ func (c *ExpectConfig) AssertClientStatusUpdateExpectations(t *testing.T) {
 	}
 	c.init()
 
-	c.compareActions(t, "StatusUpdate", c.ExpectStatusUpdates, c.client.StatusUpdateActions, statusSubresourceOnly, IgnoreLastTransitionTime, SafeDeployDiff, cmpopts.EquateEmpty())
+	c.compareActions(t, "StatusUpdate", c.ExpectStatusUpdates, c.client.StatusUpdateActions, statusSubresourceOnly, reconcilers.IgnoreAllUnexported, IgnoreLastTransitionTime, cmpopts.EquateEmpty())
 }
 
 // AssertClientStatusPatchExpectations asserts observed reconciler client status patch behavior matches the expected client status patch behavior
@@ -427,6 +427,7 @@ var (
 		return str != "" && !strings.HasPrefix(str, "Status")
 	}, cmp.Ignore())
 
+	// Deprecated: use reconcilers.IgnoreAllUnexported instead
 	SafeDeployDiff = cmpopts.IgnoreUnexported(resource.Quantity{})
 
 	NormalizeLabelSelector = cmp.Transformer("labels.Selector", func(s labels.Selector) *string {

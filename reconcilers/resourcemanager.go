@@ -203,7 +203,7 @@ func (r *ResourceManager[T]) Manage(ctx context.Context, resource client.Object,
 		log.Info("resource is in sync, no update required")
 		return actual, nil
 	}
-	log.Info("updating resource", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current)))
+	log.Info("updating resource", "diff", cmp.Diff(r.sanitize(actual), r.sanitize(current), IgnoreAllUnexported))
 	if err := c.Update(ctx, current); err != nil {
 		if !errors.Is(err, ErrQuiet) {
 			log.Error(err, "unable to update resource", "resource", namespaceName(current))

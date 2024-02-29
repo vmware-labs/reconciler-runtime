@@ -1282,3 +1282,124 @@ func TestResourceReconciler(t *testing.T) {
 		}
 	})
 }
+
+func TestResourceReconciler_UnexportedFields(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+	testRequest := reconcilers.Request{
+		NamespacedName: types.NamespacedName{Namespace: testNamespace, Name: testName},
+	}
+
+	scheme := runtime.NewScheme()
+	_ = resources.AddToScheme(scheme)
+
+	resource := dies.TestResourceUnexportedFieldsBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+		}).
+		StatusDie(func(d *dies.TestResourceUnexportedFieldsStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionUnknown).Reason("Initializing"),
+			)
+		})
+
+	rts := rtesting.ReconcilerTests{
+		"mutated exported and unexported status": {
+			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResourceUnexportedFields{},
+			},
+			GivenObjects: []client.Object{
+				resource,
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResourceUnexportedFields] {
+					return &reconcilers.SyncReconciler[*resources.TestResourceUnexportedFields]{
+						Sync: func(ctx context.Context, resource *resources.TestResourceUnexportedFields) error {
+							if resource.Status.Fields == nil {
+								resource.Status.Fields = map[string]string{}
+							}
+							resource.CopyUnexportedFields()
+							resource.Status.Fields["Reconciler"] = "ran"
+							resource.Status.AddUnexportedFields("Reconciler", "ran")
+							return nil
+						},
+					}
+				},
+			},
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated",
+					`Updated status`),
+			},
+			ExpectStatusUpdates: []client.Object{
+				resource.StatusDie(func(d *dies.TestResourceUnexportedFieldsStatusDie) {
+					d.AddField("Reconciler", "ran")
+					d.AddUnexportedField("Reconciler", "ran")
+				}),
+			},
+		},
+		"mutated unexported status": {
+			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResourceUnexportedFields{},
+			},
+			GivenObjects: []client.Object{
+				resource,
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResourceUnexportedFields] {
+					return &reconcilers.SyncReconciler[*resources.TestResourceUnexportedFields]{
+						Sync: func(ctx context.Context, resource *resources.TestResourceUnexportedFields) error {
+							if resource.Status.Fields == nil {
+								resource.Status.Fields = map[string]string{}
+							}
+							resource.CopyUnexportedFields()
+							resource.Status.AddUnexportedFields("Reconciler", "ran")
+							return nil
+						},
+					}
+				},
+			},
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated",
+					`Updated status`),
+			},
+			ExpectStatusUpdates: []client.Object{
+				resource.StatusDie(func(d *dies.TestResourceUnexportedFieldsStatusDie) {
+					d.AddUnexportedField("Reconciler", "ran")
+				}),
+			},
+		},
+		"no mutated status": {
+			Request: testRequest,
+			StatusSubResourceTypes: []client.Object{
+				&resources.TestResourceUnexportedFields{},
+			},
+			GivenObjects: []client.Object{
+				resource,
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResourceUnexportedFields] {
+					return &reconcilers.SyncReconciler[*resources.TestResourceUnexportedFields]{
+						Sync: func(ctx context.Context, resource *resources.TestResourceUnexportedFields) error {
+							if resource.Status.Fields == nil {
+								resource.Status.Fields = map[string]string{}
+							}
+							resource.CopyUnexportedFields()
+							resource.Spec.Fields["Reconciler"] = "ran"
+							return nil
+						},
+					}
+				},
+			},
+		},
+	}
+
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.ReconcilerTestCase, c reconcilers.Config) reconcile.Reconciler {
+		return &reconcilers.ResourceReconciler[*resources.TestResourceUnexportedFields]{
+			Reconciler: rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler[*resources.TestResourceUnexportedFields])(t, c),
+			Config:     c,
+		}
+	})
+}

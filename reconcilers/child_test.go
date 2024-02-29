@@ -2108,3 +2108,232 @@ func TestChildReconciler_Unstructured(t *testing.T) {
 		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler[*unstructured.Unstructured])(t, c)
 	})
 }
+
+func TestChildReconciler_UnexportedFields(t *testing.T) {
+	testNamespace := "test-namespace"
+	testName := "test-resource"
+
+	now := metav1.NewTime(time.Now().Truncate(time.Second))
+
+	scheme := runtime.NewScheme()
+	_ = resources.AddToScheme(scheme)
+	_ = clientgoscheme.AddToScheme(scheme)
+
+	resource := dies.TestResourceBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+		}).
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionUnknown).Reason("Initializing"),
+			)
+		})
+	resourceReady := resource.
+		StatusDie(func(d *dies.TestResourceStatusDie) {
+			d.ConditionsDie(
+				diemetav1.ConditionBlank.Type(apis.ConditionReady).Status(metav1.ConditionTrue).Reason("Ready"),
+			)
+		})
+
+	childCreate := dies.TestResourceUnexportedFieldsBlank.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.Namespace(testNamespace)
+			d.Name(testName)
+			d.ControlledBy(resource, scheme)
+		})
+	childGiven := childCreate.
+		MetadataDie(func(d *diemetav1.ObjectMetaDie) {
+			d.CreationTimestamp(now)
+		})
+
+	defaultChildReconciler := func(c reconcilers.Config) *reconcilers.ChildReconciler[*resources.TestResource, *resources.TestResourceUnexportedFields, *resources.TestResourceUnexportedFieldsList] {
+		return &reconcilers.ChildReconciler[*resources.TestResource, *resources.TestResourceUnexportedFields, *resources.TestResourceUnexportedFieldsList]{
+			DesiredChild: func(ctx context.Context, parent *resources.TestResource) (*resources.TestResourceUnexportedFields, error) {
+				if len(parent.Spec.Fields) == 0 {
+					return nil, nil
+				}
+
+				return &resources.TestResourceUnexportedFields{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: parent.Namespace,
+						Name:      parent.Name,
+					},
+					Spec: resources.TestResourceUnexportedFieldsSpec{
+						Fields:         parent.Spec.Fields,
+						Template:       parent.Spec.Template,
+						ErrOnMarshal:   parent.Spec.ErrOnMarshal,
+						ErrOnUnmarshal: parent.Spec.ErrOnUnmarshal,
+					},
+				}, nil
+			},
+			MergeBeforeUpdate: func(current, desired *resources.TestResourceUnexportedFields) {
+				current.Spec.Fields = desired.Spec.Fields
+				current.Spec.Template = desired.Spec.Template
+				current.Spec.ErrOnMarshal = desired.Spec.ErrOnMarshal
+				current.Spec.ErrOnUnmarshal = desired.Spec.ErrOnUnmarshal
+			},
+			ReflectChildStatusOnParent: func(ctx context.Context, parent *resources.TestResource, child *resources.TestResourceUnexportedFields, err error) {
+				if err != nil {
+					switch {
+					case apierrs.IsAlreadyExists(err):
+						name := err.(apierrs.APIStatus).Status().Details.Name
+						parent.Status.MarkNotReady(ctx, "NameConflict", "%q already exists", name)
+					case apierrs.IsInvalid(err):
+						name := err.(apierrs.APIStatus).Status().Details.Name
+						parent.Status.MarkNotReady(ctx, "InvalidChild", "%q was rejected by the api server", name)
+					}
+					return
+				}
+				if child == nil {
+					parent.Status.Fields = nil
+					parent.Status.MarkReady(ctx)
+					return
+				}
+				parent.Status.Fields = child.Status.Fields
+				parent.Status.MarkReady(ctx)
+			},
+		}
+	}
+
+	rts := rtesting.SubReconcilerTests[*resources.TestResource]{
+		"child is in sync": {
+			Resource: resourceReady.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.AddField("foo", "bar")
+				}).
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("foo", "bar")
+				}).
+				DieReleasePtr(),
+			GivenObjects: []client.Object{
+				childGiven.
+					SpecDie(func(d *dies.TestResourceUnexportedFieldsSpecDie) {
+						d.AddField("foo", "bar")
+					}).
+					StatusDie(func(d *dies.TestResourceUnexportedFieldsStatusDie) {
+						d.AddField("foo", "bar")
+					}),
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return defaultChildReconciler(c)
+				},
+			},
+		},
+		"update status": {
+			Resource: resourceReady.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.AddField("foo", "bar")
+				}).
+				DieReleasePtr(),
+			GivenObjects: []client.Object{
+				childGiven.
+					SpecDie(func(d *dies.TestResourceUnexportedFieldsSpecDie) {
+						d.AddField("foo", "bar")
+					}).
+					StatusDie(func(d *dies.TestResourceUnexportedFieldsStatusDie) {
+						d.AddField("foo", "bar")
+					}),
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return defaultChildReconciler(c)
+				},
+			},
+			ExpectResource: resourceReady.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.AddField("foo", "bar")
+				}).
+				StatusDie(func(d *dies.TestResourceStatusDie) {
+					d.AddField("foo", "bar")
+				}).
+				DieReleasePtr(),
+		},
+		"create child": {
+			Resource: resource.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.AddField("foo", "bar")
+				}).
+				DieReleasePtr(),
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return defaultChildReconciler(c)
+				},
+			},
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Created",
+					`Created TestResourceUnexportedFields %q`, testName),
+			},
+			ExpectResource: resourceReady.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.AddField("foo", "bar")
+				}).
+				DieReleasePtr(),
+			ExpectCreates: []client.Object{
+				childCreate.
+					SpecDie(func(d *dies.TestResourceUnexportedFieldsSpecDie) {
+						d.AddField("foo", "bar")
+					}),
+			},
+		},
+		"update child": {
+			Resource: resourceReady.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.AddField("foo", "bar")
+					d.AddField("new", "field")
+				}).
+				DieReleasePtr(),
+			GivenObjects: []client.Object{
+				childGiven.
+					SpecDie(func(d *dies.TestResourceUnexportedFieldsSpecDie) {
+						d.AddField("foo", "bar")
+					}),
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return defaultChildReconciler(c)
+				},
+			},
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated",
+					`Updated TestResourceUnexportedFields %q`, testName),
+			},
+			ExpectResource: resourceReady.
+				SpecDie(func(d *dies.TestResourceSpecDie) {
+					d.AddField("foo", "bar")
+					d.AddField("new", "field")
+				}).
+				DieReleasePtr(),
+			ExpectUpdates: []client.Object{
+				childGiven.
+					SpecDie(func(d *dies.TestResourceUnexportedFieldsSpecDie) {
+						d.AddField("foo", "bar")
+						d.AddField("new", "field")
+					}),
+			},
+		},
+		"delete child": {
+			Resource: resourceReady.DieReleasePtr(),
+			GivenObjects: []client.Object{
+				childGiven,
+			},
+			Metadata: map[string]interface{}{
+				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+					return defaultChildReconciler(c)
+				},
+			},
+			ExpectEvents: []rtesting.Event{
+				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Deleted",
+					`Deleted TestResourceUnexportedFields %q`, testName),
+			},
+			ExpectDeletes: []rtesting.DeleteRef{
+				rtesting.NewDeleteRefFromObject(childGiven, scheme),
+			},
+		},
+	}
+
+	rts.Run(t, scheme, func(t *testing.T, rtc *rtesting.SubReconcilerTestCase[*resources.TestResource], c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
+		return rtc.Metadata["SubReconciler"].(func(*testing.T, reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource])(t, c)
+	})
+}

@@ -2157,3 +2157,682 @@ func (d *TestDuckSpecDie) Fields(v map[string]string) *TestDuckSpecDie {
 		r.Fields = v
 	})
 }
+
+var TestResourceUnexportedFieldsBlank = (&TestResourceUnexportedFieldsDie{}).DieFeed(resources.TestResourceUnexportedFields{})
+
+type TestResourceUnexportedFieldsDie struct {
+	v1.FrozenObjectMeta
+	mutable bool
+	r       resources.TestResourceUnexportedFields
+}
+
+// DieImmutable returns a new die for the current die's state that is either mutable (`false`) or immutable (`true`).
+func (d *TestResourceUnexportedFieldsDie) DieImmutable(immutable bool) *TestResourceUnexportedFieldsDie {
+	if d.mutable == !immutable {
+		return d
+	}
+	d = d.DeepCopy()
+	d.mutable = !immutable
+	return d
+}
+
+// DieFeed returns a new die with the provided resource.
+func (d *TestResourceUnexportedFieldsDie) DieFeed(r resources.TestResourceUnexportedFields) *TestResourceUnexportedFieldsDie {
+	if d.mutable {
+		d.FrozenObjectMeta = v1.FreezeObjectMeta(r.ObjectMeta)
+		d.r = r
+		return d
+	}
+	return &TestResourceUnexportedFieldsDie{
+		FrozenObjectMeta: v1.FreezeObjectMeta(r.ObjectMeta),
+		mutable:          d.mutable,
+		r:                r,
+	}
+}
+
+// DieFeedPtr returns a new die with the provided resource pointer. If the resource is nil, the empty value is used instead.
+func (d *TestResourceUnexportedFieldsDie) DieFeedPtr(r *resources.TestResourceUnexportedFields) *TestResourceUnexportedFieldsDie {
+	if r == nil {
+		r = &resources.TestResourceUnexportedFields{}
+	}
+	return d.DieFeed(*r)
+}
+
+// DieFeedJSON returns a new die with the provided JSON. Panics on error.
+func (d *TestResourceUnexportedFieldsDie) DieFeedJSON(j []byte) *TestResourceUnexportedFieldsDie {
+	r := resources.TestResourceUnexportedFields{}
+	if err := json.Unmarshal(j, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAML returns a new die with the provided YAML. Panics on error.
+func (d *TestResourceUnexportedFieldsDie) DieFeedYAML(y []byte) *TestResourceUnexportedFieldsDie {
+	r := resources.TestResourceUnexportedFields{}
+	if err := yaml.Unmarshal(y, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAMLFile returns a new die loading YAML from a file path. Panics on error.
+func (d *TestResourceUnexportedFieldsDie) DieFeedYAMLFile(name string) *TestResourceUnexportedFieldsDie {
+	y, err := osx.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedYAML(y)
+}
+
+// DieFeedRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceUnexportedFieldsDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceUnexportedFieldsDie {
+	j, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedJSON(j)
+}
+
+// DieRelease returns the resource managed by the die.
+func (d *TestResourceUnexportedFieldsDie) DieRelease() resources.TestResourceUnexportedFields {
+	if d.mutable {
+		return d.r
+	}
+	return *d.r.DeepCopy()
+}
+
+// DieReleasePtr returns a pointer to the resource managed by the die.
+func (d *TestResourceUnexportedFieldsDie) DieReleasePtr() *resources.TestResourceUnexportedFields {
+	r := d.DieRelease()
+	return &r
+}
+
+// DieReleaseUnstructured returns the resource managed by the die as an unstructured object. Panics on error.
+func (d *TestResourceUnexportedFieldsDie) DieReleaseUnstructured() *unstructured.Unstructured {
+	r := d.DieReleasePtr()
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(r)
+	if err != nil {
+		panic(err)
+	}
+	return &unstructured.Unstructured{
+		Object: u,
+	}
+}
+
+// DieReleaseJSON returns the resource managed by the die as JSON. Panics on error.
+func (d *TestResourceUnexportedFieldsDie) DieReleaseJSON() []byte {
+	r := d.DieReleasePtr()
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+// DieReleaseYAML returns the resource managed by the die as YAML. Panics on error.
+func (d *TestResourceUnexportedFieldsDie) DieReleaseYAML() []byte {
+	r := d.DieReleasePtr()
+	y, err := yaml.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return y
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceUnexportedFieldsDie) DieReleaseRawExtension() runtime.RawExtension {
+	j := d.DieReleaseJSON()
+	raw := runtime.RawExtension{}
+	if err := json.Unmarshal(j, &raw); err != nil {
+		panic(err)
+	}
+	return raw
+}
+
+// DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
+func (d *TestResourceUnexportedFieldsDie) DieStamp(fn func(r *resources.TestResourceUnexportedFields)) *TestResourceUnexportedFieldsDie {
+	r := d.DieRelease()
+	fn(&r)
+	return d.DieFeed(r)
+}
+
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
+//
+// Future iterations will improve type coercion from the resource to the callback argument.
+func (d *TestResourceUnexportedFieldsDie) DieStampAt(jp string, fn interface{}) *TestResourceUnexportedFieldsDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFields) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
+		cp := jsonpath.New("")
+		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
+			panic(err)
+		}
+		cr, err := cp.FindResults(r)
+		if err != nil {
+			// errors are expected if a path is not found
+			return
+		}
+		for _, cv := range cr[0] {
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
+			reflectx.ValueOf(fn).Call(args)
+		}
+	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestResourceUnexportedFieldsDie) DieWith(fns ...func(d *TestResourceUnexportedFieldsDie)) *TestResourceUnexportedFieldsDie {
+	nd := TestResourceUnexportedFieldsBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
+}
+
+// DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
+func (d *TestResourceUnexportedFieldsDie) DeepCopy() *TestResourceUnexportedFieldsDie {
+	r := *d.r.DeepCopy()
+	return &TestResourceUnexportedFieldsDie{
+		FrozenObjectMeta: v1.FreezeObjectMeta(r.ObjectMeta),
+		mutable:          d.mutable,
+		r:                r,
+	}
+}
+
+var _ runtime.Object = (*TestResourceUnexportedFieldsDie)(nil)
+
+func (d *TestResourceUnexportedFieldsDie) DeepCopyObject() runtime.Object {
+	return d.r.DeepCopy()
+}
+
+func (d *TestResourceUnexportedFieldsDie) GetObjectKind() schema.ObjectKind {
+	r := d.DieRelease()
+	return r.GetObjectKind()
+}
+
+func (d *TestResourceUnexportedFieldsDie) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.r)
+}
+
+func (d *TestResourceUnexportedFieldsDie) UnmarshalJSON(b []byte) error {
+	if d == TestResourceUnexportedFieldsBlank {
+		return fmtx.Errorf("cannot unmarshal into the blank die, create a copy first")
+	}
+	if !d.mutable {
+		return fmtx.Errorf("cannot unmarshal into immutable dies, create a mutable version first")
+	}
+	r := &resources.TestResourceUnexportedFields{}
+	err := json.Unmarshal(b, r)
+	*d = *d.DieFeed(*r)
+	return err
+}
+
+// APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+func (d *TestResourceUnexportedFieldsDie) APIVersion(v string) *TestResourceUnexportedFieldsDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFields) {
+		r.APIVersion = v
+	})
+}
+
+// Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+func (d *TestResourceUnexportedFieldsDie) Kind(v string) *TestResourceUnexportedFieldsDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFields) {
+		r.Kind = v
+	})
+}
+
+// MetadataDie stamps the resource's ObjectMeta field with a mutable die.
+func (d *TestResourceUnexportedFieldsDie) MetadataDie(fn func(d *v1.ObjectMetaDie)) *TestResourceUnexportedFieldsDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFields) {
+		d := v1.ObjectMetaBlank.DieImmutable(false).DieFeed(r.ObjectMeta)
+		fn(d)
+		r.ObjectMeta = d.DieRelease()
+	})
+}
+
+// SpecDie stamps the resource's spec field with a mutable die.
+func (d *TestResourceUnexportedFieldsDie) SpecDie(fn func(d *TestResourceUnexportedFieldsSpecDie)) *TestResourceUnexportedFieldsDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFields) {
+		d := TestResourceUnexportedFieldsSpecBlank.DieImmutable(false).DieFeed(r.Spec)
+		fn(d)
+		r.Spec = d.DieRelease()
+	})
+}
+
+// StatusDie stamps the resource's status field with a mutable die.
+func (d *TestResourceUnexportedFieldsDie) StatusDie(fn func(d *TestResourceUnexportedFieldsStatusDie)) *TestResourceUnexportedFieldsDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFields) {
+		d := TestResourceUnexportedFieldsStatusBlank.DieImmutable(false).DieFeed(r.Status)
+		fn(d)
+		r.Status = d.DieRelease()
+	})
+}
+
+func (d *TestResourceUnexportedFieldsDie) Spec(v resources.TestResourceUnexportedFieldsSpec) *TestResourceUnexportedFieldsDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFields) {
+		r.Spec = v
+	})
+}
+
+func (d *TestResourceUnexportedFieldsDie) Status(v resources.TestResourceUnexportedFieldsStatus) *TestResourceUnexportedFieldsDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFields) {
+		r.Status = v
+	})
+}
+
+var TestResourceUnexportedFieldsSpecBlank = (&TestResourceUnexportedFieldsSpecDie{}).DieFeed(resources.TestResourceUnexportedFieldsSpec{})
+
+type TestResourceUnexportedFieldsSpecDie struct {
+	mutable bool
+	r       resources.TestResourceUnexportedFieldsSpec
+}
+
+// DieImmutable returns a new die for the current die's state that is either mutable (`false`) or immutable (`true`).
+func (d *TestResourceUnexportedFieldsSpecDie) DieImmutable(immutable bool) *TestResourceUnexportedFieldsSpecDie {
+	if d.mutable == !immutable {
+		return d
+	}
+	d = d.DeepCopy()
+	d.mutable = !immutable
+	return d
+}
+
+// DieFeed returns a new die with the provided resource.
+func (d *TestResourceUnexportedFieldsSpecDie) DieFeed(r resources.TestResourceUnexportedFieldsSpec) *TestResourceUnexportedFieldsSpecDie {
+	if d.mutable {
+		d.r = r
+		return d
+	}
+	return &TestResourceUnexportedFieldsSpecDie{
+		mutable: d.mutable,
+		r:       r,
+	}
+}
+
+// DieFeedPtr returns a new die with the provided resource pointer. If the resource is nil, the empty value is used instead.
+func (d *TestResourceUnexportedFieldsSpecDie) DieFeedPtr(r *resources.TestResourceUnexportedFieldsSpec) *TestResourceUnexportedFieldsSpecDie {
+	if r == nil {
+		r = &resources.TestResourceUnexportedFieldsSpec{}
+	}
+	return d.DieFeed(*r)
+}
+
+// DieFeedJSON returns a new die with the provided JSON. Panics on error.
+func (d *TestResourceUnexportedFieldsSpecDie) DieFeedJSON(j []byte) *TestResourceUnexportedFieldsSpecDie {
+	r := resources.TestResourceUnexportedFieldsSpec{}
+	if err := json.Unmarshal(j, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAML returns a new die with the provided YAML. Panics on error.
+func (d *TestResourceUnexportedFieldsSpecDie) DieFeedYAML(y []byte) *TestResourceUnexportedFieldsSpecDie {
+	r := resources.TestResourceUnexportedFieldsSpec{}
+	if err := yaml.Unmarshal(y, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAMLFile returns a new die loading YAML from a file path. Panics on error.
+func (d *TestResourceUnexportedFieldsSpecDie) DieFeedYAMLFile(name string) *TestResourceUnexportedFieldsSpecDie {
+	y, err := osx.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedYAML(y)
+}
+
+// DieFeedRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceUnexportedFieldsSpecDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceUnexportedFieldsSpecDie {
+	j, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedJSON(j)
+}
+
+// DieRelease returns the resource managed by the die.
+func (d *TestResourceUnexportedFieldsSpecDie) DieRelease() resources.TestResourceUnexportedFieldsSpec {
+	if d.mutable {
+		return d.r
+	}
+	return *d.r.DeepCopy()
+}
+
+// DieReleasePtr returns a pointer to the resource managed by the die.
+func (d *TestResourceUnexportedFieldsSpecDie) DieReleasePtr() *resources.TestResourceUnexportedFieldsSpec {
+	r := d.DieRelease()
+	return &r
+}
+
+// DieReleaseJSON returns the resource managed by the die as JSON. Panics on error.
+func (d *TestResourceUnexportedFieldsSpecDie) DieReleaseJSON() []byte {
+	r := d.DieReleasePtr()
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+// DieReleaseYAML returns the resource managed by the die as YAML. Panics on error.
+func (d *TestResourceUnexportedFieldsSpecDie) DieReleaseYAML() []byte {
+	r := d.DieReleasePtr()
+	y, err := yaml.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return y
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceUnexportedFieldsSpecDie) DieReleaseRawExtension() runtime.RawExtension {
+	j := d.DieReleaseJSON()
+	raw := runtime.RawExtension{}
+	if err := json.Unmarshal(j, &raw); err != nil {
+		panic(err)
+	}
+	return raw
+}
+
+// DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
+func (d *TestResourceUnexportedFieldsSpecDie) DieStamp(fn func(r *resources.TestResourceUnexportedFieldsSpec)) *TestResourceUnexportedFieldsSpecDie {
+	r := d.DieRelease()
+	fn(&r)
+	return d.DieFeed(r)
+}
+
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
+//
+// Future iterations will improve type coercion from the resource to the callback argument.
+func (d *TestResourceUnexportedFieldsSpecDie) DieStampAt(jp string, fn interface{}) *TestResourceUnexportedFieldsSpecDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsSpec) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
+		cp := jsonpath.New("")
+		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
+			panic(err)
+		}
+		cr, err := cp.FindResults(r)
+		if err != nil {
+			// errors are expected if a path is not found
+			return
+		}
+		for _, cv := range cr[0] {
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
+			reflectx.ValueOf(fn).Call(args)
+		}
+	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestResourceUnexportedFieldsSpecDie) DieWith(fns ...func(d *TestResourceUnexportedFieldsSpecDie)) *TestResourceUnexportedFieldsSpecDie {
+	nd := TestResourceUnexportedFieldsSpecBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
+}
+
+// DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
+func (d *TestResourceUnexportedFieldsSpecDie) DeepCopy() *TestResourceUnexportedFieldsSpecDie {
+	r := *d.r.DeepCopy()
+	return &TestResourceUnexportedFieldsSpecDie{
+		mutable: d.mutable,
+		r:       r,
+	}
+}
+
+func (d *TestResourceUnexportedFieldsSpecDie) Fields(v map[string]string) *TestResourceUnexportedFieldsSpecDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsSpec) {
+		r.Fields = v
+	})
+}
+
+func (d *TestResourceUnexportedFieldsSpecDie) Template(v corev1.PodTemplateSpec) *TestResourceUnexportedFieldsSpecDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsSpec) {
+		r.Template = v
+	})
+}
+
+func (d *TestResourceUnexportedFieldsSpecDie) ErrOnMarshal(v bool) *TestResourceUnexportedFieldsSpecDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsSpec) {
+		r.ErrOnMarshal = v
+	})
+}
+
+func (d *TestResourceUnexportedFieldsSpecDie) ErrOnUnmarshal(v bool) *TestResourceUnexportedFieldsSpecDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsSpec) {
+		r.ErrOnUnmarshal = v
+	})
+}
+
+var TestResourceUnexportedFieldsStatusBlank = (&TestResourceUnexportedFieldsStatusDie{}).DieFeed(resources.TestResourceUnexportedFieldsStatus{})
+
+type TestResourceUnexportedFieldsStatusDie struct {
+	mutable bool
+	r       resources.TestResourceUnexportedFieldsStatus
+}
+
+// DieImmutable returns a new die for the current die's state that is either mutable (`false`) or immutable (`true`).
+func (d *TestResourceUnexportedFieldsStatusDie) DieImmutable(immutable bool) *TestResourceUnexportedFieldsStatusDie {
+	if d.mutable == !immutable {
+		return d
+	}
+	d = d.DeepCopy()
+	d.mutable = !immutable
+	return d
+}
+
+// DieFeed returns a new die with the provided resource.
+func (d *TestResourceUnexportedFieldsStatusDie) DieFeed(r resources.TestResourceUnexportedFieldsStatus) *TestResourceUnexportedFieldsStatusDie {
+	if d.mutable {
+		d.r = r
+		return d
+	}
+	return &TestResourceUnexportedFieldsStatusDie{
+		mutable: d.mutable,
+		r:       r,
+	}
+}
+
+// DieFeedPtr returns a new die with the provided resource pointer. If the resource is nil, the empty value is used instead.
+func (d *TestResourceUnexportedFieldsStatusDie) DieFeedPtr(r *resources.TestResourceUnexportedFieldsStatus) *TestResourceUnexportedFieldsStatusDie {
+	if r == nil {
+		r = &resources.TestResourceUnexportedFieldsStatus{}
+	}
+	return d.DieFeed(*r)
+}
+
+// DieFeedJSON returns a new die with the provided JSON. Panics on error.
+func (d *TestResourceUnexportedFieldsStatusDie) DieFeedJSON(j []byte) *TestResourceUnexportedFieldsStatusDie {
+	r := resources.TestResourceUnexportedFieldsStatus{}
+	if err := json.Unmarshal(j, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAML returns a new die with the provided YAML. Panics on error.
+func (d *TestResourceUnexportedFieldsStatusDie) DieFeedYAML(y []byte) *TestResourceUnexportedFieldsStatusDie {
+	r := resources.TestResourceUnexportedFieldsStatus{}
+	if err := yaml.Unmarshal(y, &r); err != nil {
+		panic(err)
+	}
+	return d.DieFeed(r)
+}
+
+// DieFeedYAMLFile returns a new die loading YAML from a file path. Panics on error.
+func (d *TestResourceUnexportedFieldsStatusDie) DieFeedYAMLFile(name string) *TestResourceUnexportedFieldsStatusDie {
+	y, err := osx.ReadFile(name)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedYAML(y)
+}
+
+// DieFeedRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceUnexportedFieldsStatusDie) DieFeedRawExtension(raw runtime.RawExtension) *TestResourceUnexportedFieldsStatusDie {
+	j, err := json.Marshal(raw)
+	if err != nil {
+		panic(err)
+	}
+	return d.DieFeedJSON(j)
+}
+
+// DieRelease returns the resource managed by the die.
+func (d *TestResourceUnexportedFieldsStatusDie) DieRelease() resources.TestResourceUnexportedFieldsStatus {
+	if d.mutable {
+		return d.r
+	}
+	return *d.r.DeepCopy()
+}
+
+// DieReleasePtr returns a pointer to the resource managed by the die.
+func (d *TestResourceUnexportedFieldsStatusDie) DieReleasePtr() *resources.TestResourceUnexportedFieldsStatus {
+	r := d.DieRelease()
+	return &r
+}
+
+// DieReleaseJSON returns the resource managed by the die as JSON. Panics on error.
+func (d *TestResourceUnexportedFieldsStatusDie) DieReleaseJSON() []byte {
+	r := d.DieReleasePtr()
+	j, err := json.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return j
+}
+
+// DieReleaseYAML returns the resource managed by the die as YAML. Panics on error.
+func (d *TestResourceUnexportedFieldsStatusDie) DieReleaseYAML() []byte {
+	r := d.DieReleasePtr()
+	y, err := yaml.Marshal(r)
+	if err != nil {
+		panic(err)
+	}
+	return y
+}
+
+// DieReleaseRawExtension returns the resource managed by the die as an raw extension. Panics on error.
+func (d *TestResourceUnexportedFieldsStatusDie) DieReleaseRawExtension() runtime.RawExtension {
+	j := d.DieReleaseJSON()
+	raw := runtime.RawExtension{}
+	if err := json.Unmarshal(j, &raw); err != nil {
+		panic(err)
+	}
+	return raw
+}
+
+// DieStamp returns a new die with the resource passed to the callback function. The resource is mutable.
+func (d *TestResourceUnexportedFieldsStatusDie) DieStamp(fn func(r *resources.TestResourceUnexportedFieldsStatus)) *TestResourceUnexportedFieldsStatusDie {
+	r := d.DieRelease()
+	fn(&r)
+	return d.DieFeed(r)
+}
+
+// Experimental: DieStampAt uses a JSON path (http://goessner.net/articles/JsonPath/) expression to stamp portions of the resource. The callback is invoked with each JSON path match. Panics if the callback function does not accept a single argument of the same type or a pointer to that type as found on the resource at the target location.
+//
+// Future iterations will improve type coercion from the resource to the callback argument.
+func (d *TestResourceUnexportedFieldsStatusDie) DieStampAt(jp string, fn interface{}) *TestResourceUnexportedFieldsStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsStatus) {
+		if ni := reflectx.ValueOf(fn).Type().NumIn(); ni != 1 {
+			panic(fmtx.Errorf("callback function must have 1 input parameters, found %d", ni))
+		}
+		if no := reflectx.ValueOf(fn).Type().NumOut(); no != 0 {
+			panic(fmtx.Errorf("callback function must have 0 output parameters, found %d", no))
+		}
+
+		cp := jsonpath.New("")
+		if err := cp.Parse(fmtx.Sprintf("{%s}", jp)); err != nil {
+			panic(err)
+		}
+		cr, err := cp.FindResults(r)
+		if err != nil {
+			// errors are expected if a path is not found
+			return
+		}
+		for _, cv := range cr[0] {
+			arg0t := reflectx.ValueOf(fn).Type().In(0)
+
+			var args []reflectx.Value
+			if cv.Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv}
+			} else if cv.CanAddr() && cv.Addr().Type().AssignableTo(arg0t) {
+				args = []reflectx.Value{cv.Addr()}
+			} else {
+				panic(fmtx.Errorf("callback function must accept value of type %q, found type %q", cv.Type(), arg0t))
+			}
+
+			reflectx.ValueOf(fn).Call(args)
+		}
+	})
+}
+
+// DieWith returns a new die after passing the current die to the callback function. The passed die is mutable.
+func (d *TestResourceUnexportedFieldsStatusDie) DieWith(fns ...func(d *TestResourceUnexportedFieldsStatusDie)) *TestResourceUnexportedFieldsStatusDie {
+	nd := TestResourceUnexportedFieldsStatusBlank.DieFeed(d.DieRelease()).DieImmutable(false)
+	for _, fn := range fns {
+		if fn != nil {
+			fn(nd)
+		}
+	}
+	return d.DieFeed(nd.DieRelease())
+}
+
+// DeepCopy returns a new die with equivalent state. Useful for snapshotting a mutable die.
+func (d *TestResourceUnexportedFieldsStatusDie) DeepCopy() *TestResourceUnexportedFieldsStatusDie {
+	r := *d.r.DeepCopy()
+	return &TestResourceUnexportedFieldsStatusDie{
+		mutable: d.mutable,
+		r:       r,
+	}
+}
+
+func (d *TestResourceUnexportedFieldsStatusDie) Status(v apis.Status) *TestResourceUnexportedFieldsStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsStatus) {
+		r.Status = v
+	})
+}
+
+func (d *TestResourceUnexportedFieldsStatusDie) Fields(v map[string]string) *TestResourceUnexportedFieldsStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsStatus) {
+		r.Fields = v
+	})
+}

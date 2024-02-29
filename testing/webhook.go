@@ -216,7 +216,7 @@ func (tc *AdmissionWebhookTestCase) Run(t *testing.T, scheme *runtime.Scheme, fa
 	}()
 
 	tc.ExpectedResponse.Complete(*tc.Request)
-	if diff := cmp.Diff(tc.ExpectedResponse, response); diff != "" {
+	if diff := cmp.Diff(tc.ExpectedResponse, response, reconcilers.IgnoreAllUnexported); diff != "" {
 		t.Errorf("ExpectedResponse differs (%s, %s): %s", DiffRemovedColor.Sprint("-expected"), DiffAddedColor.Sprint("+actual"), ColorizeDiff(diff))
 	}
 
