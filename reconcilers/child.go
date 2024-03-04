@@ -364,9 +364,12 @@ func (r *ChildReconciler[T, CT, CLT]) filterChildren(resource T, children CLT) [
 
 func (r *ChildReconciler[T, CT, CLT]) listOptions(ctx context.Context, resource T) []client.ListOption {
 	if r.ListOptions == nil {
-		return []client.ListOption{
-			client.InNamespace(resource.GetNamespace()),
+		opts := []client.ListOption{}
+		if !r.SkipOwnerReference {
+			opts = append(opts, client.InNamespace(resource.GetNamespace()))
 		}
+
+		return opts
 	}
 	return r.ListOptions(ctx, resource)
 }
