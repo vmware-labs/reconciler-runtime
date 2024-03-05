@@ -2299,12 +2299,6 @@ func TestChildReconciler_UnexportedFields(t *testing.T) {
 				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "Updated",
 					`Updated TestResourceUnexportedFields %q`, testName),
 			},
-			ExpectResource: resourceReady.
-				SpecDie(func(d *dies.TestResourceSpecDie) {
-					d.AddField("foo", "bar")
-					d.AddField("new", "field")
-				}).
-				DieReleasePtr(),
 			ExpectUpdates: []client.Object{
 				childGiven.
 					SpecDie(func(d *dies.TestResourceUnexportedFieldsSpecDie) {

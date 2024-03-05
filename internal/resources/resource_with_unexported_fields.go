@@ -11,6 +11,7 @@ import (
 
 	"github.com/vmware-labs/reconciler-runtime/apis"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -67,7 +68,7 @@ func (r *TestResourceUnexportedFields) validate() field.ErrorList {
 	return errs
 }
 
-func (r *TestResourceUnexportedFields) CopyUnexportedFields() {
+func (r *TestResourceUnexportedFields) ReflectUnexportedFieldsToStatus() {
 	r.Status.unexportedFields = r.Spec.unexportedFields
 }
 
@@ -89,7 +90,7 @@ func (r *TestResourceUnexportedFieldsSpec) SetUnexportedFields(f map[string]stri
 	r.unexportedFields = f
 }
 
-func (r *TestResourceUnexportedFieldsSpec) AddUnexportedFields(key, value string) {
+func (r *TestResourceUnexportedFieldsSpec) AddUnexportedField(key, value string) {
 	if r.unexportedFields == nil {
 		r.unexportedFields = map[string]string{}
 	}
@@ -149,7 +150,7 @@ func (r *TestResourceUnexportedFieldsStatus) SetUnexportedFields(f map[string]st
 	r.unexportedFields = f
 }
 
-func (r *TestResourceUnexportedFieldsStatus) AddUnexportedFields(key, value string) {
+func (r *TestResourceUnexportedFieldsStatus) AddUnexportedField(key, value string) {
 	if r.unexportedFields == nil {
 		r.unexportedFields = map[string]string{}
 	}
@@ -167,4 +168,19 @@ type TestResourceUnexportedFieldsList struct {
 
 func init() {
 	SchemeBuilder.Register(&TestResourceUnexportedFields{}, &TestResourceUnexportedFieldsList{})
+
+	if err := equality.Semantic.AddFuncs(
+		func(a, b TestResourceUnexportedFieldsSpec) bool {
+			return equality.Semantic.DeepEqual(a.Fields, b.Fields) &&
+				equality.Semantic.DeepEqual(a.Template, b.Template) &&
+				equality.Semantic.DeepEqual(a.ErrOnMarshal, b.ErrOnMarshal) &&
+				equality.Semantic.DeepEqual(a.ErrOnUnmarshal, b.ErrOnUnmarshal)
+		},
+		func(a, b TestResourceUnexportedFieldsStatus) bool {
+			return equality.Semantic.DeepEqual(a.Status, b.Status) &&
+				equality.Semantic.DeepEqual(a.Fields, b.Fields)
+		},
+	); err != nil {
+		panic(err)
+	}
 }

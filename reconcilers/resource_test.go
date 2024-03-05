@@ -1320,9 +1320,9 @@ func TestResourceReconciler_UnexportedFields(t *testing.T) {
 							if resource.Status.Fields == nil {
 								resource.Status.Fields = map[string]string{}
 							}
-							resource.CopyUnexportedFields()
+							resource.ReflectUnexportedFieldsToStatus()
 							resource.Status.Fields["Reconciler"] = "ran"
-							resource.Status.AddUnexportedFields("Reconciler", "ran")
+							resource.Status.AddUnexportedField("Reconciler", "ran")
 							return nil
 						},
 					}
@@ -1354,21 +1354,12 @@ func TestResourceReconciler_UnexportedFields(t *testing.T) {
 							if resource.Status.Fields == nil {
 								resource.Status.Fields = map[string]string{}
 							}
-							resource.CopyUnexportedFields()
-							resource.Status.AddUnexportedFields("Reconciler", "ran")
+							resource.ReflectUnexportedFieldsToStatus()
+							resource.Status.AddUnexportedField("Reconciler", "ran")
 							return nil
 						},
 					}
 				},
-			},
-			ExpectEvents: []rtesting.Event{
-				rtesting.NewEvent(resource, scheme, corev1.EventTypeNormal, "StatusUpdated",
-					`Updated status`),
-			},
-			ExpectStatusUpdates: []client.Object{
-				resource.StatusDie(func(d *dies.TestResourceUnexportedFieldsStatusDie) {
-					d.AddUnexportedField("Reconciler", "ran")
-				}),
 			},
 		},
 		"no mutated status": {
@@ -1377,17 +1368,16 @@ func TestResourceReconciler_UnexportedFields(t *testing.T) {
 				&resources.TestResourceUnexportedFields{},
 			},
 			GivenObjects: []client.Object{
-				resource,
+				resource.StatusDie(func(d *dies.TestResourceUnexportedFieldsStatusDie) {
+					d.AddUnexportedField("Test", "ran")
+					d.AddUnexportedField("Reconciler", "ran")
+				}),
 			},
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResourceUnexportedFields] {
 					return &reconcilers.SyncReconciler[*resources.TestResourceUnexportedFields]{
 						Sync: func(ctx context.Context, resource *resources.TestResourceUnexportedFields) error {
-							if resource.Status.Fields == nil {
-								resource.Status.Fields = map[string]string{}
-							}
-							resource.CopyUnexportedFields()
-							resource.Spec.Fields["Reconciler"] = "ran"
+							resource.Status.AddUnexportedField("Reconciler", "ran")
 							return nil
 						},
 					}
