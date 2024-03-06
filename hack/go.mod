@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.6
 
 require (
-	dies.dev/diegen v0.10.0
+	dies.dev/diegen v0.10.1
 	sigs.k8s.io/controller-tools v0.14.0
 )
 
