@@ -99,3 +99,69 @@ func (d *TestDuckSpecDie) AddField(key, value string) *TestDuckSpecDie {
 		r.Fields[key] = value
 	})
 }
+
+// +die:object=true
+type _ = resources.TestResourceUnexportedFields
+
+// +die:ignore={unexportedFields}
+type _ = resources.TestResourceUnexportedFieldsSpec
+
+func (d *TestResourceUnexportedFieldsSpecDie) AddField(key, value string) *TestResourceUnexportedFieldsSpecDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsSpec) {
+		if r.Fields == nil {
+			r.Fields = map[string]string{}
+		}
+		r.Fields[key] = value
+	})
+}
+
+func (d *TestResourceUnexportedFieldsSpecDie) AddUnexportedField(key, value string) *TestResourceUnexportedFieldsSpecDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsSpec) {
+		f := r.GetUnexportedFields()
+		if f == nil {
+			f = map[string]string{}
+		}
+		f[key] = value
+		r.SetUnexportedFields(f)
+	})
+}
+
+func (d *TestResourceUnexportedFieldsSpecDie) TemplateDie(fn func(d *diecorev1.PodTemplateSpecDie)) *TestResourceUnexportedFieldsSpecDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsSpec) {
+		d := diecorev1.PodTemplateSpecBlank.DieImmutable(false).DieFeed(r.Template)
+		fn(d)
+		r.Template = d.DieRelease()
+	})
+}
+
+// +die:ignore={unexportedFields}
+type _ = resources.TestResourceUnexportedFieldsStatus
+
+func (d *TestResourceUnexportedFieldsStatusDie) ConditionsDie(conditions ...*diemetav1.ConditionDie) *TestResourceUnexportedFieldsStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsStatus) {
+		r.Conditions = make([]metav1.Condition, len(conditions))
+		for i := range conditions {
+			r.Conditions[i] = conditions[i].DieRelease()
+		}
+	})
+}
+
+func (d *TestResourceUnexportedFieldsStatusDie) AddField(key, value string) *TestResourceUnexportedFieldsStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsStatus) {
+		if r.Fields == nil {
+			r.Fields = map[string]string{}
+		}
+		r.Fields[key] = value
+	})
+}
+
+func (d *TestResourceUnexportedFieldsStatusDie) AddUnexportedField(key, value string) *TestResourceUnexportedFieldsStatusDie {
+	return d.DieStamp(func(r *resources.TestResourceUnexportedFieldsStatus) {
+		f := r.GetUnexportedFields()
+		if f == nil {
+			f = map[string]string{}
+		}
+		f[key] = value
+		r.SetUnexportedFields(f)
+	})
+}

@@ -95,3 +95,30 @@ func TestTestDuckSpecDie_MissingMethods(t *testingx.T) {
 		t.Errorf("found missing fields for TestDuckSpecDie: %s", diff.List())
 	}
 }
+
+func TestTestResourceUnexportedFieldsDie_MissingMethods(t *testingx.T) {
+	die := TestResourceUnexportedFieldsBlank
+	ignore := []string{"TypeMeta", "ObjectMeta"}
+	diff := testing.DieFieldDiff(die).Delete(ignore...)
+	if diff.Len() != 0 {
+		t.Errorf("found missing fields for TestResourceUnexportedFieldsDie: %s", diff.List())
+	}
+}
+
+func TestTestResourceUnexportedFieldsSpecDie_MissingMethods(t *testingx.T) {
+	die := TestResourceUnexportedFieldsSpecBlank
+	ignore := []string{"unexportedFields"}
+	diff := testing.DieFieldDiff(die).Delete(ignore...)
+	if diff.Len() != 0 {
+		t.Errorf("found missing fields for TestResourceUnexportedFieldsSpecDie: %s", diff.List())
+	}
+}
+
+func TestTestResourceUnexportedFieldsStatusDie_MissingMethods(t *testingx.T) {
+	die := TestResourceUnexportedFieldsStatusBlank
+	ignore := []string{"unexportedFields"}
+	diff := testing.DieFieldDiff(die).Delete(ignore...)
+	if diff.Len() != 0 {
+		t.Errorf("found missing fields for TestResourceUnexportedFieldsStatusDie: %s", diff.List())
+	}
+}
