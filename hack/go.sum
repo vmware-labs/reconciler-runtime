@@ -1,5 +1,5 @@
-dies.dev/diegen v0.10.0 h1:exldvX8g4eIxrab9QYE4zt4c5G+mFsp2EPPqdkVVPP8=
-dies.dev/diegen v0.10.0/go.mod h1:rfSDZ7WoP1IWA12jsaL+3BUbCkns2wVgU9oNjwuCRKw=
+dies.dev/diegen v0.10.1 h1:bUjO7L3ALdyT6nRuntcCAfy4Vx4ny4cC8kemT/GY240=
+dies.dev/diegen v0.10.1/go.mod h1:08auIh8JtE32P7wVv7IC1EmAxSRoziWLwbOiMfk8cNI=
 github.com/cpuguy83/go-md2man/v2 v2.0.3/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
