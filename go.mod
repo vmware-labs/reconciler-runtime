@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.6
 
 require (
-	dies.dev v0.10.0
+	dies.dev v0.10.1
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/fatih/color v1.16.0
 	github.com/go-logr/logr v1.4.1

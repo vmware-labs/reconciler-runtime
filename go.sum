@@ -1,5 +1,5 @@
-dies.dev v0.10.0 h1:HBbcL94hHXuxZHlmHjQFVRz2JmsErBinVjFKitP7deE=
-dies.dev v0.10.0/go.mod h1:F/ldZL0yRckmlltwtkA4q1GT4RwLqKmXzFZ7fuMEnd0=
+dies.dev v0.10.1 h1:UKgYIrPRKPlvCA0PTBNjvQv1UxHwgzD22QKC5ByoBds=
+dies.dev v0.10.1/go.mod h1:7gwWOuo9E63wlQ8xso6uLX0jcqgQQVp6X0AYe+UhAl8=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/cespare/xxhash/v2 v2.2.0 h1:DC2CZ1Ep5Y4k3ZQ899DldepgrayRUGE6BBZ/cd9Cj44=
