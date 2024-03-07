@@ -464,6 +464,22 @@ func TestChildReconciler_validate(t *testing.T) {
 			},
 		},
 		{
+			name:   "ListOptions missing",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
+				Name:                       "ListOptions missing",
+				ChildType:                  &corev1.Pod{},
+				ChildListType:              &corev1.PodList{},
+				DesiredChild:               func(ctx context.Context, parent *corev1.ConfigMap) (*corev1.Pod, error) { return nil, nil },
+				ReflectChildStatusOnParent: func(ctx context.Context, parent *corev1.ConfigMap, child *corev1.Pod, err error) {},
+				MergeBeforeUpdate:          func(current, desired *corev1.Pod) {},
+				SkipOwnerReference:         true,
+				// ListOptions:                func(ctx context.Context, parent *corev1.ConfigMap) []client.ListOption { return []client.ListOption{} },
+				OurChild: func(resource *corev1.ConfigMap, child *corev1.Pod) bool { return true },
+			},
+			shouldErr: `ChildReconciler "ListOptions missing" must implement ListOptions since owner references are not used`,
+		},
+		{
 			name:   "Finalizer without OurChild",
 			parent: &corev1.ConfigMap{},
 			reconciler: &ChildReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
@@ -621,6 +637,23 @@ func TestChildSetReconciler_validate(t *testing.T) {
 				ListOptions:                   func(ctx context.Context, parent *corev1.ConfigMap) []client.ListOption { return []client.ListOption{} },
 				IdentifyChild:                 func(child *corev1.Pod) string { return "" },
 			},
+		},
+		{
+			name:   "ListOptions missing",
+			parent: &corev1.ConfigMap{},
+			reconciler: &ChildSetReconciler[*corev1.ConfigMap, *corev1.Pod, *corev1.PodList]{
+				Name:                          "ListOptions missing",
+				ChildType:                     &corev1.Pod{},
+				ChildListType:                 &corev1.PodList{},
+				DesiredChildren:               func(ctx context.Context, parent *corev1.ConfigMap) ([]*corev1.Pod, error) { return nil, nil },
+				ReflectChildrenStatusOnParent: func(ctx context.Context, parent *corev1.ConfigMap, result ChildSetResult[*corev1.Pod]) {},
+				MergeBeforeUpdate:             func(current, desired *corev1.Pod) {},
+				SkipOwnerReference:            true,
+				// ListOptions:                   func(ctx context.Context, parent *corev1.ConfigMap) []client.ListOption { return []client.ListOption{} },
+				OurChild:      func(resource *corev1.ConfigMap, child *corev1.Pod) bool { return true },
+				IdentifyChild: func(child *corev1.Pod) string { return "" },
+			},
+			shouldErr: `ChildSetReconciler "ListOptions missing" must implement ListOptions since owner references are not used`,
 		},
 		{
 			name:   "Finalizer without OurChild",

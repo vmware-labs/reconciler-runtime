@@ -121,12 +121,18 @@ type ChildReconciler[Type, ChildType client.Object, ChildListType client.ObjectL
 	MergeBeforeUpdate func(current, desired ChildType)
 
 	// ListOptions allows custom options to be use when listing potential child resources. Each
-	// resource retrieved as part of the listing is confirmed via OurChild.
+	// resource retrieved as part of the listing is confirmed via OurChild. There is a performance
+	// benefit to limiting the number of resource return for each List operation, however,
+	// excluding an actual child will orphan that resource.
 	//
 	// Defaults to filtering by the reconciled resource's namespace:
 	//     []client.ListOption{
 	//         client.InNamespace(resource.GetNamespace()),
 	//     }
+	//
+	// ListOptions is required when a Finalizer is defined or SkipOwnerReference is true. An empty
+	// list is often sufficient although it may incur a performance penalty, especially when
+	// querying the API sever instead of an informer cache.
 	//
 	// +optional
 	ListOptions func(ctx context.Context, resource Type) []client.ListOption
@@ -227,6 +233,11 @@ func (r *ChildReconciler[T, CT, CLT]) validate(ctx context.Context) error {
 	if r.OurChild == nil && r.SkipOwnerReference {
 		// OurChild is required when SkipOwnerReference is true
 		return fmt.Errorf("ChildReconciler %q must implement OurChild since owner references are not used", r.Name)
+	}
+
+	if r.ListOptions == nil && r.SkipOwnerReference {
+		// ListOptions is required when SkipOwnerReference is true
+		return fmt.Errorf("ChildReconciler %q must implement ListOptions since owner references are not used", r.Name)
 	}
 
 	// require MergeBeforeUpdate
