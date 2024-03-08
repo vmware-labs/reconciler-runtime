@@ -306,16 +306,21 @@ func (r *ChildReconciler[T, CT, CLT]) reconcile(ctx context.Context, resource T)
 	c := RetrieveConfigOrDie(ctx)
 
 	actual := r.ChildType.DeepCopyObject().(CT)
-	children := r.ChildListType.DeepCopyObject().(CLT)
-	if err := c.List(ctx, children, r.listOptions(ctx, resource)...); err != nil {
-		return nilCT, err
+	children := RetrieveKnownChildren[CT](ctx)
+	if children == nil {
+		// use existing known children when available, fall back to lookup
+		list := r.ChildListType.DeepCopyObject().(CLT)
+		if err := c.List(ctx, list, r.listOptions(ctx, resource)...); err != nil {
+			return nilCT, err
+		}
+		children = extractItems[CT](list)
 	}
-	items := r.filterChildren(resource, children)
-	if len(items) == 1 {
-		actual = items[0]
-	} else if len(items) > 1 {
+	children = r.filterChildren(resource, children)
+	if len(children) == 1 {
+		actual = children[0]
+	} else if len(children) > 1 {
 		// this shouldn't happen, delete everything to a clean slate
-		for _, extra := range items {
+		for _, extra := range children {
 			log.Info("deleting extra child", "child", namespaceName(extra))
 			if err := c.Delete(ctx, extra); err != nil {
 				if !errors.Is(err, ErrQuiet) {
@@ -362,9 +367,9 @@ func (r *ChildReconciler[T, CT, CLT]) desiredChild(ctx context.Context, resource
 	return r.DesiredChild(ctx, resource)
 }
 
-func (r *ChildReconciler[T, CT, CLT]) filterChildren(resource T, children CLT) []CT {
+func (r *ChildReconciler[T, CT, CLT]) filterChildren(resource T, children []CT) []CT {
 	items := []CT{}
-	for _, child := range extractItems[CT](children) {
+	for _, child := range children {
 		if r.ourChild(resource, child) {
 			items = append(items, child)
 		}

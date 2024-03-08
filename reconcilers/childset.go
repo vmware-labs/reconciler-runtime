@@ -283,7 +283,13 @@ func (r *ChildSetReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource
 		WithName(r.Name)
 	ctx = logr.NewContext(ctx, log)
 
-	cr, err := r.composeChildReconcilers(ctx, resource)
+	knownChildren, err := r.knownChildren(ctx, resource)
+	if err != nil {
+		return Result{}, err
+	}
+	ctx = stashKnownChildren(ctx, knownChildren)
+
+	cr, err := r.composeChildReconcilers(ctx, resource, knownChildren)
 	if err != nil {
 		return Result{}, err
 	}
@@ -292,10 +298,8 @@ func (r *ChildSetReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource
 	return result, err
 }
 
-func (r *ChildSetReconciler[T, CT, CLT]) composeChildReconcilers(ctx context.Context, resource T) (SubReconciler[T], error) {
+func (r *ChildSetReconciler[T, CT, CLT]) knownChildren(ctx context.Context, resource T) ([]CT, error) {
 	c := RetrieveConfigOrDie(ctx)
-
-	childIDs := sets.NewString()
 
 	children := r.ChildListType.DeepCopyObject().(CLT)
 	ourChildren := []CT{}
@@ -309,12 +313,16 @@ func (r *ChildSetReconciler[T, CT, CLT]) composeChildReconcilers(ctx context.Con
 		ourChildren = append(ourChildren, child.DeepCopyObject().(CT))
 	}
 
-	ctx = stashKnownChildren(ctx, ourChildren)
+	return ourChildren, nil
+}
+
+func (r *ChildSetReconciler[T, CT, CLT]) composeChildReconcilers(ctx context.Context, resource T, knownChildren []CT) (SubReconciler[T], error) {
 	desiredChildren, desiredChildrenErr := r.DesiredChildren(ctx, resource)
 	if desiredChildrenErr != nil && !errors.Is(desiredChildrenErr, OnlyReconcileChildStatus) {
 		return nil, desiredChildrenErr
 	}
 
+	childIDs := sets.NewString()
 	desiredChildByID := map[string]CT{}
 	for _, child := range desiredChildren {
 		id := r.IdentifyChild(child)
@@ -328,7 +336,7 @@ func (r *ChildSetReconciler[T, CT, CLT]) composeChildReconcilers(ctx context.Con
 		desiredChildByID[id] = child
 	}
 
-	for _, child := range ourChildren {
+	for _, child := range knownChildren {
 		id := r.IdentifyChild(child)
 		childIDs.Insert(id)
 	}

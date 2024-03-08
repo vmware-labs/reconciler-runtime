@@ -460,6 +460,21 @@ func InduceFailure(verb, kind string, o ...InduceFailureOpts) ReactionFunc {
 	}
 }
 
+// CalledAtMostTimes error if the client is called more than the max number of times for a verb and kind
+func CalledAtMostTimes(verb, kind string, maxCalls int) ReactionFunc {
+	callCount := 0
+	return func(action Action) (handled bool, ret runtime.Object, err error) {
+		if !action.Matches("list", "ConfigMapList") {
+			return false, nil, nil
+		}
+		callCount++
+		if callCount <= maxCalls {
+			return false, nil, nil
+		}
+		return true, nil, fmt.Errorf("%s %s called %d times, expected %d call(s)", verb, kind, callCount, maxCalls)
+	}
+}
+
 type namedAction interface {
 	Action
 	GetName() string
