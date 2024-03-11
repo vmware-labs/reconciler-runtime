@@ -49,6 +49,21 @@ func (c Config) WithCluster(cluster cluster.Cluster) Config {
 	}
 }
 
+// WithDangerousDuckClientOperations returns a new Config with client Create and Update methods for
+// duck typed objects enabled.
+//
+// This is dangerous because duck types typically represent a subset of the target resource and may
+// cause data loss if the resource's server representation contains fields that do not exist on the
+// duck typed object.
+func (c Config) WithDangerousDuckClientOperations() Config {
+	return Config{
+		Client:    duck.NewDangerousDuckAwareClientWrapper(c.Client),
+		APIReader: c.APIReader,
+		Recorder:  c.Recorder,
+		Tracker:   c.Tracker,
+	}
+}
+
 // TrackAndGet tracks the resources for changes and returns the current value. The track is
 // registered even when the resource does not exists so that its creation can be tracked.
 //

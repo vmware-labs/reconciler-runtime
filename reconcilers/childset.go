@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/vmware-labs/reconciler-runtime/duck"
 	"github.com/vmware-labs/reconciler-runtime/internal"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -157,6 +158,16 @@ type ChildSetReconciler[Type, ChildType client.Object, ChildListType client.Obje
 	// +optional
 	Sanitize func(child ChildType) interface{}
 
+	// DangerouslyAllowDuckTypedChildren allows the ChildType to be a duck typed resource. This is
+	// dangerous because duck types typically represent a subset of the target resource and may
+	// cause data loss if the resource's server representation contains fields that do not exist on
+	// the duck typed object.
+	//
+	// Use of this setting should be limited to when the author is certain the duck type is able to
+	// represent the resource with full fidelity, or when data loss for unrepresented fields is
+	// acceptable.
+	DangerouslyAllowDuckTypedChildren bool
+
 	stamp          *ResourceManager[ChildType]
 	lazyInit       sync.Once
 	voidReconciler *ChildReconciler[Type, ChildType, ChildListType]
@@ -238,11 +249,14 @@ func (r *ChildSetReconciler[T, CT, CLT]) childReconcilerFor(desired CT, desiredE
 			}
 			return void || id == r.IdentifyChild(child)
 		},
-		Sanitize: r.Sanitize,
+		Sanitize:                          r.Sanitize,
+		DangerouslyAllowDuckTypedChildren: r.DangerouslyAllowDuckTypedChildren,
 	}
 }
 
 func (r *ChildSetReconciler[T, CT, CLT]) validate(ctx context.Context) error {
+	c := RetrieveConfigOrDie(ctx)
+
 	// default implicit values
 	if r.Finalizer != "" {
 		r.SkipOwnerReference = true
@@ -271,6 +285,11 @@ func (r *ChildSetReconciler[T, CT, CLT]) validate(ctx context.Context) error {
 	// require IdentifyChild
 	if r.IdentifyChild == nil {
 		return fmt.Errorf("ChildSetReconciler %q must implement IdentifyChild", r.Name)
+	}
+
+	// require DangerouslyAllowDuckTypedChildren for duck types
+	if !r.DangerouslyAllowDuckTypedChildren && duck.IsDuck(r.ChildType, c.Scheme()) {
+		return fmt.Errorf("ChildSetReconciler %q must enable DangerouslyAllowDuckTypedChildren to use a child duck type", r.Name)
 	}
 
 	return nil

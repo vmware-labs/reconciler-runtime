@@ -15,11 +15,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/vmware-labs/reconciler-runtime/duck"
 	"github.com/vmware-labs/reconciler-runtime/internal"
 )
 
@@ -154,6 +156,16 @@ type ChildReconciler[Type, ChildType client.Object, ChildListType client.ObjectL
 	// +optional
 	Sanitize func(child ChildType) interface{}
 
+	// DangerouslyAllowDuckTypedChildren allows the ChildType to be a duck typed resource. This is
+	// dangerous because duck types typically represent a subset of the target resource and may
+	// cause data loss if the resource's server representation contains fields that do not exist on
+	// the duck typed object.
+	//
+	// Use of this setting should be limited to when the author is certain the duck type is able to
+	// represent the resource with full fidelity, or when data loss for unrepresented fields is
+	// acceptable.
+	DangerouslyAllowDuckTypedChildren bool
+
 	stamp    *ResourceManager[ChildType]
 	lazyInit sync.Once
 }
@@ -202,10 +214,16 @@ func (r *ChildReconciler[T, CT, CLT]) SetupWithManager(ctx context.Context, mgr 
 		return err
 	}
 
+	var ct client.Object = r.ChildType
+	if duck.IsDuck(ct, mgr.GetScheme()) {
+		gvk := ct.GetObjectKind().GroupVersionKind()
+		ct = &unstructured.Unstructured{}
+		ct.GetObjectKind().SetGroupVersionKind(gvk)
+	}
 	if r.SkipOwnerReference {
-		bldr.Watches(r.ChildType, EnqueueTracked(ctx))
+		bldr.Watches(ct, EnqueueTracked(ctx))
 	} else {
-		bldr.Owns(r.ChildType)
+		bldr.Owns(ct)
 	}
 
 	if r.Setup == nil {
@@ -215,6 +233,8 @@ func (r *ChildReconciler[T, CT, CLT]) SetupWithManager(ctx context.Context, mgr 
 }
 
 func (r *ChildReconciler[T, CT, CLT]) validate(ctx context.Context) error {
+	c := RetrieveConfigOrDie(ctx)
+
 	// default implicit values
 	if r.Finalizer != "" {
 		r.SkipOwnerReference = true
@@ -245,6 +265,11 @@ func (r *ChildReconciler[T, CT, CLT]) validate(ctx context.Context) error {
 		return fmt.Errorf("ChildReconciler %q must implement MergeBeforeUpdate", r.Name)
 	}
 
+	// require DangerouslyAllowDuckTypedChildren for duck types
+	if !r.DangerouslyAllowDuckTypedChildren && duck.IsDuck(r.ChildType, c.Scheme()) {
+		return fmt.Errorf("ChildReconciler %q must enable DangerouslyAllowDuckTypedChildren to use a child duck type", r.Name)
+	}
+
 	return nil
 }
 
@@ -259,6 +284,10 @@ func (r *ChildReconciler[T, CT, CLT]) Reconcile(ctx context.Context, resource T)
 	r.init()
 
 	c := RetrieveConfigOrDie(ctx)
+	if r.DangerouslyAllowDuckTypedChildren {
+		c = c.WithDangerousDuckClientOperations()
+		ctx = StashConfig(ctx, c)
+	}
 
 	log := logr.FromContextOrDiscard(ctx).
 		WithName(r.Name).
