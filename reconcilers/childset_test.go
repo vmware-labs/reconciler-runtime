@@ -167,6 +167,9 @@ func TestChildSetReconciler(t *testing.T) {
 				configMapBlueGiven.DieReleasePtr(),
 				configMapGreenGiven.DieReleasePtr(),
 			},
+			WithReactors: []rtesting.ReactionFunc{
+				rtesting.CalledAtMostTimes("list", "ConfigMapList", 1),
+			},
 			Metadata: map[string]interface{}{
 				"SubReconciler": func(t *testing.T, c reconcilers.Config) reconcilers.SubReconciler[*resources.TestResource] {
 					r := defaultChildSetReconciler(c)
