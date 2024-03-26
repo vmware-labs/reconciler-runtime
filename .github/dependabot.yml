@@ -4,7 +4,7 @@ updates:
   directory: "/"
   schedule:
     interval: daily
-  open-pull-requests-limit: 10
+  open-pull-requests-limit: 0
   reviewers:
   - squeedee
   - mamachanko
@@ -16,7 +16,7 @@ updates:
       - "k8s.io/*"
   schedule:
     interval: daily
-  open-pull-requests-limit: 10
+  open-pull-requests-limit: 0
   reviewers:
   - squeedee
   - mamachanko
@@ -24,7 +24,7 @@ updates:
   directory: "/hack"
   schedule:
     interval: daily
-  open-pull-requests-limit: 10
+  open-pull-requests-limit: 0
   reviewers:
   - squeedee
   - mamachanko
