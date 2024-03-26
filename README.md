@@ -1,3 +1,9 @@
+# ⚠️  Maintenance suspended  ⚠️
+
+Please, migrate to the active fork `reconciler.io/runtime`. See [reconcilerio/runtime@v0.20.0](https://github.com/reconcilerio/runtime/releases/tag/v0.20.0) for instructions. This repository will be archived eventually.
+
+---
+
 # reconciler-runtime <!-- omit in toc -->
 
 ![CI](https://github.com/vmware-labs/reconciler-runtime/workflows/CI/badge.svg?branch=main)
